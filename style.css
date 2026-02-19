@@ -1,0 +1,141 @@
+:root {
+    --text-color: #ffffff;
+    --accent-green: #2d4a3e; /* Verde escuro das folhas */
+    --input-border: rgba(255, 255, 255, 0.2);
+}
+
+* {
+    margin: 0; padding: 0; box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #000;
+}
+
+.login-wrapper {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* --- LADO DA IMAGEM --- */
+.image-section {
+    flex: 1.2;
+    background-image: url('folhas.jpg'); /* Use o nome da imagem que você baixar */
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+}
+
+.welcome-msg {
+    color: white;
+    max-width: 400px;
+}
+
+.welcome-msg h2 {
+    font-size: 3.5rem;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+/* --- LADO DO FORMULÁRIO (Efeito Vidro) --- */
+.form-section {
+    flex: 0.8;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* O fundo aqui é a continuação da imagem, mas com desfoque */
+    background-image: url('folhas.jpg');
+    background-size: cover;
+    background-position: left;
+}
+
+.glass-container {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 10, 5, 0.6); /* Camada escura transparente */
+    backdrop-filter: blur(25px); /* O Segredo do Glassmorphism */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 15%;
+    color: white;
+}
+
+.logo {
+    font-size: 1.5rem;
+    margin-bottom: 3rem;
+    letter-spacing: 2px;
+}
+
+.input-box {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--input-border); /* Linha fina como no exemplo */
+}
+
+.input-box label {
+    display: block;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    color: #ccc;
+}
+
+.input-box input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 10px 0;
+    color: white;
+    font-size: 1rem;
+    outline: none;
+}
+
+.form-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin: 20px 0;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 15px;
+    background-color: #0b0f0d; /* Botão preto/verde bem escuro */
+    color: white;
+    border: 1px solid var(--input-border);
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: 0.3s;
+}
+
+.btn-primary:hover {
+    background-color: #1a2e24;
+}
+
+.register-text {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.85rem;
+    color: #999;
+}
+
+.register-text a, .forgot {
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+/* Responsividade para celular */
+@media (max-width: 900px) {
+    .image-section { display: none; }
+    .form-section { flex: 1; }
+    .glass-container { padding: 0 10%; }
+}

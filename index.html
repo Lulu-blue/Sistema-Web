@@ -1,0 +1,47 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Sistema</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <main class="login-wrapper">
+        <section class="form-section">
+            <div class="glass-container">
+                <header class="header">
+                    <h1 class="logo">YOUR LOGO</h1>
+                </header>
+
+                <form id="loginForm">
+                    <div class="input-box">
+                        <label>CPF</label>
+                        <input type="text" id="cpf" placeholder="Digite seu CPF" maxlength="14" required autocomplete="off">
+                    </div>
+
+                    <div class="input-box">
+                        <label>Senha</label>
+                        <input type="password" id="password" placeholder="••••••••" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary">Log in</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="image-section">
+            <div class="welcome-msg">
+                <h2>Welcome back</h2>
+                <p>Por favor, insira seus dados para acessar o painel.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+</body>
+</html>
