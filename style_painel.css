@@ -1,0 +1,199 @@
+:root {
+    --bg-main: #f8fafc;         /* Fundo da área de trabalho */
+    /* Degradê de verde escuro para a sidebar */
+    --sidebar-gradient: linear-gradient(180deg, #062117 0%, #0c3e2b 100%);
+    --card-bg: #ffffff;
+    --accent-green: #2ecc71;    /* Verde vibrante para detalhes */
+    --text-white: #f8fafc;      /* Texto na sidebar */
+    --text-dark: #1e293b;       /* Texto no conteúdo */
+    --border-soft: #e2e8f0;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--bg-main);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.dashboard-layout {
+    display: flex;
+    height: 100vh;
+}
+
+/* SIDEBAR COM DEGRADÊ */
+.sidebar {
+    width: 280px;
+    background: var(--sidebar-gradient);
+    display: flex;
+    flex-direction: column;
+    padding: 2.5rem 1.5rem;
+    color: var(--text-white);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+/* PERFIL INTEGRADO AO DEGRADÊ */
+.profile-section {
+    text-align: center;
+    padding-bottom: 2rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.avatar-wrapper img {
+    width: 85px;
+    height: 85px;
+    border-radius: 50%;
+    border: 3px solid var(--accent-green);
+    object-fit: cover;
+    margin-bottom: 12px;
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 2px;
+}
+
+.profile-info h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.profile-info p {
+    font-size: 0.75rem;
+    color: var(--accent-green);
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+/* MENU DE NAVEGAÇÃO */
+.nav-menu {
+    flex-grow: 1;
+}
+
+.nav-btn {
+    width: 100%;
+    padding: 14px 18px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: left;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+
+
+/* CONTEÚDO PRINCIPAL (CLARO) */
+.main-content {
+    flex-grow: 1;
+    padding: 3.5rem;
+    overflow-y: auto;
+    background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+    background-size: 30px 30px; /* Efeito sutil de grid ao fundo */
+}
+
+h1 {
+    font-size: 2.2rem;
+    color: var(--text-dark);
+    margin-bottom: 2.5rem;
+    font-weight: 700;
+}
+
+/* CARDS BRANCOS */
+.stat-card {
+    background: var(--card-bg);
+    padding: 30px;
+    border-radius: 16px;
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04);
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+/* --- SIDEBAR COM GLASSMORPHISM --- */
+.sidebar {
+    width: 280px;
+    background: var(--sidebar-gradient);
+    display: flex;
+    flex-direction: column;
+    padding: 2.5rem 1.2rem;
+    color: var(--text-white);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+/* --- BOTÕES COM EFEITO VIDRO --- */
+.nav-btn {
+    width: 100%;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* O SEGREDO DO VIDRO: */
+    background: rgba(255, 255, 255, 0.05); /* Fundo quase invisível */
+    backdrop-filter: blur(8px);           /* Desfoque do fundo */
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Borda fina de vidro */
+    border-radius: 14px;
+    outline: none;
+}
+
+/* Efeito ao passar o mouse */
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: white;
+    transform: translateX(5px); /* Deslocamento suave */
+}
+
+/* Botão Ativo (Onde o usuário está) */
+.nav-btn.active {
+    background: rgba(46, 204, 113, 0.2); /* Verde translúcido */
+    border-color: rgba(46, 204, 113, 0.5);
+    color: var(--accent-green);
+    font-weight: 600;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Ajuste no rodapé de logout para seguir o estilo */
+.logout-footer {
+    margin-top: auto;
+    background: rgba(239, 68, 68, 0.05);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    padding: 14px;
+    border-radius: 14px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.3s;
+}
+
+.logout-footer:hover {
+    background: #ef4444;
+    color: white;
+}

@@ -2,16 +2,62 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Tarefas</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="painel.js"></script> ``
-    <script src="protecao.js"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestão | Painel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style_painel.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <h1>Bem-vindo ao seu sistema seguro!</h1>
-    <button onclick="sair()">Sair do Sistema</button>
+
+    <div class="dashboard-layout">
+        <aside class="sidebar">
+            <div class="profile-section">
+                <div class="avatar-wrapper">
+                    <img id="user-photo" src="https://via.placeholder.com/150" alt="Foto de Perfil">
+                </div>
+                <div class="profile-info">
+                    <h3 id="user-name">Carregando...</h3>
+                    <p id="user-role-display">Cargo</p>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-btn active" onclick="mudarAba('home')">🏠 Dashboard</button>
+                <button class="nav-btn" onclick="mudarAba('tarefas')">📋 Minhas Tarefas</button>
+                <button class="nav-btn" onclick="mudarAba('arquivos')">📁 Arquivos</button>
+                
+                <div id="admin-options" style="display: none;">
+                    <div class="nav-divider">ADMINISTRAÇÃO</div>
+                    <button class="nav-btn" onclick="mudarAba('usuarios')">👥 Usuários</button>
+                    <button class="nav-btn" onclick="mudarAba('config')">⚙️ Configurações</button>
+                </div>
+            </nav>
+
+            <button class="logout-footer" onclick="sair()">
+                <span> Sair do Sistema</span>
+            </button>
+        </aside>
+
+        <main class="main-content">
+            <section id="aba-home" class="content-section">
+                <h1>Visão Geral</h1>
+                <div class="stats-grid">
+                    <div class="stat-card"><h3>Tarefas</h3><p>03 pendentes</p></div>
+                    <div id="card-admin-stats" class="stat-card admin-only" style="display:none;">
+                        <h3>Alertas</h3><p>Sistema Estável</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="aba-tarefas" class="content-section" style="display: none;">
+                <h1>Minhas Tarefas</h1>
+                <p>Aqui aparecerá o seu histórico de tarefas.</p>
+            </section>
+        </main>
+    </div>
+
+    <script src="protecao.js"></script>
+    <script src="painel.js"></script>
 </body>
 </html>
