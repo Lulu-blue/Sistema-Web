@@ -6,6 +6,16 @@ const supabaseKey = 'sb_publishable_ZVtndwPOvY2dA4Qzlwkl2A_H0-TeUgu';
 
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
+// Máscara de CPF: 000.000.000-00
+const cpfInput = document.getElementById('cpf');
+cpfInput.addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+    else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+    e.target.value = v;
+});
+
 const form = document.getElementById('loginForm');
 
 form.addEventListener('submit', async (e) => {
@@ -37,7 +47,7 @@ form.addEventListener('submit', async (e) => {
         if (perfil) {
             alert(`Logado! CPF: ${perfil.cpf} | Cargo: ${perfil.role}`);
             // Redirecionamento baseado no cargo
-            window.location.href = perfil.role === 'admin' ? "painel.html" : "usuario.html";
+            window.location.href = "painel.html";
         }
     }
 });

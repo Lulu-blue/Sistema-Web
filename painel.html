@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestão | Painel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style_painel.css">
+    <link rel="stylesheet" href="style_produtividade.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
 
     <div class="dashboard-layout">
@@ -23,41 +26,329 @@
             </div>
 
             <nav class="nav-menu">
-                <button class="nav-btn active" onclick="mudarAba('home')">🏠 Dashboard</button>
-                <button class="nav-btn" onclick="mudarAba('tarefas')">📋 Minhas Tarefas</button>
-                <button class="nav-btn" onclick="mudarAba('arquivos')">📁 Arquivos</button>
-                
+                <button class="nav-btn active" onclick="mudarAba('home')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+                        <path
+                            d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    </svg>
+                    Home
+                </button>
+
+                <!-- Botões visíveis apenas para FISCAL -->
+                <div id="fiscal-options" style="display: none;">
+                    <button class="nav-btn" onclick="mudarAba('produtividade')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+                            <path d="M7 16l4-8 4 4 4-8" />
+                        </svg>
+                        Produtividade
+                    </button>
+                    <button class="nav-btn" onclick="mudarAba('historico')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        Histórico
+                    </button>
+                    <button class="nav-btn" onclick="mudarAba('historico-geral')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                            <path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z" />
+                            <path d="M12 11h4" />
+                            <path d="M12 16h4" />
+                            <path d="M8 11h.01" />
+                            <path d="M8 16h.01" />
+                        </svg>
+                        Histórico Geral
+                    </button>
+                </div>
                 <div id="admin-options" style="display: none;">
                     <div class="nav-divider">ADMINISTRAÇÃO</div>
-                    <button class="nav-btn" onclick="mudarAba('usuarios')">👥 Usuários</button>
-                    <button class="nav-btn" onclick="mudarAba('config')">⚙️ Configurações</button>
-                </div>
+                    <button class="nav-btn" onclick="mudarAba('usuarios')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Usuários
+                    </button>
+                </div> <!-- /admin-options -->
+
+                <div class="nav-divider"></div>
+                <button class="nav-btn" onclick="mudarAba('configuracoes')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    Configurações
+                </button>
             </nav>
 
             <button class="logout-footer" onclick="sair()">
-                <span> Sair do Sistema</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Sair do Sistema</span>
             </button>
         </aside>
 
         <main class="main-content">
+            <!-- ABA: HOME -->
             <section id="aba-home" class="content-section">
-                <h1>Visão Geral</h1>
-                <div class="stats-grid">
-                    <div class="stat-card"><h3>Tarefas</h3><p>03 pendentes</p></div>
-                    <div id="card-admin-stats" class="stat-card admin-only" style="display:none;">
-                        <h3>Alertas</h3><p>Sistema Estável</p>
+                <h1>Home</h1>
+
+                <div id="home-produtividade-container" style="display:none;">
+                    <div class="pontuacao-resumo" style="margin-top: 2rem;">
+                        <div class="pontuacao-card">
+                            <h3>Pontuação Total</h3>
+                            <div class="valor" id="pontuacao-resumo-total">0</div>
+                            <div id="meta-2000" class="meta-badge" style="display:none;">🏆 META ATINGIDA!</div>
+                        </div>
+                        <div class="pontuacao-card">
+                            <h3>Registros</h3>
+                            <div class="valor" id="total-registros">0</div>
+                        </div>
+                        <div class="pontuacao-card pontuacao-card-acao">
+                            <button class="btn-relatorio" onclick="abrirRelatorio()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <line x1="16" y1="13" x2="8" y2="13" />
+                                    <line x1="16" y1="17" x2="8" y2="17" />
+                                </svg>
+                                Gerar Relatório
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grafico-container">
+                        <h3>Produtividade por Dia</h3>
+                        <canvas id="grafico-produtividade" height="200"></canvas>
                     </div>
                 </div>
             </section>
 
+            <!-- ABA: PRODUTIVIDADE (só fiscal) -->
+            <section id="aba-produtividade" class="content-section" style="display: none;">
+                <h1 class="secao-titulo-prod">Produtividade</h1>
+
+                <div class="categorias-grid" id="categorias-grid">
+                    <!-- Preenchido dinamicamente pelo JS -->
+                </div>
+            </section>
+
+            <!-- ABA: HISTÓRICO (só fiscal) -->
+            <section id="aba-historico" class="content-section" style="display: none;">
+                <h1 class="secao-titulo-prod">Histórico de Produtividade</h1>
+
+
+                <div class="pontuacao-resumo">
+                    <div class="pontuacao-card">
+                        <h3>Pontuação Total</h3>
+                        <div class="valor" id="pontuacao-total">0</div>
+                    </div>
+                    <div class="pontuacao-card">
+                        <h3>Registros</h3>
+                        <div class="valor" id="total-registros-hist">0</div>
+                    </div>
+                </div>
+
+                <div class="filtros-historico">
+                    <div class="filtro-grupo">
+                        <label for="filtro-categoria">Categoria</label>
+                        <select id="filtro-categoria" onchange="filtrarHistorico()">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    <div class="filtro-grupo">
+                        <label for="filtro-busca">Buscar</label>
+                        <input type="text" id="filtro-busca" placeholder="Pesquisar nos registros..."
+                            oninput="filtrarHistorico()">
+                    </div>
+                </div>
+
+                <div class="historico-container" id="historico-lista">
+                    <div class="historico-vazio">
+                        Nenhum registro de produtividade ainda.<br>
+                        Vá em Produtividade e registre suas atividades!
+                    </div>
+                </div>
+            </section>
+
+            <!-- ABA: HISTÓRICO GERAL (Controle Processual) -->
+            <section id="aba-historico-geral" class="content-section" style="display: none;">
+                <h1>Histórico Geral — Controle Processual</h1>
+
+                <div class="sub-abas-cp">
+                    <button class="sub-aba-btn active" onclick="mudarSubAbaCP('1.1', this)">NP</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.2', this)">Auto Infração</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.3', this)">AR</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.4', this)">Ofício</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.5', this)">Relatório</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.6', this)">Protocolo</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.7', this)">Réplica</button>
+                </div>
+
+                <div class="busca-geral-container">
+                    <input type="text" id="busca-historico-geral"
+                        placeholder="Pesquisar por N°, Nome, Bairro ou N° Inscrição..."
+                        oninput="filtrarHistoricoGeral()">
+                </div>
+
+                <div id="historico-geral-lista">
+                    <div class="historico-vazio">Selecione uma categoria acima.</div>
+                </div>
+            </section>
+
+            <!-- ABA: TAREFAS -->
             <section id="aba-tarefas" class="content-section" style="display: none;">
                 <h1>Minhas Tarefas</h1>
                 <p>Aqui aparecerá o seu histórico de tarefas.</p>
             </section>
+
+            <!-- ABA: CONFIGURAÇÕES (Perfil) -->
+            <section id="aba-configuracoes" class="content-section" style="display: none;">
+                <h1>Meu Perfil</h1>
+                <div class="perfil-container">
+                    <div class="perfil-avatar-sec">
+                        <div class="avatar-grande-wrapper">
+                            <img id="perfil-foto-preview" src="https://via.placeholder.com/150" alt="Sua Foto">
+                            <label for="upload-avatar" class="btn-trocar-foto">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path
+                                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                    <circle cx="12" cy="13" r="4" />
+                                </svg>
+                            </label>
+                            <input type="file" id="upload-avatar" accept="image/*" style="display: none;"
+                                onchange="uploadAvatarLocal(event)">
+                        </div>
+                        <p class="avatar-help">Clique no ícone para alterar sua foto.</p>
+                        <p id="upload-status" style="font-size: 0.8rem; color: #64748b; margin-top: 5px;"></p>
+                        <span class="link-redefinir-senha" onclick="mostrarFormSenha()">Redefinir Senha</span>
+                    </div>
+
+                    <div class="perfil-dados-sec">
+                        <div class="input-group">
+                            <label>Nome Completo</label>
+                            <input type="text" id="perfil-nome" readonly>
+                        </div>
+                        <div class="input-group">
+                            <label>Login (CPF)</label>
+                            <input type="text" id="perfil-cpf" readonly>
+                        </div>
+                        <div class="input-group">
+                            <label>Cargo Atual</label>
+                            <input type="text" id="perfil-cargo" readonly class="input-destaque">
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
+    <!-- MODAL FLUTUANTE (Formulário de registro) -->
+    <div class="modal-overlay" id="modal-produtividade">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 id="modal-titulo">Categoria</h2>
+                <button class="modal-close" onclick="fecharModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-campos">
+                <!-- Campos gerados dinamicamente -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancelar" onclick="fecharModal()">Cancelar</button>
+                <button class="btn-salvar" onclick="salvarRegistro()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE DETALHES (ao clicar em um registro) -->
+    <div class="modal-overlay" id="modal-detalhes">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 id="detalhe-titulo">Detalhes</h2>
+                <button class="modal-close" onclick="fecharDetalhes()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="detalhe-campos">
+                <!-- Detalhes gerados dinamicamente -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-excluir" onclick="excluirRegistro()">Excluir</button>
+                <button class="btn-salvar" onclick="editarRegistro()">Editar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL REDEFINIR SENHA -->
+    <div class="modal-overlay" id="modal-senha" style="display: none;">
+        <div class="modal-container" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>Redefinir Senha</h2>
+                <button class="modal-close" onclick="fecharModalSenha()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <label>Senha Antiga</label>
+                    <input type="password" id="senha-antiga" placeholder="Digite sua senha atual"
+                        style="width: 100%; padding: 10px; border: 1px solid var(--border-soft); border-radius: 8px;">
+                </div>
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <label>Nova Senha</label>
+                    <input type="password" id="nova-senha" placeholder="Mínimo 6 caracteres"
+                        style="width: 100%; padding: 10px; border: 1px solid var(--border-soft); border-radius: 8px;">
+                </div>
+                <div class="input-group">
+                    <label>Confirmar Nova Senha</label>
+                    <input type="password" id="confirmar-senha" placeholder="Repita a nova senha"
+                        style="width: 100%; padding: 10px; border: 1px solid var(--border-soft); border-radius: 8px;">
+                </div>
+                <p id="msg-senha" style="font-size: 0.85rem; margin-top: 15px; text-align: center; height: 1.2em;"></p>
+            </div>
+            <div class="modal-footer" style="justify-content: flex-end; gap: 10px;">
+                <button class="btn-cancelar" onclick="fecharModalSenha()">Cancelar</button>
+                <button class="btn-salvar" onclick="alterarSenha()">Alterar Senha</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="protecao.js"></script>
     <script src="painel.js"></script>
+    <script src="produtividade.js"></script>
 </body>
+
 </html>
