@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="style_painel.css">
     <link rel="stylesheet" href="style_produtividade.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 
 <body>
@@ -22,6 +23,8 @@
                 <div class="profile-info">
                     <h3 id="user-name">Carregando...</h3>
                     <p id="user-role-display">Cargo</p>
+                    <p id="user-matricula" style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">Matrícula: ---
+                    </p>
                 </div>
             </div>
 
@@ -145,6 +148,17 @@
             <section id="aba-produtividade" class="content-section" style="display: none;">
                 <h1 class="secao-titulo-prod">Produtividade</h1>
 
+                <div class="pontuacao-resumo">
+                    <div class="pontuacao-card">
+                        <h3>Pontuação Total</h3>
+                        <div class="valor" id="pontuacao-prod-total">0</div>
+                    </div>
+                    <div class="pontuacao-card">
+                        <h3>Registros</h3>
+                        <div class="valor" id="total-registros-prod">0</div>
+                    </div>
+                </div>
+
                 <div class="categorias-grid" id="categorias-grid">
                     <!-- Preenchido dinamicamente pelo JS -->
                 </div>
@@ -169,7 +183,8 @@
                 <div class="filtros-historico">
                     <div class="filtro-grupo">
                         <label for="filtro-categoria">Categoria</label>
-                        <select id="filtro-categoria" onchange="filtrarHistorico()">
+                        <select id="filtro-categoria" class="sub-aba-btn" onchange="filtrarHistorico()"
+                            style="margin: 0; outline: none; width: 100%; min-width: 200px; padding: 10px 15px;">
                             <option value="">Todas</option>
                         </select>
                     </div>
@@ -202,10 +217,16 @@
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.7', this)">Réplica</button>
                 </div>
 
-                <div class="busca-geral-container">
-                    <input type="text" id="busca-historico-geral"
-                        placeholder="Pesquisar por N°, Nome, Bairro ou N° Inscrição..."
-                        oninput="filtrarHistoricoGeral()">
+                <div class="busca-geral-container" style="display: flex; gap: 10px; align-items: center;">
+                    <div style="flex: 1; position: relative;">
+                        <input type="text" id="busca-historico-geral"
+                            placeholder="Pesquisar por N°, Nome, Bairro ou N° Inscrição..."
+                            oninput="filtrarHistoricoGeral()" style="width: 100%;">
+                    </div>
+                    <select id="filtro-bairro-historico" class="sub-aba-btn" onchange="filtrarHistoricoGeral()"
+                        style="outline: none; min-width: 180px; max-width: 250px; height: 100%;">
+                        <option value="">Todos os Bairros</option>
+                    </select>
                 </div>
 
                 <div id="historico-geral-lista">
@@ -250,6 +271,10 @@
                         <div class="input-group">
                             <label>Login (CPF)</label>
                             <input type="text" id="perfil-cpf" readonly>
+                        </div>
+                        <div class="input-group">
+                            <label>Matrícula</label>
+                            <input type="text" id="perfil-matricula" readonly>
                         </div>
                         <div class="input-group">
                             <label>Cargo Atual</label>
@@ -345,7 +370,51 @@
         </div>
     </div>
 
+    <!-- MODAL EDITOR DE DOCUMENTO (WYSIWYG) -->
+    <div class="modal-overlay" id="modal-editor-documento" style="display: none; z-index: 2000;">
+        <div class="modal-container"
+            style="max-width: 900px; width: 95%; height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>Pré-visualização e Edição</h2>
+                <button class="modal-close" onclick="fecharEditorDocumento()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body"
+                style="flex: 1; overflow-y: auto; background: #e2e8f0; padding: 20px; display: flex; justify-content: center;">
+                <!-- Papel A4 -->
+                <div id="editor-texto" contenteditable="true" style="
+                    background: white; 
+                    width: 210mm; 
+                    min-height: 297mm; 
+                    padding: 20mm; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+                    outline: none;
+                    font-family: 'Times New Roman', Times, serif;
+                    font-size: 12pt;
+                    line-height: 1.5;
+                    color: black;
+                ">
+                </div>
+            </div>
+
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn-cancelar" onclick="fecharEditorDocumento()">Voltar ao Formulário</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-exporta-word" class="btn-salvar" style="background: #2563eb;"
+                        onclick="baixarDocumentoWord()">Baixar Word (.doc)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="protecao.js"></script>
     <script src="painel.js"></script>
     <script src="produtividade.js"></script>

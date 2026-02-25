@@ -21,6 +21,11 @@ const form = document.getElementById('loginForm');
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Carregando...';
+    submitBtn.disabled = true;
+
     // 1. Pega o CPF e limpa pontos e traços (deixa só números)
     let cpfLimpo = document.getElementById('cpf').value.replace(/\D/g, '');
     const password = document.getElementById('password').value;
@@ -36,6 +41,8 @@ form.addEventListener('submit', async (e) => {
 
     if (error) {
         alert("Erro no login: CPF ou senha incorretos.");
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
     } else {
         // Busca o cargo na tabela profiles usando o ID do usuário logado
         const { data: perfil } = await supabaseClient

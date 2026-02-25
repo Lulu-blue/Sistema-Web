@@ -30,7 +30,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 
 ### Aba de Configurações (Meu Perfil)
 - Fica disponível para qualquer um na navegação inferior esquerda.
-- Exibe o **Cargo**, **Nome** e **CPF** (Carregados via `profiles`).
+- Exibe o **Cargo**, **Nome**, **CPF**, e agora também a **Matrícula** (Carregados via tabela de perfis `profiles`).
 - **Upload de Avatar**: Clique na foto do perfil permite o envio de imagem local `.jpg/.png` dimensionada, que será carregada usando o *Storage (`avatars`)* do supabase com chave única por usuário, atualizando dinamicamente na Sidebar.
 - **Redefinição de Senha Segura**: Um modal central de redefinição garante a segurança exigindo que a **Senha Antiga** passe pelo `signInWithPassword()` atrás das cortinas, somado a uma **dupla verificação** da digitação da nova credencial, para só então ativar a trigger de alteração.
 
@@ -56,9 +56,10 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 - **Tabelas Distintas no Supabase**: 
   - *Registros comuns* vão para a tabela `registros_produtividade`.
   - *Controle Processual* vai para a tabela separada `controle_processual`.
-- **Anexo PDF (Notificação Preliminar - 1.1°)**: Campo de arquivo obrigatório (`type="file"`). É feito upload do PDF diretamente para o **Storage do Supabase** (Bucket: `anexos`). A URL do arquivo é então salva no JSONB dos campos e fica disponível num botão de visualização no modo detalhes.
-- **Campo de Dropdown Persistente**: A categoria *Notificação Preliminar* permite dropdown selecionável onde "Outro..." abre criação de motivos customizados, salvos localmente e deletáveis a qualquer momento.
-- **Numeração Automática**: Algumas atividades de Processual (ex. Ofício e Auto de Infração) puxam sequenciado pelo maior número que o fiscal executou naquele tipo.
+- **Anexo Automático em PDF e Editor WYSIWYG**: Categorias específicas como **Auto de Infração** param de perguntar por upload manual ao acionar botão *Gerar Documento* do formulário. Invoca-se um Mini-Editor (Modal editável) que mostra de antemão formato A4 timbrado pronto. O sistema converte simultaneamente para Word e invoca nativamente a biblioteca `html2pdf.js` forçando um download local e em segundo plano a anexação do respectivo PDF assinado/submetido em nuvem, limpando os campos de dados do banco de dados e enviando apenas colunas essenciais.
+- **Auto-Preenchimento por Leitura IA de Word**: Algumas categorias (ex. Notificação Preliminar) disponibilizam função "*Preencher c/ Arquivo Word*". Graças ao plugin `mammoth.js`, o sistema varre o DOCX via Regex em busca de blocos cruciais (Contribuinte, CPF, Bairro e Inscrição) repassando instantaneamente para os inputs visuais da plataforma para reduzir o tempo de digitação manual.
+- **Campo de Dropdown Persistente Avançado**: A categoria permite dropdowns selecionáveis onde "Outro..." abre criação de motivos customizados, salvos localmente num array próprio, limpáveis pela Lixeira "🗑" e selecionáveis sem interrupção através de manipulação de DOM para impedir perda de focus no input de texto.
+- **Numeração Automática**: Algumas atividades de Processual (ex. Ofício e Auto de Infração) puxam sequenciado pelo maior número que o fiscal executou naquele tipo (ex. `0116/2026`).
 - **Calculadora de Horas**: Certas rotinas geram pontos multiplicando o "horas gastas" * "fator (ex 30pts/h)".
 
 ---
@@ -67,11 +68,11 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 
 - **Histórico Pessoal**: Todo o registro preenchido por um único fiscal é centralizado aqui independente se ele foi parar na tabela Normal ou na tabela de Controle Processual.
     - É possível visualizar os detalhes (inclusive acessar botão p/ visualizar Anexos PDF).
-    - O Registro pode ser Editado ou Deletado pelo dono do dado.
+    - O Registro pode ser Editado ou Deletado pelo dono do dado com feedback visual assíncrono (Loading state contra duplo-clique).
     - Ordenação feita de forma inteligente a partir da *Data do Evento informada no Form* e não a do momento da digitação.
 - **Histórico Geral**: Aba exclusiva para consulta de todas as entradas da secretaria de **Controle Processual**, subdividido por sub-abas (Notificação, Autofração, AR etc).
-    - Visão de leitura (sem exclusão ou edição).
-    - Buscador que filtra a tabela por texto em tempo real ignorando acentuação (exeto por nome do fiscal).
+    - Visão de leitura com omitimento dinâmico de colunas invisíveis (`ignorarNoBanco`).
+    - Buscador que filtra a tabela por texto cruzado em tempo real e dropdown interligado contendo o filtro local de **Bairro** mapeado ao vivo.
 
 ---
 

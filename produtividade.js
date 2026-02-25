@@ -18,23 +18,29 @@ const CATEGORIAS = [
             { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
             { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
             { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio', 'Reconstrução de Muro ou Passeio'] },
-            { nome: 'data', label: 'Data da Notificação', tipo: 'date', obrigatorio: true },
-            { nome: 'anexo_pdf', label: 'Anexo (PDF)', tipo: 'file', obrigatorio: true, aceitar: '.pdf' }
+            { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
         ]
     },
     {
         id: '1.2',
         nome: 'Auto de Infração',
-        pontos: 30,
+        pontos: 60,
         destaque: true,
         campos: [
-            { nome: 'nome', label: 'Nome do Contribuinte', tipo: 'text', obrigatorio: true },
-            { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
-            { nome: 'motivo', label: 'Motivo', tipo: 'text', obrigatorio: true },
-            { nome: 'data', label: 'Data do Auto', tipo: 'date', obrigatorio: true },
-            { nome: 'artigo', label: 'Artigo Infringido', tipo: 'text', obrigatorio: true },
-            { nome: 'valor_multa', label: 'Valor da Multa (R$)', tipo: 'text', obrigatorio: true }
+            { nome: 'nome', label: 'Contribuinte', tipo: 'text', obrigatorio: true },
+            { nome: 'endereco_infrator', label: 'Endereço do Infrator', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'endereco_imovel', label: 'Endereço do Imóvel Autuado', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'bairro', label: 'Bairro do Imóvel Autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'inscricao_zona', label: 'Zona', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
+            { nome: 'inscricao_quadra', label: 'Quadra', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
+            { nome: 'inscricao_lote', label: 'Lote', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
+            { nome: 'inscricao_area', label: 'Área', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
+            { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio'] },
+            { nome: 'data', label: 'Data da Fiscalização', tipo: 'date', obrigatorio: true },
+            { nome: 'n_notificacao', label: 'Nº da notificação', tipo: 'text', obrigatorio: false, ignorarNoBanco: true },
+            { nome: 'prazo_defesa', label: 'Prazo p/ Defesa (Dias)', tipo: 'number', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'fundamentacao_legal', label: 'Fundamentação Legal (Lei/Decreto Descumprido)', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'valor_multa', label: 'Valor da Multa (R$)', tipo: 'text', obrigatorio: true, ignorarNoBanco: true }
         ]
     },
     {
@@ -461,6 +467,29 @@ function abrirFormulario(categoria) {
 
     titulo.textContent = categoria.nome;
     corpo.innerHTML = '';
+    window.arquivoWordSubmissao = null; // Zera anexo em memória ao abrir novo form
+
+    // SE for Notificação Preliminar (1.1), adicionar botão extra de Autopreenchimento de Word no topo
+    if (categoria.id === '1.1') {
+        const divWord = document.createElement('div');
+        divWord.className = 'campo-grupo';
+        divWord.style.background = 'rgba(46, 204, 113, 0.1)';
+        divWord.style.padding = '15px';
+        divWord.style.borderRadius = '10px';
+        divWord.style.border = '1px dashed #2ecc71';
+        divWord.style.marginBottom = '20px';
+
+        divWord.innerHTML = `
+            <label style="color: #166534; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                Preenchimento Automático (Word)
+            </label>
+            <p style="font-size: 0.8rem; color: #475569; margin-bottom: 10px;">Anexe o modelo preenchido (.docx) para que o sistema digite os campos automaticamente para você:</p>
+            <input type="file" id="input-word-autopreencher" accept=".docx" onchange="processarWordNotificacao(event)" style="font-size: 0.85rem; padding: 8px;">
+            <p id="msg-word-status" style="font-size: 0.8rem; margin-top: 8px; font-weight: 600;"></p>
+        `;
+        corpo.appendChild(divWord);
+    }
 
     // Gerar campos dinamicamente
     categoria.campos.forEach(campo => {
@@ -517,8 +546,51 @@ function abrirFormulario(categoria) {
             <label for="campo-${campo.nome}">${campo.label} ${campo.obrigatorio ? '*' : ''}</label>
             ${inputHTML}
         `;
-        corpo.appendChild(grupo);
+
+        if (campo.agrupar) {
+            let containerAgrupador = document.getElementById(`grupo-${campo.agrupar}`);
+            if (!containerAgrupador) {
+                // Criação do Row-Flex
+                const wrapper = document.createElement('div');
+                wrapper.style.marginBottom = '15px';
+
+                const labelAgrupada = document.createElement('label');
+                labelAgrupada.textContent = campo.agrupar === 'inscricao' ? 'Inscrição Imobiliária Municipal' : '';
+                labelAgrupada.style.fontWeight = '600';
+                labelAgrupada.style.color = '#475569';
+                labelAgrupada.style.display = 'block';
+                labelAgrupada.style.marginBottom = '5px';
+
+                containerAgrupador = document.createElement('div');
+                containerAgrupador.id = `grupo-${campo.agrupar}`;
+                containerAgrupador.style.display = 'flex';
+                containerAgrupador.style.gap = '10px';
+                containerAgrupador.style.width = '100%';
+
+                wrapper.appendChild(labelAgrupada);
+                wrapper.appendChild(containerAgrupador);
+                corpo.appendChild(wrapper);
+            }
+            grupo.style.flex = '1';
+            grupo.style.marginBottom = '0';
+            // Simplificar label em agrupados pequenos
+            const grpLabel = grupo.querySelector('label');
+            grpLabel.style.fontSize = '0.75rem';
+            containerAgrupador.appendChild(grupo);
+        } else {
+            corpo.appendChild(grupo);
+        }
     });
+
+    // Se for Auto de Infração, troca o botão Salvar por Gerar Documento
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    if (categoria.id === '1.2') {
+        btnSalvarForm.textContent = 'Gerar Documento';
+        btnSalvarForm.onclick = () => abrirEditorAutoInfracao();
+    } else {
+        btnSalvarForm.textContent = 'Salvar';
+        btnSalvarForm.onclick = () => salvarRegistro();
+    }
 
     overlay.classList.add('ativo');
 }
@@ -532,7 +604,7 @@ function fecharModal() {
 
 // --- SALVAR REGISTRO ---
 let salvando = false;
-async function salvarRegistro() {
+async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (!categoriaAtual || salvando) return;
     salvando = true;
 
@@ -541,16 +613,41 @@ async function salvarRegistro() {
     let todosPreenchidos = true;
     let arquivoAnexo = null; // para upload de PDF
 
+    if (blobManual && nomeManual) {
+        arquivoAnexo = {
+            nome: 'anexo_pdf',
+            file: new File([blobManual], nomeManual, { type: 'application/pdf' })
+        };
+    }
+
     categoriaAtual.campos.forEach(campo => {
         const input = document.getElementById(`campo-${campo.nome}`);
 
         if (campo.tipo === 'file') {
+            if (arquivoAnexo && arquivoAnexo.file) return; // Se ja forneceu um auto-file via prop manual
+
             // Tratar campo de arquivo
             if (campo.obrigatorio && (!input.files || input.files.length === 0)) {
                 todosPreenchidos = false;
                 input.style.borderColor = '#ef4444';
             } else if (input.files && input.files.length > 0) {
-                arquivoAnexo = { nome: campo.nome, file: input.files[0] };
+                const fileSubmit = input.files[0];
+
+                // Validação de segurança anti-burlar extensão:
+                if (campo.aceitar) {
+                    const permitidos = campo.aceitar.split(',').map(ext => ext.trim().toLowerCase());
+                    const extensaoAnexo = fileSubmit.name.substring(fileSubmit.name.lastIndexOf('.')).toLowerCase();
+
+                    if (!permitidos.includes(extensaoAnexo)) {
+                        alert(`Arquivo inválido em "${campo.label}". \nPor favor, envie apenas nos formatos permitidos: ${permitidos.join(', ')}`);
+                        todosPreenchidos = false;
+                        input.style.borderColor = '#ef4444';
+                        input.value = ''; // Limpa o input fakeado
+                        return; // Trava o envio
+                    }
+                }
+
+                arquivoAnexo = { nome: campo.nome, file: fileSubmit };
                 input.style.borderColor = '#e2e8f0';
             }
             return; // não salvar no campos — será salvo como URL após upload
@@ -569,7 +666,10 @@ async function salvarRegistro() {
         } else {
             input.style.borderColor = '#e2e8f0';
         }
-        campos[campo.nome] = valor;
+
+        if (!campo.ignorarNoBanco) {
+            campos[campo.nome] = valor;
+        }
     });
 
     if (!todosPreenchidos) {
@@ -676,7 +776,14 @@ async function salvarRegistro() {
     // Upload de arquivo anexo (se houver)
     if (arquivoAnexo && data && data.length > 0) {
         const registroId = data[0].id;
-        const nomeArquivo = `${registroId}_${arquivoAnexo.file.name}`;
+        // Limpar acentos e espaços do nome para não dar erro no Supabase
+        let nomeAnexoLimpo = arquivoAnexo.file.name
+            .normalize('NFD')                     // Remove acentos
+            .replace(/[\u0300-\u036f]/g, '')      // Limpa os diacríticos
+            .replace(/\s+/g, '_')                 // Troca espaços por underscore
+            .replace(/[^a-zA-Z0-9_\-\.]/g, '');   // Remove caracteres especiais
+
+        const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
         const caminho = `${user.id}/${nomeArquivo}`;
         const tabela = categoriaAtual.destaque ? 'controle_processual' : 'registros_produtividade';
 
@@ -772,16 +879,23 @@ async function carregarHistorico() {
 
     // Calcular pontuação total
     const pontuacaoTotal = todosRegistros.reduce((total, r) => total + r.pontuacao, 0);
-    if (pontuacaoEl) pontuacaoEl.textContent = pontuacaoTotal;
 
+    // Atualiza cards de Histórico Pessoal
+    if (pontuacaoEl) pontuacaoEl.textContent = pontuacaoTotal;
+    const totalRegistrosHistEl = document.getElementById('total-registros-hist');
+    if (totalRegistrosHistEl) totalRegistrosHistEl.textContent = todosRegistros.length;
+
+    // Atualiza cards de Resumo (Home)
     const pontuacaoResEl = document.getElementById('pontuacao-resumo-total');
     if (pontuacaoResEl) pontuacaoResEl.textContent = pontuacaoTotal;
-
     const totalRegistrosEl = document.getElementById('total-registros');
     if (totalRegistrosEl) totalRegistrosEl.textContent = todosRegistros.length;
 
-    const totalRegistrosHistEl = document.getElementById('total-registros-hist');
-    if (totalRegistrosHistEl) totalRegistrosHistEl.textContent = todosRegistros.length;
+    // Atualiza cards da Produtividade
+    const pontuacaoProdEl = document.getElementById('pontuacao-prod-total');
+    if (pontuacaoProdEl) pontuacaoProdEl.textContent = pontuacaoTotal;
+    const totalRegistrosProdEl = document.getElementById('total-registros-prod');
+    if (totalRegistrosProdEl) totalRegistrosProdEl.textContent = todosRegistros.length;
 
     popularFiltroCategorias();
     renderizarTabela(todosRegistros);
@@ -939,12 +1053,18 @@ function abrirDetalhes(id) {
 
         // Buscar label da definição
         let label = chave;
+        let ignorarExibicao = false;
         if (catDef) {
             const campoDef = catDef.campos.find(c => c.nome === chave);
-            if (campoDef) label = campoDef.label;
+            if (campoDef) {
+                label = campoDef.label;
+                ignorarExibicao = campoDef.ignorarNoBanco;
+            }
         }
 
-        html += `<div class="detalhe-item"><span class="detalhe-label">${label}</span><span class="detalhe-valor">${valor}</span></div>`;
+        if (!ignorarExibicao) {
+            html += `<div class="detalhe-item"><span class="detalhe-label">${label}</span><span class="detalhe-valor">${valor}</span></div>`;
+        }
     });
 
     // Pontuação
@@ -1023,21 +1143,36 @@ async function excluirRegistro() {
     const confirma = confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.');
     if (!confirma) return;
 
-    const tabela = registroSelecionado._tabela || 'registros_produtividade';
-    const { error } = await supabaseClient
-        .from(tabela)
-        .delete()
-        .eq('id', registroSelecionado.id);
+    const btnExcluir = document.querySelector('#modal-detalhes .btn-excluir');
+    const oldTexto = btnExcluir ? btnExcluir.textContent : 'Excluir';
 
-    if (error) {
-        console.error('Erro ao excluir:', error);
-        alert('Erro ao excluir: ' + error.message);
-        return;
+    if (btnExcluir) {
+        btnExcluir.textContent = 'Excluindo...';
+        btnExcluir.disabled = true;
     }
 
-    fecharDetalhes();
-    carregarHistorico();
-    alert('Registro excluído com sucesso.');
+    try {
+        const tabela = registroSelecionado._tabela || 'registros_produtividade';
+        const { error } = await supabaseClient
+            .from(tabela)
+            .delete()
+            .eq('id', registroSelecionado.id);
+
+        if (error) {
+            console.error('Erro ao excluir:', error);
+            alert('Erro ao excluir: ' + error.message);
+            return;
+        }
+
+        fecharDetalhes();
+        carregarHistorico();
+        alert('Registro excluído com sucesso.');
+    } finally {
+        if (btnExcluir) {
+            btnExcluir.textContent = oldTexto;
+            btnExcluir.disabled = false;
+        }
+    }
 }
 
 // --- DROPDOWN CUSTOMIZADO ---
@@ -1080,12 +1215,28 @@ function adicionarOpcaoCustom(catId, campoNome) {
         localStorage.setItem(storageKey, JSON.stringify(customOpts));
     }
 
-    // Re-abrir formulário com nova opção selecionada
-    const categoria = CATEGORIAS.find(c => c.id === catId);
-    if (categoria) {
-        abrirFormulario(categoria);
-        setTimeout(() => selecionarOpcao(campoNome, novoValor), 50);
+    // Fecha o campo texto e insere a nova opção na lista
+    input.value = '';
+    const containerOutro = document.getElementById(`outro-container-${campoNome}`);
+    if (containerOutro) containerOutro.style.display = 'none';
+
+    // Insere visualmente na lista sem recarregar o form
+    const dropdownLista = document.getElementById(`dropdown-lista-${campoNome}`);
+    if (dropdownLista) {
+        const novoItemHTML = document.createElement('div');
+        novoItemHTML.className = 'dropdown-item dropdown-item-custom';
+        novoItemHTML.onclick = () => selecionarOpcao(campoNome, novoValor.replace(/'/g, "\\'"));
+        novoItemHTML.innerHTML = `
+            <span>${novoValor}</span>
+            <button class="dropdown-delete" onclick="event.stopPropagation(); removerOpcaoCustom('${catId}', '${campoNome}', '${novoValor.replace(/'/g, "\\'")}')">🗑</button>
+        `;
+        // insere antes do botão 'Outro...'
+        const btnOutro = dropdownLista.querySelector('.dropdown-item-outro');
+        if (btnOutro) dropdownLista.insertBefore(novoItemHTML, btnOutro);
     }
+
+    // Já deixa o novo valor selecionado
+    selecionarOpcao(campoNome, novoValor);
 }
 
 function removerOpcaoCustom(catId, campoNome, valor) {
@@ -1161,35 +1312,71 @@ async function carregarHistoricoGeral(categoriaId) {
     const registrosOrdenados = registros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
 
     registrosGeralAtual = registrosOrdenados;
+    popularFiltroBairros(registrosOrdenados); // Popula o dropdown
     renderizarTabelaGeral(registrosOrdenados, categoriaId);
 }
 
-// Filtro de busca — busca por N°, nome, bairro, n_inscricao (NÃO por fiscal)
-function filtrarHistoricoGeral() {
-    const termo = document.getElementById('busca-historico-geral').value.toLowerCase().trim();
-    if (!termo) {
-        renderizarTabelaGeral(registrosGeralAtual, subAbaAtual);
-        return;
-    }
+// Extrai bairros únicos e preenche o dropdown
+function popularFiltroBairros(registros) {
+    const select = document.getElementById('filtro-bairro-historico');
+    if (!select) return;
 
-    const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
+    // Guardar a opção "Todos os Bairros"
+    select.innerHTML = '<option value="">Todos os Bairros</option>';
 
-    const filtrados = registrosGeralAtual.filter(reg => {
-        // Buscar no numero_sequencial
-        if (reg.numero_sequencial && reg.numero_sequencial.toLowerCase().includes(termo)) return true;
-        // Buscar nos campos do contribuinte (não fiscal)
-        for (const campo of camposBusca) {
-            if (reg.campos[campo] && reg.campos[campo].toString().toLowerCase().includes(termo)) return true;
+    // Extrair os bairros que existem dentro do campo JSON "campos"
+    const bairros = new Set();
+    registros.forEach(reg => {
+        if (reg.campos && reg.campos.bairro) {
+            const b = reg.campos.bairro.trim();
+            if (b) bairros.add(b);
         }
-        return false;
     });
 
-    if (filtrados.length === 0) {
-        document.getElementById('historico-geral-lista').innerHTML = '<div class="historico-vazio">Nenhum resultado para a busca.</div>';
-        return;
+    // Ordenar alfabeticamente e criar as tags <option>
+    Array.from(bairros).sort().forEach(bairro => {
+        const option = document.createElement('option');
+        option.value = bairro;
+        option.textContent = bairro;
+        select.appendChild(option);
+    });
+}
+
+// Filtro de busca misto: Texto Livre + Dropdown de Bairro
+function filtrarHistoricoGeral() {
+    const termo = document.getElementById('busca-historico-geral').value.toLowerCase().trim();
+    const bairroSelecionado = document.getElementById('filtro-bairro-historico').value;
+
+    let filtrados = registrosGeralAtual;
+
+    // 1. Filtrar pelo Dropdown de Bairro (Exato)
+    if (bairroSelecionado) {
+        filtrados = filtrados.filter(reg =>
+            reg.campos && reg.campos.bairro === bairroSelecionado
+        );
     }
 
-    renderizarTabelaGeral(filtrados, subAbaAtual);
+    // 2. Filtrar pelo Texto (Contém)
+    if (termo) {
+        const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
+
+        filtrados = filtrados.filter(reg => {
+            // Buscar no numero_sequencial
+            if (reg.numero_sequencial && reg.numero_sequencial.toLowerCase().includes(termo)) return true;
+            // Buscar nos campos do contribuinte (não fiscal)
+            for (const campo of camposBusca) {
+                if (reg.campos && reg.campos[campo] && reg.campos[campo].toString().toLowerCase().includes(termo)) return true;
+            }
+            return false;
+        });
+    }
+
+    // Renderizar
+    if (filtrados.length === 0) {
+        document.getElementById('historico-geral-lista').innerHTML = '<div class="historico-vazio">Nenhum resultado para a busca.</div>';
+    } else {
+        renderizarTabelaGeral(filtrados, subAbaAtual);
+    }
 }
 
 function renderizarTabelaGeral(registros, categoriaId) {
@@ -1203,7 +1390,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
     let headerHTML = '<tr>';
     if (temNumero) headerHTML += '<th>N°</th>';
     categoria.campos.forEach(campo => {
-        if (campo.tipo !== 'date') {
+        if (campo.tipo !== 'date' && !campo.ignorarNoBanco) {
             headerHTML += `<th>${campo.label}</th>`;
         }
     });
@@ -1214,7 +1401,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
         bodyHTML += '<tr>';
         if (temNumero) bodyHTML += `<td>${reg.numero_sequencial || '-'}</td>`;
         categoria.campos.forEach(campo => {
-            if (campo.tipo !== 'date') {
+            if (campo.tipo !== 'date' && !campo.ignorarNoBanco) {
                 bodyHTML += `<td>${reg.campos[campo.nome] || '-'}</td>`;
             }
         });
@@ -1475,6 +1662,317 @@ function inicializarProdutividade() {
     renderizarCategorias();
     carregarHistorico();
 }
+
+// --- MAMMOTH / EXTRAÇÃO DE WORD E CONVERSÃO PDF ---
+async function processarWordNotificacao(event) {
+    const file = event.target.files[0];
+    const statusMsg = document.getElementById('msg-word-status');
+
+    if (!file) return;
+
+    // Proteção Javascript para forçar que só .doc ou .docx passem
+    const extensao = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (extensao !== '.docx' && extensao !== '.doc') {
+        statusMsg.textContent = "❌ Arquivo Inválido! Anexe somente um documento Word (.docx ou .doc).";
+        statusMsg.style.color = "#ef4444";
+        event.target.value = ''; // Remove o arquivo rejeitado
+        return;
+    }
+
+    statusMsg.textContent = "Processando arquivo aguarde...";
+    statusMsg.style.color = "#eab308"; // Amarelo
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+
+        statusMsg.textContent = "1. Lendo formulário e extraindo o texto...";
+
+        // mammoth js (extração limpa para as Regex)
+        const resultRaw = await mammoth.extractRawText({ arrayBuffer: arrayBuffer.slice(0) });
+        const text = resultRaw.value;
+
+        // Roda as RegEx e Preenche os Inputs em tela
+        const dadosExtraidos = extrairDadosNotificacaoWord(text);
+
+        if (dadosExtraidos.n_notificacao) {
+            const el = document.getElementById('campo-n_notificacao');
+            if (el) el.value = dadosExtraidos.n_notificacao;
+        }
+
+        if (dadosExtraidos.nome) {
+            const el = document.getElementById('campo-nome');
+            if (el) el.value = dadosExtraidos.nome;
+        }
+
+        if (dadosExtraidos.n_inscricao) {
+            const el = document.getElementById('campo-n_inscricao');
+            if (el) el.value = dadosExtraidos.n_inscricao;
+        }
+
+        if (dadosExtraidos.bairro) {
+            const el = document.getElementById('campo-bairro');
+            if (el) el.value = dadosExtraidos.bairro;
+        }
+
+        if (dadosExtraidos.data) {
+            const el = document.getElementById('campo-data');
+            if (el) el.value = dadosExtraidos.data;
+        }
+
+        // Procura o input oficial de anexo obrigatório
+        const inputAnexoFinal = document.getElementById('campo-anexo_pdf');
+        if (inputAnexoFinal) {
+            // Repassa o arquivo Word cru diretamente para a validação oficial do form
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            inputAnexoFinal.files = dataTransfer.files;
+
+            // Dispara o evento de validação para tirar a borda vermelha
+            inputAnexoFinal.dispatchEvent(new Event('change'));
+            inputAnexoFinal.style.borderColor = '#e2e8f0';
+        }
+
+        statusMsg.textContent = "✔ Formulário pré-preenchido e Word enviado como anexo com sucesso!";
+        statusMsg.style.color = "#22c55e"; // Verde
+
+    } catch (err) {
+        console.error("Erro Mammoth JS / html2pdf:", err);
+        statusMsg.textContent = "❌ Falha ao tentar processar arquivo. Preencha manualmente.";
+        statusMsg.style.color = "#ef4444"; // Vermelho
+    }
+}
+
+function extrairDadosNotificacaoWord(texto) {
+    const dados = {};
+    const trimAll = str => str.replace(/\s+/g, ' ').trim();
+
+    // 1. N° Notificacao
+    const mNotif = texto.match(/NOTIFICAÇÃO\s*PRELIMINAR\s*N[º°]?\s*(\d+)/i);
+    if (mNotif) dados.n_notificacao = mNotif[1].trim();
+
+    // 2. Data
+    const mData = texto.match(/Data:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    if (mData) {
+        // Converte DD/MM/YYYY para YYYY-MM-DD (Padrão de input type=date)
+        dados.data = `${mData[3]}-${mData[2]}-${mData[1]}`;
+    }
+
+    // 3. Nome (Remove String Contribuinte Repetida)
+    const mNome = texto.match(/Contribuinte\s+([\s\S]+?)\s+Logradouro:/i);
+    if (mNome) {
+        let nomeLido = trimAll(mNome[1]);
+        nomeLido = nomeLido.replace(/^Contribuinte\s*/i, '');
+        dados.nome = nomeLido;
+    }
+
+    // 3. Inscrição do Imóvel
+    const mInscricao = texto.match(/Inscrição\s*do\s*Imóvel:\s*([\d\.\s]+)/i);
+    if (mInscricao) dados.n_inscricao = mInscricao[1].replace(/\s+/g, '').trim();
+
+    // 4. Bairro
+    const regexBairro = /Bairro:\s*([\s\S]+?)\s*(?:Número:|Inscrição|Observacão|Observação|\d{5})/gi;
+    let match;
+    const bairros = [];
+    while ((match = regexBairro.exec(texto)) !== null) {
+        bairros.push(trimAll(match[1]));
+    }
+
+    // Tenta pegar o 2° bairro (geralmente Imóvel), senão o 1°
+    if (bairros.length > 1) {
+        dados.bairro = bairros[1];
+    } else if (bairros.length === 1) {
+        dados.bairro = bairros[0];
+    }
+
+    return dados;
+}
+
+// --- GERADOR DE AUTO DE INFRAÇÃO (WYSIWYG) ---
+async function abrirEditorAutoInfracao() {
+    // 1. Coleta e valida dados
+    const campos = {};
+    let todosPreenchidos = true;
+
+    categoriaAtual.campos.forEach(campo => {
+        if (campo.tipo === 'file') return;
+        const input = document.getElementById(`campo-${campo.nome}`);
+        let valor = input ? input.value.trim() : '';
+
+        // n_notificacao não é obrigatorio no Auto
+        if (campo.obrigatorio && !valor && campo.nome !== 'n_notificacao') {
+            todosPreenchidos = false;
+            if (input) input.style.borderColor = '#ef4444';
+        } else if (input) {
+            input.style.borderColor = '#e2e8f0';
+        }
+        campos[campo.nome] = valor || '';
+    });
+
+    if (!todosPreenchidos) {
+        alert('Preencha os dados obrigatórios do Auto de Infração antes de gerar o documento.');
+        return;
+    }
+
+    // Puxa do Banco de Dados offline o provável sequencial desse Auto e injeta
+    const numSequencial = await gerarNumeroSequencial('1.2');
+
+    // 2. Prepara HTML do Documento
+    const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
+    const dataFormatada = campos.data ? `${dataPartes[2]}/${dataPartes[1]}/${dataPartes[0]}` : '';
+    const descInscricao = campos.inscricao_zona ? `Zona: ${campos.inscricao_zona}, Quadra: ${campos.inscricao_quadra}, Lote: ${campos.inscricao_lote}, com área de ${campos.inscricao_area} m²` : '---';
+    const numNotificacao = campos.n_notificacao ? campos.n_notificacao : '_____';
+    const prazoDefesa = campos.prazo_defesa ? campos.prazo_defesa : '_____';
+
+    // Pegar informações do Fiscal (Nome logado) e Data de Hoje para Assinatura
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    let nomeFiscal = 'Nome do Fiscal';
+    if (user) {
+        const { data: perfil } = await supabaseClient
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+        if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+    }
+
+    const hoje = new Date();
+    const diaHoje = String(hoje.getDate()).padStart(2, '0');
+    const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
+    const anoHoje = hoje.getFullYear();
+    const dataAssinatura = `${diaHoje}-${mesHoje}-${anoHoje}`;
+
+    const base64Logo = "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";
+    const htmlTemplate = `
+        <div style="border: 1px solid #999; padding: 20px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
+            <img src="data:image/png;base64,${base64Logo}" alt="Prefeitura Municipal de Divinópolis" style="max-height: 90px; width: auto; max-width: 100%;">
+        </div>
+        
+        <div style="text-align: center; margin-bottom: 25px;">
+            <p style="font-weight: bold; font-size: 14pt; margin: 10px 0;">FISCALIZAÇÃO DE POSTURAS AMBIENTAL</p>
+            <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">AUTO DE INFRAÇÃO Nº: ${numSequencial}</p>
+        </div>
+        
+        <p style="margin-top: 20px;">
+            <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}
+        </p>
+        <p>
+            <strong>Endereço:</strong> ${campos.endereco_infrator || '---'}
+        </p>
+
+        <p style="text-indent: 30px; margin-top: 20px; line-height: 1.5;">
+            Foi fiscalizado da data <strong>${dataFormatada}</strong> pelo motivo descrito: o imóvel situado na <strong>${campos.endereco_imovel || '______________________'}</strong>, Bairro <strong>${campos.bairro}</strong>; Inscrição Imobiliária Municipal: <strong>${descInscricao}</strong>, necessitava de <strong>${campos.motivo || '...'}</strong>.
+        </p>
+
+        <p style="text-indent: 30px; margin-top: 10px;">
+            Na presente data deste documento foi verificado: Não cumprimento da obrigação da Notificação Preliminar nº: <strong>${numNotificacao}</strong> - <strong>${campos.motivo || 'Limpeza do imóvel de sua propriedade'}</strong>.
+        </p>
+
+        <p style="text-indent: 30px; margin-top: 10px;">
+            Motivo da infração baseada na Lei/ Decreto pelo descumprimento do dispositivo: <strong>${campos.fundamentacao_legal || '_______'}</strong>.<br><br>
+            <strong>MULTA NO VALOR DE R$ ${campos.valor_multa || '__________'}</strong>
+        </p>
+        
+        <p style="text-indent: 30px; margin-top: 20px;">
+            O autuado tem o prazo de <strong>${prazoDefesa} DIAS</strong> para apresentação de defesa, por escrito, protocolada via protocolo municipal. Instruções: link (https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/201)
+        </p>
+
+        <div style="margin-top: 40px; margin-left: 30px;">
+            <div style="display: inline-block; text-align: center;">
+                <p style="margin: 0;">_________________________________________ Divinópolis, ${dataAssinatura}</p>
+                <p style="margin: 5px 0 0 0; margin-right: 170px;"><strong>${nomeFiscal}</strong></p>
+            </div>
+        </div>
+        
+        <p style="margin-top: 50px; text-indent: 30px;">
+            Recebi a 2ª via do presente Auto de infração do qual fico ciente.
+        </p>
+        
+        <div style="margin-top: 40px; margin-left: 30px;">
+            <div style="display: inline-block; text-align: center;">
+                <p style="margin: 0;">_________________________________________ Divinópolis, _____/_____/_________.</p>
+                <p style="margin: 5px 0 0 0; margin-right: 170px;"><strong>ASSINATURA DO AUTUADO</strong></p>
+            </div>
+        </div>
+    `;
+
+    // 3. Exibe Modal
+    const editor = document.getElementById('editor-texto');
+    editor.innerHTML = htmlTemplate;
+
+    document.getElementById('modal-produtividade').classList.remove('ativo'); // esconde o form
+    document.getElementById('modal-editor-documento').style.display = 'flex';
+}
+
+function fecharEditorDocumento() {
+    document.getElementById('modal-editor-documento').style.display = 'none';
+    document.getElementById('modal-produtividade').classList.add('ativo');
+}
+
+async function baixarDocumentoWord() {
+    const editor = document.getElementById('editor-texto');
+    // Adiciona as Metatags da Microsoft Office para interpretar o HTML como Word Nativo
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' " +
+        "xmlns:w='urn:schemas-microsoft-com:office:word' " +
+        "xmlns='http://www.w3.org/TR/REC-html40'>" +
+        "<head><meta charset='utf-8'><title>Auto de Infração</title>" +
+        "<style> @page { size: 21cm 29.7cm; margin: 2cm } body { font-family: 'Times New Roman'; font-size: 12pt } </style>" +
+        "</head><body>";
+    const footer = "</body></html>";
+    const sourceHTML = header + editor.innerHTML + footer;
+
+    // Tratamento para caracteres UTF-8 no Blob MS-WORD
+    const blobDoc = new Blob(['\ufeff', sourceHTML], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blobDoc);
+    const fileDownload = document.createElement("a");
+    document.body.appendChild(fileDownload);
+    fileDownload.href = url;
+    fileDownload.download = 'Auto_de_Infracao.doc';
+    fileDownload.click();
+    document.body.removeChild(fileDownload);
+    URL.revokeObjectURL(url);
+
+    // Gerando PDF Anexo e Salvando no Histórico In-background
+    if (typeof html2pdf === 'undefined') {
+        alert("Baixado DOC com sucesso, mas o html2pdf não iniciou para criar o Anexo do banco.");
+        fecharEditorDocumento();
+        return;
+    }
+
+    const btnDown = document.querySelector('#modal-editor-documento .btn-salvar');
+    const oldText = btnDown ? btnDown.textContent : 'Baixando...';
+    if (btnDown) {
+        btnDown.textContent = "Salvando Histórico...";
+        btnDown.disabled = true;
+    }
+
+    try {
+        const opt = {
+            margin: 10,
+            filename: 'Auto_de_Infracao.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        const blobPdf = await html2pdf().set(opt).from(editor).output('blob');
+        const numSeq = await gerarNumeroSequencial('1.2');
+        const filenameSafe = `Auto_Infracao_${numSeq.replace('/', '-')}.pdf`;
+
+        // Executa lógica de banco de dados completa (incluindo Storage)
+        await salvarRegistro(blobPdf, filenameSafe);
+        fecharEditorDocumento(); // fecha o frame do documento
+        fecharModal(); // fecha o formulário pai imediatamente
+    } catch (err) {
+        console.error(err);
+        alert('O DOCX foi gerado, mas ocorreu um erro para anexar o PDF no Servidor e atualizar Histórico. Tente registrar separadamente.');
+    } finally {
+        if (btnDown) {
+            btnDown.textContent = oldText;
+            btnDown.disabled = false;
+        }
+    }
+}
+
+
 
 // Executa quando a página carregar
 document.addEventListener('DOMContentLoaded', inicializarProdutividade);

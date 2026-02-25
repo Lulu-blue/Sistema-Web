@@ -27,14 +27,15 @@ async function carregarDadosIniciais() {
 
     const { data: perfil } = await supabaseClient
         .from('profiles')
-        .select('full_name, role, cpf, avatar_url')
+        .select('full_name, role, cpf, avatar_url, matricula')
         .eq('id', user.id)
         .single();
 
     if (perfil) {
-        // Preenche o Perfil
+        // Preenche o Perfil Sidebar
         document.getElementById('user-name').innerText = perfil.full_name || "Usuário";
         document.getElementById('user-role-display').innerText = perfil.role;
+        document.getElementById('user-matricula').innerText = "Matrícula: " + (perfil.matricula || '---');
 
         if (perfil.avatar_url) {
             document.getElementById('user-photo').src = perfil.avatar_url;
@@ -48,6 +49,9 @@ async function carregarDadosIniciais() {
 
         const inputCpf = document.getElementById('perfil-cpf');
         if (inputCpf) inputCpf.value = perfil.cpf || '';
+
+        const inputMatricula = document.getElementById('perfil-matricula');
+        if (inputMatricula) inputMatricula.value = perfil.matricula || '';
 
         const inputCargo = document.getElementById('perfil-cargo');
         if (inputCargo) inputCargo.value = (perfil.role || '').toUpperCase();
