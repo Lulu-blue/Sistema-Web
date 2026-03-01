@@ -26,35 +26,44 @@ form.addEventListener('submit', async (e) => {
     submitBtn.textContent = 'Carregando...';
     submitBtn.disabled = true;
 
-    // 1. Pega o CPF e limpa pontos e traços (deixa só números)
-    let cpfLimpo = document.getElementById('cpf').value.replace(/\D/g, '');
-    const password = document.getElementById('password').value;
+    try {
+        // 1. Pega o CPF e limpa pontos e traços (deixa só números)
+        let cpfLimpo = document.getElementById('cpf').value.replace(/\D/g, '');
+        const password = document.getElementById('password').value;
 
-    // 2. Transforma o CPF em um "e-mail fictício" para o Supabase aceitar
-    const emailFicticio = `${cpfLimpo}@email.com`;
+        // 2. Transforma o CPF em um "e-mail fictício" para o Supabase aceitar
+        const emailFicticio = `${cpfLimpo}@email.com`;
 
-    // 3. Tenta o login
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email: emailFicticio, // Enviamos o CPF mascarado de e-mail
-        password: password,
-    });
+        // 3. Tenta o login
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: emailFicticio, // Enviamos o CPF mascarado de e-mail
+            password: password,
+        });
 
-    if (error) {
-        alert("Erro no login: CPF ou senha incorretos.");
-        submitBtn.textContent = originalText;
-        submitBtn.disabled = false;
-    } else {
-        // Busca o cargo na tabela profiles usando o ID do usuário logado
-        const { data: perfil } = await supabaseClient
-            .from('profiles')
-            .select('role, cpf')
-            .eq('id', data.user.id)
-            .single();
+        if (error) {
+            alert("Erro no login: CPF ou senha incorretos.");
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+        } else {
+            // Busca o cargo na tabela profiles usando o ID do usuário logado
+            const { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('role, cpf')
+                .eq('id', data.user.id)
+                .single();
 
-        if (perfil) {
-            alert(`Logado! CPF: ${perfil.cpf} | Cargo: ${perfil.role}`);
-            // Redirecionamento baseado no cargo
-            window.location.href = "painel.html";
+            if (perfil) {
+                // Redirecionamento baseado no cargo
+                window.location.href = "painel.html";
+            }
+        }
+    } catch (err) {
+        console.error("Erro de requisição login:", err);
+        alert("Erro crítico no login, verifique o console.");
+    } finally {
+        if (submitBtn && window.location.href.indexOf('painel.html') === -1) {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
         }
     }
 });
