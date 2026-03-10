@@ -47,6 +47,9 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
   - **Resumo de Pontuação**: Exibe os pontos totais e notificações de conclusão.
   - **Destaque Dinâmico (Meta 2000)**: Quando a soma dos pontos atinge 2000 no mês, um badge dourado pulsante "*🏆 META ATINGIDA*" é exibido.
   - **Botão "Gerar Relatório"**: Processa no navegador um **relatório HTML editável** (com a data de pesquisa, agrupado por categorias e subtotais) com botão para Salvar em formato PDF.
+- **Botão "Limpeza Geral"**: Localizado ao lado do relatório, permite que o fiscal limpe permanentemente seus dados da tabela `registros_produtividade` e **zere a pontuação** da tabela `controle_processual` vinculada a ele.
+    - **⚠️ Integridade**: O botão **NÃO apaga** os registros da tabela `controle_processual` (Notificações, Autos, Ofícios, etc), garantindo que os documentos oficiais continuem existindo no Histórico Geral, apenas remove a pontuação associada ao fiscal no histórico pessoal.
+- **Alerta de Encerramento Mensal**: Um banner verde translúcido aparece automaticamente no topo da Home no **último dia de cada mês**, lembrando o fiscal de gerar seu relatório antes da virada do calendário.
 
 ### Tabela "Minhas Tarefas" na Home
 - Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos.
@@ -78,7 +81,7 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 
 ## 📋 Histórico do Usuário e Histórico Geral
 
-- **Histórico Pessoal**: Todo o registro preenchido por um único fiscal é centralizado aqui independente se ele foi parar na tabela Normal ou na tabela de Controle Processual.
+- **Histórico Pessoal**: Centraliza os registros do fiscal (Normal e Controle Processual), porém exibe **exclusivamente itens com pontuação maior que zero**. Isso permite que, após a "Limpeza Geral", o histórico pessoal fique limpo sem perder os dados oficiais do sistema.
     - É possível visualizar os detalhes (inclusive acessar botão p/ visualizar Anexos PDF).
     - O Registro pode ser Editado ou Deletado pelo dono do dado com feedback visual assíncrono (Loading state contra duplo-clique).
     - Ordenação feita de forma inteligente a partir da *Data do Evento informada no Form* e não a do momento da digitação.
@@ -88,7 +91,7 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 
 ---
 
-## 📅 Módulo de Tarefas e Calendário (`tarefas.js`)
+## ✅ Módulo de Tarefas e Calendário (`tarefas.js`)
 
 Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos os usuários). Layout em duas colunas:
 - **Coluna Esquerda**: Calendário mensal + lista de eventos.
@@ -191,9 +194,10 @@ Bucket para armazenamento dos PDFs anexados às tarefas. Políticas: upload/down
 
 ---
 
-## 🚀 Uso Rápido
-1. Execute as Views/Tabelas e Buckets no console do **Supabase** via `supabase_setup.sql`.
-2. Execute o script `setup_tarefas.sql` no console do Supabase para criar as tabelas do módulo de Tarefas (eventos, tarefas, tarefa_responsaveis, tarefa_anexos) e o bucket de storage.
-3. Configure as constantes em `protecao.js`.
-4. Adicione o seu cadastro no Control Panel do DB manualmente.
-5. O servidor front-end local está pronto utilizando CSS puro sem compilações externas e importando libs (Chart.js / Supabase SDK) no próprio browser.
+---
+
+## 🛠️ Correções Recentes (Março/2026)
+- **Fix (salvarRegistro)**: Corrigida falha lógica onde categorias de produtividade comum (não CP) eram ignoradas pelo banco de dados devido a um erro de aninhamento de chaves no `isCP`.
+- **Fix (Referência de Botão)**: Resolvido erro `ReferenceError` que impedia o carregamento do histórico quando o ouvinte do botão de limpeza tentava acessar funções removidas.
+- **Sincronização**: Adicionado delay de 500ms pós-save para garantir que o Supabase finalize a escrita antes da releitura do histórico.
+- **Refatoração do Histórico e Limpeza**: Ajustada a lógica de limpeza para zerar a pontuação do Controle Processual e restaurado o filtro global de pontuação > 0 no histórico pessoal.

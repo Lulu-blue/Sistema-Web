@@ -66,10 +66,15 @@ async function carregarDadosIniciais() {
                 if (cardAdmin) cardAdmin.style.display = 'block';
             }
 
-            if (userRole === 'gerente fiscal' || userRole === 'gerente' || userRole === 'admin') {
+            if (userRole === 'gerente fiscal' || userRole === 'gerente de posturas') {
                 // Exibe as opcoes de gerencia na sidebar
                 var gOpts = document.getElementById('gerente-options');
                 if (gOpts) gOpts.style.display = 'block';
+
+                if (userRole === 'gerente de posturas') {
+                    var pOpts = document.getElementById('gerente-posturas-options');
+                    if (pOpts) pOpts.style.display = 'block';
+                }
 
                 // Gerente ve apenas Historico Geral (sem Produtividade e Historico pessoal)
                 var ghg = document.getElementById('gerente-historico-geral');
@@ -86,11 +91,21 @@ async function carregarDadosIniciais() {
                 if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
             }
 
-            if (userRole === 'fiscal') {
+            if (userRole === 'fiscal' || userRole === 'fiscal de posturas') {
                 var fOpts2 = document.getElementById('fiscal-options');
                 if (fOpts2) fOpts2.style.display = 'block';
                 var hc = document.getElementById('home-produtividade-container');
                 if (hc) hc.style.display = 'block';
+                var npai = document.getElementById('home-npai-container');
+                if (npai) npai.style.display = 'block';
+                if (typeof carregarNPAIHome === 'function') carregarNPAIHome();
+            }
+
+            if (userRole === 'administrador de posturas') {
+                // Apenas exibe o botão do Histórico Geral no menu lateral.
+                // A home só mostrará o container padrão "Minhas Tarefas", que não está oculto.
+                var ghg = document.getElementById('gerente-historico-geral');
+                if (ghg) ghg.style.display = 'block';
             }
         }
     } catch (erroGeral) {
@@ -122,6 +137,10 @@ function mudarAba(idAba) {
 
     if (idAba === 'tarefas') {
         if (typeof carregarModuloTarefas === 'function') carregarModuloTarefas();
+    }
+
+    if (idAba === 'projetos') {
+        if (typeof inicializarCalendario === 'function') inicializarCalendario();
     }
 }
 
@@ -330,3 +349,21 @@ async function alterarSenha() {
         }
     }
 }
+
+// --- ALERTA DE ÚLTIMO DIA DO MÊS ---
+function verificarUltimoDiaMes() {
+    const alerta = document.getElementById('alerta-ultimo-dia');
+    if (!alerta) return;
+
+    const hoje = new Date();
+    const diaAtual = hoje.getDate();
+    
+    // Calcula o último dia do mês atual (mês + 1 no dia 0 retrocede para o último dia do mês atual)
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+
+    if (diaAtual === ultimoDia) {
+        alerta.style.display = 'flex';
+    }
+}
+window.addEventListener('load', verificarUltimoDiaMes);
+

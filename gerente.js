@@ -12,7 +12,7 @@ async function carregarGraficoFiscais() {
         const { data: fiscais, error: errFiscais } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url')
-            .eq('role', 'fiscal');
+            .in('role', ['fiscal', 'Fiscal de Posturas', 'fiscal de posturas']);
 
         if (errFiscais) throw errFiscais;
         if (!fiscais || fiscais.length === 0) {
@@ -843,7 +843,7 @@ async function salvarNovoFiscal() {
                 full_name: nome,
                 cpf: cpfRaw,
                 matricula: matricula,
-                role: 'fiscal'
+                role: 'Fiscal de Posturas'
             });
 
         if (profileErr) throw profileErr;
@@ -991,23 +991,21 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
             });
         }
 
-        // Deletar perfil do fiscal
+        // Desativar perfil do fiscal (Exclusão Lógica)
         var { error: deleteErr } = await supabaseClient
             .from('profiles')
-            .delete()
+            .update({ role: 'inativo' })
             .eq('id', fiscalId);
 
         if (deleteErr) throw deleteErr;
 
-        msgEl.innerHTML = '<strong>' + nomeFiscal + '</strong> foi excluido com sucesso.';
+        msgEl.innerHTML = '<strong>' + nomeFiscal + '</strong> foi desativado com sucesso.';
         msgEl.style.color = '#10b981';
 
-        // Fechar e atualizar ranking
-        setTimeout(function () {
-            var modal = document.getElementById('modal-excluir-fiscal');
-            if (modal) modal.remove();
-            if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
-        }, 1500);
+        // Fechar e atualizar ranking imediatamente
+        var modal = document.getElementById('modal-excluir-fiscal');
+        if (modal) modal.remove();
+        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
 
     } catch (err) {
         console.error('Erro ao excluir fiscal:', err);
@@ -1745,7 +1743,7 @@ async function mostrarSelecaoFiscais() {
         var { data: fiscais, error } = await supabaseClient
             .from('profiles')
             .select('id, full_name, role')
-            .eq('role', 'fiscal')
+            .in('role', ['fiscal', 'Fiscal de Posturas', 'fiscal de posturas'])
             .order('full_name', { ascending: true });
 
         if (error) throw error;

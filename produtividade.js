@@ -67,7 +67,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.5',
-        nome: 'Relatório',
+        nome: 'Relatório de Vistoria',
         pontos: 15,
         destaque: true,
         campos: [
@@ -197,9 +197,9 @@ const CATEGORIAS = [
         id: '11',
         nome: 'Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa',
         pontos: 100,
+        destaque: true,
         campos: [
-            { nome: 'n_processo', label: 'N° do Processo', tipo: 'text', obrigatorio: true },
-            { nome: 'descricao', label: 'Descrição', tipo: 'text', obrigatorio: true },
+            { nome: 'n_auto', label: 'N° do Auto de Infração', tipo: 'text', obrigatorio: true },
             { nome: 'data', label: 'Data', tipo: 'date', obrigatorio: true }
         ]
     },
@@ -466,8 +466,8 @@ function abrirFormulario(categoria) {
     corpo.innerHTML = '';
     window.arquivoWordSubmissao = null; // Zera anexo em memória ao abrir novo form
 
-    // SE for Notificação Preliminar (1.1) ou Protocolo (1.6), adicionar botão extra de Autopreenchimento de Word no topo
-    if (categoria.id === '1.1' || categoria.id === '1.6') {
+    // SE for Notificação Preliminar (1.1) adicionar botão extra de Autopreenchimento de Word no topo
+    if (categoria.id === '1.1') {
         const divWord = document.createElement('div');
         divWord.className = 'campo-grupo';
         divWord.style.background = 'rgba(46, 204, 113, 0.1)';
@@ -584,6 +584,9 @@ function abrirFormulario(categoria) {
     if (categoria.id === '1.2') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorAutoInfracao();
+    } else if (categoria.id === '11') {
+        btnSalvarForm.textContent = 'Gerar Número';
+        btnSalvarForm.onclick = () => salvarRegistro();
     } else if (categoria.id === '1.4') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorOficio();
@@ -602,7 +605,7 @@ function abrirFormulario(categoria) {
 }
 
 // --- FECHAR MODAL ---
-function fecharModal() {
+function fecharModalProdutividade() {
     const overlay = document.getElementById('modal-produtividade');
     overlay.classList.remove('ativo');
     categoriaAtual = null;
@@ -740,9 +743,9 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     .single();
                 const fiscalNome = perfil?.full_name || 'Fiscal';
 
-                // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica)
+                // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Dívida Ativa)
                 let numeroSeq = null;
-                const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7'];
+                const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7', '11'];
                 if (categoriasAutoNum.includes(categoriaAtual.id)) {
                     numeroSeq = await gerarNumeroSequencial(categoriaAtual.id);
                 }
@@ -760,6 +763,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     })
                     .select());
             } else {
+                // NÃO É CP (Registros Produtividade)
                 ({ data, error } = await supabaseClient
                     .from('registros_produtividade')
                     .insert({
@@ -771,57 +775,69 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     })
                     .select());
             }
-        }
 
-        if (error) {
-            throw error;
-        }
-
-        // Upload de arquivo anexo (se houver)
-        if (arquivoAnexo && data && data.length > 0) {
-            const registroId = data[0].id;
-            // Limpar acentos e espaços do nome para não dar erro no Supabase
-            let nomeAnexoLimpo = arquivoAnexo.file.name
-                .normalize('NFD')                     // Remove acentos
-                .replace(/[\u0300-\u036f]/g, '')      // Limpa os diacríticos
-                .replace(/\s+/g, '_')                 // Troca espaços por underscore
-                .replace(/[^a-zA-Z0-9_\-\.]/g, '');   // Remove caracteres especiais
-
-            const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
-            const caminho = `${user.id}/${nomeArquivo}`;
-            const tabela = categoriaAtual.destaque ? 'controle_processual' : 'registros_produtividade';
-
-            const { error: uploadError } = await supabaseClient.storage
-                .from('anexos')
-                .upload(caminho, arquivoAnexo.file, { upsert: true });
-
-            if (uploadError) {
-                console.error('Erro no upload:', uploadError);
-                alert('Registro salvo, mas erro ao anexar PDF: ' + uploadError.message);
-            } else {
-                // Salvar caminho do arquivo no registro
-                const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-                const camposAtualizados = { ...campos, [arquivoAnexo.nome]: urlData.publicUrl };
-
-                await supabaseClient
-                    .from(tabela)
-                    .update({ campos: camposAtualizados })
-                    .eq('id', registroId);
+            if (error) {
+                throw error;
             }
-        }
 
-        // Resetar modo edição
-        const eraEdicao = modoEdicao;
-        modoEdicao = false;
-        idEditando = null;
+            // Upload de arquivo anexo (se houver)
+            if (arquivoAnexo && data && data.length > 0) {
+                const registroId = data[0].id;
+                // Limpar acentos e espaços do nome para não dar erro no Supabase
+                let nomeAnexoLimpo = arquivoAnexo.file.name
+                    .normalize('NFD')                     // Remove acentos
+                    .replace(/[\u0300-\u036f]/g, '')      // Limpa os diacríticos
+                    .replace(/\s+/g, '_')                 // Troca espaços por underscore
+                    .replace(/[^a-zA-Z0-9_\-\.]/g, '');   // Remove caracteres especiais
 
-        // Fechar modal e atualizar histórico
-        fecharModal();
-        carregarHistorico();
-        alert(eraEdicao ? 'Registro atualizado com sucesso!' : '✅ Registro salvo com sucesso! (' + pontos + ' pontos)');
+                const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
+                const caminho = `${user.id}/${nomeArquivo}`;
+                const tabela = categoriaAtual.destaque ? 'controle_processual' : 'registros_produtividade';
+
+                const { error: uploadError } = await supabaseClient.storage
+                    .from('anexos')
+                    .upload(caminho, arquivoAnexo.file, { upsert: true });
+
+                if (uploadError) {
+                    console.error('Erro no upload:', uploadError);
+                    alert('Registro salvo, mas erro ao anexar PDF: ' + uploadError.message);
+                } else {
+                    // Salvar caminho do arquivo no registro
+                    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
+                    const camposAtualizados = { ...campos, [arquivoAnexo.nome]: urlData.publicUrl };
+
+                    await supabaseClient
+                        .from(tabela)
+                        .update({ campos: camposAtualizados })
+                        .eq('id', registroId);
+                }
+            }
+
+            // Resetar modo edição
+            const eraEdicao = modoEdicao;
+            modoEdicao = false;
+            idEditando = null;
+
+            // Atualizar histórico aguardando o Supabase com pequena margem de segurança
+            await new Promise(r => setTimeout(r, 500));
+            await carregarHistorico();
+
+            if (eraEdicao) {
+                alert('Registro atualizado com sucesso!');
+            } else if (categoriaAtual.id === '11' && data && data.length > 0) {
+                // Para Dívida Ativa, o usuário precisa ver o número gerado para anotar no processo físico
+                alert(`✅ Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
+            } else {
+                alert('✅ Registro salvo com sucesso! (' + pontos + ' pontos)');
+            }
+
+            // Fechar modal DEPOIS do alerta (pois zera a categoriaAtual)
+            fecharModalProdutividade();
+
+        } // Fim de else (CRIAÇÃO)
     } catch (err) {
         console.error("Erro no salvarRegistro:", err);
-        alert('Ocorreu um erro ao salvar o registro no banco de dados.');
+        alert('Ocorreu um erro ao salvar o registro no banco de dados: ' + (err.message || JSON.stringify(err)));
     } finally {
         if (btnSalvar) {
             btnSalvar.textContent = oldTexto;
@@ -885,10 +901,11 @@ async function carregarHistorico() {
     const prodMarcados = (regProd || []).map(r => ({ ...r, _tabela: 'registros_produtividade' }));
     const cpMarcados = (regCP || []).map(r => ({ ...r, _tabela: 'controle_processual' }));
 
-    // Juntar e ordenar usando a data REAL do evento (informada no formulário)
-    todosRegistros = [...prodMarcados, ...cpMarcados].sort((a, b) =>
-        obterDataReal(b) - obterDataReal(a)
-    );
+    // Unir ambos e filtrar para o histórico pessoal:
+    // Não deve aparecer nenhum registro que tenha pontuação 0
+    todosRegistros = [...prodMarcados, ...cpMarcados]
+        .filter(r => r.pontuacao > 0)
+        .sort((a, b) => obterDataReal(b) - obterDataReal(a));
 
     // Calcular pontuação total
     const pontuacaoTotal = todosRegistros.reduce((total, r) => total + r.pontuacao, 0);
@@ -911,7 +928,7 @@ async function carregarHistorico() {
     if (totalRegistrosProdEl) totalRegistrosProdEl.textContent = todosRegistros.length;
 
     popularFiltroCategorias();
-    renderizarTabela(todosRegistros);
+    filtrarHistorico();
     renderizarGrafico(todosRegistros);
     verificarMeta2000(pontuacaoTotal);
 }
@@ -944,7 +961,11 @@ function popularFiltroCategorias() {
         select.appendChild(option);
     });
 
-    select.value = valorAtual;
+    if (categoriasUsadas.includes(valorAtual)) {
+        select.value = valorAtual;
+    } else {
+        select.value = "";
+    }
 }
 
 // --- FILTRAR HISTÓRICO ---
@@ -1327,10 +1348,11 @@ async function carregarHistoricoGeral(categoriaId) {
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
-    const { data: registros, error } = await supabaseClient
-        .from('controle_processual')
-        .select('*')
-        .eq('categoria_id', categoriaId);
+    let query = supabaseClient.from('controle_processual').select('*');
+    if (categoriaId !== 'todos') {
+        query = query.eq('categoria_id', categoriaId);
+    }
+    const { data: registros, error } = await query;
 
     if (error) {
         container.innerHTML = '<div class="historico-vazio">Erro ao carregar.</div>';
@@ -1377,9 +1399,11 @@ function popularFiltroBairros(registros) {
     });
 }
 
-// Filtro de busca misto: Texto Livre + Dropdown de Bairro
+// Filtro de busca misto: Texto Livre + Dropdown de Bairro + Fiscal
 function filtrarHistoricoGeral() {
     const termo = document.getElementById('busca-historico-geral').value.toLowerCase().trim();
+    const inputFiscal = document.getElementById('busca-fiscal-geral');
+    const termoFiscal = inputFiscal ? inputFiscal.value.toLowerCase().trim() : '';
     const bairroSelecionado = document.getElementById('filtro-bairro-historico').value;
 
     let filtrados = registrosGeralAtual;
@@ -1391,7 +1415,24 @@ function filtrarHistoricoGeral() {
         );
     }
 
-    // 2. Filtrar pelo Texto (Contém)
+    // 2. Filtrar pelo Fiscal (Contém)
+    if (termoFiscal) {
+        filtrados = filtrados.filter(reg =>
+            reg.fiscal_nome && reg.fiscal_nome.toLowerCase().includes(termoFiscal)
+        );
+    }
+
+    // 3. Filtrar pelo Ano (Selecionado)
+    const anoSelecionado = document.getElementById('busca-ano-geral') ? document.getElementById('busca-ano-geral').value : '';
+    if (anoSelecionado) {
+        filtrados = filtrados.filter(reg => {
+            const dtReal = obterDataReal(reg);
+            if (!dtReal || isNaN(dtReal)) return false;
+            return dtReal.getFullYear().toString() === anoSelecionado;
+        });
+    }
+
+    // 4. Filtrar pelo Texto (Contém)
     if (termo) {
         const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
 
@@ -1412,14 +1453,120 @@ function filtrarHistoricoGeral() {
     } else {
         renderizarTabelaGeral(filtrados, subAbaAtual);
     }
+
+    // Atualizar bolinha indicadora no botão Filtro instantaneamente
+    atualizarIndicadorFiltro();
+}
+
+// Abre/Fecha o painel de filtros
+function togglePainelFiltro() {
+    const painel = document.getElementById('painel-filtro-popup');
+    if (!painel) return;
+    const aberto = painel.style.display === 'block';
+    painel.style.display = aberto ? 'none' : 'block';
+    atualizarIndicadorFiltro();
+}
+
+// Fecha o painel ao clicar fora dele
+document.addEventListener('click', function (e) {
+    const painel = document.getElementById('painel-filtro-popup');
+    const btn = document.getElementById('btn-filtro-toggle');
+    if (!painel || !btn) return;
+    if (!painel.contains(e.target) && !btn.contains(e.target)) {
+        painel.style.display = 'none';
+    }
+});
+
+// Limpa todos os filtros e atualiza a tabela
+function limparFiltrosHistorico() {
+    const inputFiscal = document.getElementById('busca-fiscal-geral');
+    const selectBairro = document.getElementById('filtro-bairro-historico');
+    if (inputFiscal) inputFiscal.value = '';
+    if (selectBairro) selectBairro.value = '';
+    filtrarHistoricoGeral();
+    atualizarIndicadorFiltro();
+}
+
+// Mostra um ponto vermelho no botão Filtro se algum filtro estiver ativo
+function atualizarIndicadorFiltro() {
+    const btn = document.getElementById('btn-filtro-toggle');
+    if (!btn) return;
+    const inputFiscal = document.getElementById('busca-fiscal-geral');
+    const selectBairro = document.getElementById('filtro-bairro-historico');
+    const temFiltro = (inputFiscal && inputFiscal.value.trim()) || (selectBairro && selectBairro.value);
+    btn.innerHTML = temFiltro
+        ? 'Filtro <span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;"></span>'
+        : 'Filtro';
 }
 
 function renderizarTabelaGeral(registros, categoriaId) {
     const container = document.getElementById('historico-geral-lista');
+    const isGerente = window.userRoleGlobal === 'gerente fiscal' || window.userRoleGlobal === 'gerente de posturas' || window.userRoleGlobal === 'gerente' || window.userRoleGlobal === 'admin';
+
+    if (categoriaId === 'todos') {
+        let headerHTML = '<tr><th>Tipo de Documento</th><th>Identificador / Nome</th><th>Fiscal</th><th>Data</th><th>Pontos</th>';
+        if (isGerente) headerHTML += '<th>Anexo</th>';
+        headerHTML += '</tr>';
+
+        let bodyHTML = '';
+        registros.forEach((reg) => {
+            let nomeCategoria = 'Desconhecido';
+            switch (reg.categoria_id) {
+                case '1.1': nomeCategoria = 'NP'; break;
+                case '1.2': nomeCategoria = 'Auto Infração'; break;
+                case '1.3': nomeCategoria = 'AR'; break;
+                case '1.4': nomeCategoria = 'Ofício'; break;
+                case '1.5': nomeCategoria = 'Relatório de Vistoria'; break;
+                case '1.6': nomeCategoria = 'Protocolo'; break;
+                case '1.7': nomeCategoria = 'Réplica'; break;
+                case '11': nomeCategoria = 'Dívida Ativa'; break;
+                default:
+                    const catObj = CATEGORIAS.find(c => c.id === reg.categoria_id);
+                    nomeCategoria = catObj ? catObj.nome : 'Desconhecido';
+            }
+
+            // Tenta pegar o identificador principal (numero ou nome)
+            let identificador = reg.numero_sequencial || (reg.campos && reg.campos.nome) || '-';
+
+            const temAnexo = reg.campos && reg.campos.anexo_pdf;
+            const dataFormatada = obterDataReal(reg).toLocaleDateString('pt-BR');
+
+            let rowAttributes = '';
+            if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id)) {
+                rowAttributes = ` style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+            }
+
+            bodyHTML += `<tr${rowAttributes}>`;
+            bodyHTML += `<td><span style="background:#10b981; color:#ffffff; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,0.1);">${nomeCategoria}</span></td>`;
+            bodyHTML += `<td>${identificador}</td>`;
+            bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
+
+            if (isGerente) {
+                if (temAnexo) {
+                    bodyHTML += `<td><button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📄 Ver</button></td>`;
+                } else {
+                    bodyHTML += `<td style="color:#94a3b8;font-size:12px;">—</td>`;
+                }
+            }
+            bodyHTML += '</tr>';
+        });
+
+        container.innerHTML = `
+            <div style="overflow-x: auto;">
+                <table class="historico-tabela">
+                    <thead>${headerHTML}</thead>
+                    <tbody>${bodyHTML}</tbody>
+                </table>
+            </div>
+            <p style="margin-top: 12px; font-size: 0.85rem; color: #64748b;">
+                Total: ${registros.length} registro(s)
+            </p>
+        `;
+        return;
+    }
+
     const categoria = CATEGORIAS.find(c => c.id === categoriaId);
     if (!categoria) return;
-
-    const isGerente = window.userRoleGlobal === 'gerente fiscal' || window.userRoleGlobal === 'gerente' || window.userRoleGlobal === 'admin';
 
     // Colunas: Nº (se tiver), campos da categoria + Fiscal + Data
     const temNumero = registros.some(r => r.numero_sequencial);
@@ -1427,7 +1574,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
     let headerHTML = '<tr>';
     if (temNumero) headerHTML += '<th>N°</th>';
     categoria.campos.forEach(campo => {
-        if (campo.tipo !== 'date' && !campo.ignorarNoBanco) {
+        if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
             headerHTML += `<th>${campo.label}</th>`;
         }
     });
@@ -1439,10 +1586,14 @@ function renderizarTabelaGeral(registros, categoriaId) {
     registros.forEach((reg, idx) => {
         const temAnexo = reg.campos && reg.campos.anexo_pdf;
 
-        bodyHTML += '<tr>';
+        let rowAttributes = '';
+        if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoria.id)) {
+            rowAttributes = ` style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+        }
+        bodyHTML += `<tr${rowAttributes}>`;
         if (temNumero) bodyHTML += `<td>${reg.numero_sequencial || '-'}</td>`;
         categoria.campos.forEach(campo => {
-            if (campo.tipo !== 'date' && !campo.ignorarNoBanco) {
+            if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
                 bodyHTML += `<td>${reg.campos[campo.nome] || '-'}</td>`;
             }
         });
@@ -1513,6 +1664,184 @@ function abrirAnexoGerente(url) {
     });
 }
 
+// --- DETALHES GERAIS (MODAL CLICÁVEL) ---
+async function abrirDetalhesAdminHist(id) {
+    if (!registrosGeralAtual) return;
+    const reg = registrosGeralAtual.find(r => r.id === id);
+    if (!reg) return;
+
+    const existente = document.getElementById('modal-detalhes-admin-hist');
+    if (existente) existente.remove();
+
+    const catDef = CATEGORIAS.find(c => c.id === reg.categoria_id);
+    const campos = reg.campos || {};
+
+    let htmlCampos = '';
+
+    const dataReg = new Date(reg.created_at).toLocaleDateString('pt-BR');
+    htmlCampos += `<div style="margin-bottom:8px;"><strong>Registrado em:</strong> ${dataReg}</div>`;
+    htmlCampos += `<div style="margin-bottom:8px;"><strong>Fiscal:</strong> ${reg.fiscal_nome}</div>`;
+
+    Object.entries(campos).forEach(([chave, valor]) => {
+        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'historico_admin' || chave === 'resposta_fiscal') return;
+        let label = chave;
+        if (catDef) {
+            const campoDef = catDef.campos.find(c => c.nome === chave);
+            if (campoDef) label = campoDef.label;
+        }
+        htmlCampos += `<div style="margin-bottom:8px;"><strong>${label}:</strong> ${valor}</div>`;
+    });
+
+    htmlCampos += '<hr style="border:0; border-top:1px dashed #cbd5e1; margin:16px 0;">';
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const userIdAtual = user ? user.id : null;
+
+    const isAdmin = window.userRoleGlobal === 'administrador de posturas' || window.userRoleGlobal === 'admin';
+    const isDono = reg.user_id === userIdAtual;
+
+    const vEntrada = campos.data_entrada || '';
+    const vVencimento = campos.data_vencimento || '';
+    const vHistorico = campos.historico_admin || '';
+    const vResposta = campos.resposta_fiscal || '';
+
+    let btnSalvar = '';
+
+    if (reg.categoria_id !== '11') {
+        if (isAdmin) {
+            htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de Entrada (Admin)</label>
+                <input type="date" id="admin-data-entrada" value="${vEntrada}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
+            </div>`;
+            htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de Vencimento (Admin)</label>
+                <input type="date" id="admin-data-vencimento" value="${vVencimento}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
+            </div>`;
+            htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Histórico (Admin)</label>
+                <textarea id="admin-historico-texto" rows="3" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${vHistorico}</textarea>
+            </div>`;
+        } else {
+            htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Entrada:</strong> ${vEntrada ? vEntrada.split('-').reverse().join('/') : '—'}</div>`;
+            htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento:</strong> ${vVencimento ? vVencimento.split('-').reverse().join('/') : '—'}</div>`;
+            htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Histórico Administrativo:</strong> ${vHistorico || '—'}</div>`;
+        }
+
+        if (isDono) {
+            // Prepara visualização de toggle para a resposta
+            const isOpcaoPadrao = vResposta === 'ATENDIDO' || vResposta === '';
+
+            htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#10b981;">Sua Resposta</label>
+                <select id="admin-resposta-select" onchange="const t = document.getElementById('admin-resposta-text-container'); if(this.value === 'Outro') { t.style.display = 'block'; } else { t.style.display = 'none'; document.getElementById('admin-resposta-fiscal').value = ''; }" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; margin-bottom:8px; background:white;">
+                    <option value="">Selecione...</option>
+                    <option value="ATENDIDO" ${vResposta === 'ATENDIDO' ? 'selected' : ''}>ATENDIDO</option>
+                    <option value="Outro" ${!isOpcaoPadrao ? 'selected' : ''}>Outro (Escrever manual...)</option>
+                </select>
+                <div id="admin-resposta-text-container" style="display:${!isOpcaoPadrao ? 'block' : 'none'};">
+                    <textarea id="admin-resposta-fiscal" rows="3" placeholder="Digite sua resposta personalizada..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${!isOpcaoPadrao ? vResposta : ''}</textarea>
+                </div>
+            </div>`;
+        } else {
+            htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Resposta do Fiscal:</strong> ${vResposta || '—'}</div>`;
+        }
+
+        if (isAdmin || isDono) {
+            btnSalvar = `<button onclick="salvarDetalhesHist('${reg.id}')" style="width:100%; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-top:20px; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
+        }
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-detalhes-admin-hist';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center; backdrop-filter:blur(2px);';
+
+    modal.innerHTML = `
+        <div style="background:white; border-radius:16px; width:90%; max-width:550px; padding:28px; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">
+            <button onclick="document.getElementById('modal-detalhes-admin-hist').remove()" style="position:absolute; top:16px; right:20px; background:none; border:none; font-size:22px; cursor:pointer; color:#94a3b8; transition:color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#94a3b8'">✕</button>
+            <h3 style="margin-top:0; margin-bottom:20px; color:#0f172a; font-size:20px; border-bottom:2px solid #f1f5f9; padding-bottom:12px;">Detalhes do Documento</h3>
+            <div style="max-height:65vh; overflow-y:auto; font-size:15px; color:#334155; padding-right:8px;">
+                ${htmlCampos}
+            </div>
+            ${btnSalvar}
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+async function salvarDetalhesHist(id) {
+    const reg = registrosGeralAtual.find(r => r.id === id);
+    if (!reg) return;
+
+    let novosCampos = { ...reg.campos };
+
+    const inputEntrada = document.getElementById('admin-data-entrada');
+    const inputVencimento = document.getElementById('admin-data-vencimento');
+    const inputHistorico = document.getElementById('admin-historico-texto');
+    const selectResposta = document.getElementById('admin-resposta-select');
+    const inputResposta = document.getElementById('admin-resposta-fiscal');
+
+    if (inputEntrada) novosCampos.data_entrada = inputEntrada.value;
+    if (inputVencimento) novosCampos.data_vencimento = inputVencimento.value;
+    if (inputHistorico) novosCampos.historico_admin = inputHistorico.value;
+
+    // Salvar 'Resposta' lendo o select ou o campo de texto
+    if (selectResposta) {
+        if (selectResposta.value === 'ATENDIDO' || selectResposta.value === '') {
+            novosCampos.resposta_fiscal = selectResposta.value;
+        } else if (selectResposta.value === 'Outro' && inputResposta) {
+            novosCampos.resposta_fiscal = inputResposta.value;
+        }
+    }
+
+    const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id);
+    const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
+
+    try {
+        // Tenta usar a RPC (Stored Procedure) para burlar o RLS
+        const { error } = await supabaseClient
+            .rpc('atualizar_campos_admin', {
+                p_id: id,
+                p_campos: novosCampos,
+                p_tabela: targetTable
+            });
+
+        if (error) {
+            console.warn("RPC falhou, tentando update direto:", error);
+            const fallback = await supabaseClient
+                .from(targetTable)
+                .update({ campos: novosCampos })
+                .eq('id', id)
+                .select();
+
+            if (fallback.error) throw fallback.error;
+            if (!fallback.data || fallback.data.length === 0) {
+                throw new Error("Permissão negada pelo banco de dados (RLS). O registro não foi atualizado.");
+            }
+        }
+
+        reg.campos = novosCampos;
+        document.getElementById('modal-detalhes-admin-hist').remove();
+
+        // Atualizar tabela de histórico imediatamente
+        renderizarTabelaGeral(registrosGeralAtual, reg.categoria_id);
+
+        // Atualizar aba NP/AI na Home, se estiver sendo visualizada
+        if (typeof carregarNPAIHome === 'function') {
+            carregarNPAIHome();
+        }
+
+        alert('Alterações salvas com sucesso!');
+    } catch (err) {
+        console.error("Erro ao salvar detalhes:", err);
+        alert(err.message || 'Erro ao salvar no banco de dados. Tente novamente.');
+    }
+}
+
 // --- GRÁFICO DE PRODUTIVIDADE POR DIA ---
 let graficoChart = null;
 
@@ -1541,6 +1870,14 @@ function renderizarGrafico(registros) {
     let soma = 0;
     const acumulado = dados.map(v => { soma += v; return soma; });
 
+    // Dinamicamente ajustar largura para não esmagar barras quando tem muitos dias
+    const wrapper = document.getElementById('grafico-produtividade-wrapper');
+    if (wrapper) {
+        // Usa max(100%, px) para garantir que sempre ocupe a tela toda se houver poucos dias,
+        // mas crie barra de rolagem se houver muitos dias
+        wrapper.style.minWidth = `max(100 %, ${labels.length * 60}px)`;
+    }
+
     if (graficoChart) graficoChart.destroy();
 
     graficoChart = new Chart(canvas, {
@@ -1554,7 +1891,8 @@ function renderizarGrafico(registros) {
                     backgroundColor: 'rgba(46, 204, 113, 0.6)',
                     borderColor: '#2ecc71',
                     borderWidth: 1,
-                    borderRadius: 6
+                    borderRadius: 6,
+                    maxBarThickness: 60
                 },
                 {
                     label: 'Acumulado',
@@ -1572,6 +1910,7 @@ function renderizarGrafico(registros) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             interaction: { intersect: false, mode: 'index' },
             plugins: {
                 legend: { display: true, position: 'top' },
@@ -1678,41 +2017,41 @@ async function abrirRelatorio() {
                     <tfoot><tr><td colspan="${colSpanSubtotal}" style="text-align:right; font-weight:600;">Subtotal:</td><td style="font-weight:600;">${subtotal}</td></tr></tfoot>
                 </table>
             </div>
-        `;
+            `;
     });
 
     // Criar modal do relatório
     const modalHTML = `
-        <div class="modal-overlay ativo" id="modal-relatorio" onclick="if(event.target===this)fecharRelatorio()">
-            <div class="relatorio-preview" id="relatorio-conteudo">
-                <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
-                <div class="relatorio-info">
-                    <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
-                    <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
-                    <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
-                    <div><strong>Total de Registros:</strong> ${todosRegistros.length}</div>
-                </div>
-                ${secoesHTML}
-                
-                <div class="relatorio-assinaturas" style="display: flex; justify-content: space-around; margin-top: 60px; padding-bottom: 30px; text-align: center; page-break-inside: avoid;">
-                    <div>
-                        <p style="margin: 0;">_________________________________________</p>
-                        <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
-                        <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+            <div class="modal-overlay ativo" id="modal-relatorio" onclick="if(event.target===this)fecharRelatorio()">
+                <div class="relatorio-preview" id="relatorio-conteudo">
+                    <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
+                    <div class="relatorio-info">
+                        <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
+                        <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
+                        <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
+                        <div><strong>Total de Registros:</strong> ${todosRegistros.length}</div>
                     </div>
-                    <div>
-                        <p style="margin: 0;">_________________________________________</p>
-                        <p style="margin: 5px 0 0 0;"><strong>Gerente de Alvarás e Posturas</strong></p>
-                    </div>
-                </div>
+                    ${secoesHTML}
 
-                <div class="relatorio-acoes" id="relatorio-acoes">
-                    <button class="btn-cancelar-rel" onclick="fecharRelatorio()">Cancelar</button>
-                    <button class="btn-salvar-pdf" onclick="salvarPDF()">💾 Salvar como PDF</button>
+                    <div class="relatorio-assinaturas" style="display: flex; justify-content: space-around; margin-top: 60px; padding-bottom: 30px; text-align: center; page-break-inside: avoid;">
+                        <div>
+                            <p style="margin: 0;">_________________________________________</p>
+                            <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
+                            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+                        </div>
+                        <div>
+                            <p style="margin: 0;">_________________________________________</p>
+                            <p style="margin: 5px 0 0 0;"><strong>Gerente de Alvarás e Posturas</strong></p>
+                        </div>
+                    </div>
+
+                    <div class="relatorio-acoes" id="relatorio-acoes">
+                        <button class="btn-cancelar-rel" onclick="fecharRelatorio()">Cancelar</button>
+                        <button class="btn-salvar-pdf" onclick="salvarPDF()">💾 Salvar como PDF</button>
+                    </div>
                 </div>
-            </div>
         </div>
-    `;
+            `;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
@@ -1742,24 +2081,78 @@ function salvarPDF() {
 
     // Mudar título (navegadores usam isso como nome padrão do PDF)
     // Usa traço no lugar de barra no MM/YYYY para evitar problemas de nome de arquivo
-    document.title = `Produtividade ${mes}-${ano} - ${nome}`;
+    document.title = `Produtividade ${mes} -${ano} - ${nome} `;
 
+    // Disparar impressão
     window.print();
 
-    // Restaurar botões, título e fechar o modal após imprimir
     setTimeout(() => {
         document.title = tituloOriginal;
         if (acoes) acoes.style.display = 'flex';
-        fecharRelatorio(); // Fecha o modal automaticamente
+        fecharRelatorio();
     }, 500);
 }
+
+// --- NOVA LIMPEZA GERAL ---
+function confirmarLimpeza() {
+    Swal.fire({
+        title: 'Limpeza Geral',
+        text: 'Tem certeza? Isso zerará sua pontuação atual em todos os registros do Controle Processual vinculados a você. Eles não aparecerão mais no seu Histórico pessoal, mas continuarão visíveis no Histórico Geral. Esta ação não tem volta.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Sim, zerar minha pontuação',
+        cancelButtonText: 'Cancelar'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Limpando histórico...',
+                text: 'Por favor, aguarde.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                if (!user) {
+                    Swal.fire('Erro', 'Usuário não autenticado.', 'error');
+                    return;
+                }
+
+                // 1. Zera a pontuação no Controle Processual
+                const { error: errorCP } = await supabaseClient
+                    .from('controle_processual')
+                    .update({ pontuacao: 0 })
+                    .eq('user_id', user.id);
+
+                if (errorCP) throw errorCP;
+
+                // 2. Remove registros da produtividade normal (se houver política de limpeza total)
+                const { error: errorProd } = await supabaseClient
+                    .from('registros_produtividade')
+                    .delete()
+                    .eq('user_id', user.id);
+
+                if (errorProd) throw errorProd;
+
+                Swal.fire('Concluído!', 'Sua pontuação foi zerada com sucesso.', 'success');
+                carregarHistorico();
+            } catch (err) {
+                console.error('Erro ao limpar produtividade:', err);
+                Swal.fire('Erro', 'Ocorreu um erro ao limpar o histórico.', 'error');
+            }
+        }
+    });
+}
+window.confirmarLimpeza = confirmarLimpeza;
 
 // Fechar dropdowns e modais ao clicar fora
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown-custom')) {
         document.querySelectorAll('.dropdown-lista.aberto').forEach(el => el.classList.remove('aberto'));
     }
-    if (e.target.id === 'modal-produtividade') fecharModal();
+    if (e.target.id === 'modal-produtividade') fecharModalProdutividade();
     if (e.target.id === 'modal-detalhes') fecharDetalhes();
 });
 
@@ -1773,7 +2166,15 @@ document.addEventListener('keydown', (e) => {
 
 // --- INICIALIZAÇÃO ---
 function inicializarProdutividade() {
+    console.log("Inicializando produtividade...");
     renderizarCategorias();
+
+    // Explicitamente lincar o botão de limpeza geral para evitar erros de escopo do HTML
+    const btnLimpeza = document.getElementById('btn-limpeza-geral');
+    if (btnLimpeza) {
+        btnLimpeza.addEventListener('click', confirmarLimpeza);
+    }
+
     carregarHistorico();
 }
 
@@ -1878,7 +2279,7 @@ function extrairDadosNotificacaoWord(texto) {
     const mData = texto.match(/Data:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
     if (mData) {
         // Converte DD/MM/YYYY para YYYY-MM-DD (Padrão de input type=date)
-        dados.data = `${mData[3]}-${mData[2]}-${mData[1]}`;
+        dados.data = `${mData[3]} -${mData[2]} -${mData[1]} `;
     }
 
     // 3. Nome (Remove String Contribuinte Repetida)
@@ -1922,7 +2323,7 @@ function extrairDadosProtocoloWord(texto) {
     // 2. Data
     const mData = texto.match(/Data:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
     if (mData) {
-        dados.data = `${mData[3]}-${mData[2]}-${mData[1]}`;
+        dados.data = `${mData[3]} -${mData[2]} -${mData[1]} `;
     }
 
     // 3. Nome (Busca genérica por Requerente/Nome/Contribuinte)
@@ -1958,7 +2359,8 @@ async function abrirEditorAutoInfracao() {
     });
 
     if (!todosPreenchidos) {
-        alert('Preencha os dados obrigatórios do Auto de Infração antes de gerar o documento.');
+        const nomeAlerta = categoriaAtual.id === '11' ? 'Dívida Ativa' : 'Auto de Infração';
+        alert(`Preencha os dados obrigatórios do ${nomeAlerta} antes de gerar o documento.`);
         return;
     }
 
@@ -1970,8 +2372,9 @@ async function abrirEditorAutoInfracao() {
     }
 
     try {
-        // Puxa do Banco de Dados offline o provável sequencial desse Auto e injeta
-        const numSequencial = await gerarNumeroSequencial('1.2');
+        // Puxa do Banco de Dados offline o provável sequencial desse documento e injeta
+        const numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
+        const tituloDoc = categoriaAtual.id === '11' ? 'DÍVIDA ATIVA Nº' : 'AUTO DE INFRAÇÃO Nº';
 
         // 2. Prepara HTML do Documento
         const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
@@ -1996,17 +2399,19 @@ async function abrirEditorAutoInfracao() {
         const diaHoje = String(hoje.getDate()).padStart(2, '0');
         const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
         const anoHoje = hoje.getFullYear();
-        const dataAssinatura = `${diaHoje}-${mesHoje}-${anoHoje}`;
+        const dataAssinatura = `${diaHoje}/${mesHoje}/${anoHoje}`;
 
         const base64Logo = "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";
+        const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
+
         const htmlTemplate = `
-        <div style="border: 1px solid #999; padding: 20px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
+            <div style="border: 1px solid #999; padding: 20px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
             <img src="data:image/png;base64,${base64Logo}" alt="Prefeitura Municipal de Divinópolis" style="max-height: 90px; width: auto; max-width: 100%;">
         </div>
         
         <div style="text-align: center; margin-bottom: 25px;">
             <p style="font-weight: bold; font-size: 14pt; margin: 10px 0;">FISCALIZAÇÃO DE POSTURAS AMBIENTAL</p>
-            <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">AUTO DE INFRAÇÃO Nº: ${numSequencial}</p>
+            <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">${tituloDoc}: ${numSequencial}</p>
         </div>
         
         <p style="margin-top: 20px;">
@@ -2041,7 +2446,7 @@ async function abrirEditorAutoInfracao() {
         </div>
         
         <p style="margin-top: 50px; text-indent: 30px;">
-            Recebi a 2ª via do presente Auto de infração do qual fico ciente.
+            Recebi a 2ª via do presente ${termoDocumento} do qual fico ciente.
         </p>
         
         <div style="margin-top: 40px; margin-left: 30px;">
@@ -2509,7 +2914,7 @@ async function baixarDocumentoWord() {
         // Executa lógica de banco de dados completa (incluindo Storage)
         await salvarRegistro(blobPdf, filenameSafe);
         fecharEditorDocumento(); // fecha o frame do documento
-        fecharModal(); // fecha o formulário pai imediatamente
+        fecharModalProdutividade(); // fecha o formulário pai imediatamente
     } catch (err) {
         console.error(err);
         alert('O DOCX/PDF foi gerado, mas ocorreu um erro ao salvar o Histórico e Storage.');
@@ -2522,6 +2927,128 @@ async function baixarDocumentoWord() {
 }
 
 
+// =============================================
+// NP / AI — VENCIDOS E ATENDIDOS (HOME DO FISCAL)
+// =============================================
+let npaiVencidos = [];
+let npaiAtendidos = [];
+let npaiAbaAtual = 'vencidos';
+
+async function carregarNPAIHome() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return;
+
+    const { data: registros, error } = await supabaseClient
+        .from('controle_processual')
+        .select('*')
+        .in('categoria_id', ['1.1', '1.2'])
+        .eq('user_id', user.id);
+
+    if (error || !registros) {
+        console.error('Erro ao carregar NP/AI:', error);
+        return;
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    npaiVencidos = [];
+    npaiAtendidos = [];
+
+    registros.forEach(reg => {
+        const campos = reg.campos || {};
+        const resposta = (campos.resposta_fiscal || '').trim();
+        const dataVenc = campos.data_vencimento;
+
+        if (resposta) {
+            // Tem resposta = atendido
+            // Só exibe se não tiver passado mais de 30 dias do vencimento (ou da criação, se sem vencimento)
+            let dataBase = dataVenc ? new Date(dataVenc + 'T00:00:00') : new Date(reg.created_at);
+            const limite30Dias = new Date(dataBase);
+            limite30Dias.setDate(limite30Dias.getDate() + 30);
+
+            if (hoje <= limite30Dias) {
+                npaiAtendidos.push(reg);
+            }
+        } else if (dataVenc) {
+            // Sem resposta + tem data de vencimento
+            const dv = new Date(dataVenc + 'T00:00:00');
+            if (dv <= hoje) {
+                // Já venceu
+                npaiVencidos.push(reg);
+            }
+        }
+    });
+
+    // Atualizar contadores
+    const countV = document.getElementById('npai-count-vencidos');
+    const countA = document.getElementById('npai-count-atendidos');
+    if (countV) countV.textContent = npaiVencidos.length;
+    if (countA) countA.textContent = npaiAtendidos.length;
+
+    renderizarListaNPAI();
+}
+
+function trocarAbaNPAI(aba) {
+    npaiAbaAtual = aba;
+    const btnV = document.getElementById('btn-npai-vencidos');
+    const btnA = document.getElementById('btn-npai-atendidos');
+    if (btnV) btnV.classList.toggle('active', aba === 'vencidos');
+    if (btnA) btnA.classList.toggle('active', aba === 'atendidos');
+    renderizarListaNPAI();
+}
+
+function renderizarListaNPAI() {
+    const container = document.getElementById('npai-lista');
+    if (!container) return;
+
+    const lista = npaiAbaAtual === 'vencidos' ? npaiVencidos : npaiAtendidos;
+
+    if (lista.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">
+            ${npaiAbaAtual === 'vencidos' ? 'Nenhum documento vencido! 🎉' : 'Nenhum documento atendido ainda.'}
+        </div>`;
+        return;
+    }
+
+    let html = '';
+    lista.forEach(reg => {
+        const campos = reg.campos || {};
+        const catNome = reg.categoria_nome || (reg.categoria_id === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração');
+        const nome = campos.nome || campos.n_notificacao || '—';
+        const bairro = campos.bairro || '—';
+        const dataVenc = campos.data_vencimento
+            ? campos.data_vencimento.split('-').reverse().join('/')
+            : '—';
+        const resposta = (campos.resposta_fiscal || '').trim();
+
+        const corBorda = npaiAbaAtual === 'vencidos' ? '#ef4444' : '#10b981';
+
+        const svgNP = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#64748b;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
+        const svgAI = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#64748b;"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="4" y1="10" x2="20" y2="10"></line><line x1="2" y1="14" x2="22" y2="14"></line><line x1="2" y1="18" x2="22" y2="18"></line></svg>`;
+        const iconeCat = reg.categoria_id === '1.1' ? svgNP : svgAI;
+
+        html += `<div style="display:flex; align-items:flex-start; gap:12px; padding:14px; margin-bottom:10px; background:#f8fafc; border-left:4px solid ${corBorda}; border-radius:8px; cursor:pointer; transition:0.2s;"
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'"
+            onclick="registrosGeralAtual = [...npaiVencidos, ...npaiAtendidos]; abrirDetalhesAdminHist('${reg.id}')">
+            <div style="font-size:24px; line-height:1;">${iconeCat}</div>
+            <div style="flex:1; min-width:0;">
+                <div style="font-weight:600; color:#1e293b; font-size:14px; margin-bottom:4px;">
+                    ${catNome} ${reg.numero_sequencial ? '— Nº ' + reg.numero_sequencial : ''}
+                </div>
+                <div style="color:#64748b; font-size:13px; margin-bottom:2px;">
+                    <strong>Contribuinte:</strong> ${nome} &nbsp;|&nbsp; <strong>Bairro:</strong> ${bairro}
+                </div>
+                <div style="color:#64748b; font-size:13px;">
+                    <strong>Vencimento:</strong> ${dataVenc}
+                    ${resposta ? '&nbsp;|&nbsp; <strong>Resposta:</strong> <span style="color:#10b981;">' + resposta + '</span>' : ''}
+                </div>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
 
 // Executa quando a página carregar
 document.addEventListener('DOMContentLoaded', inicializarProdutividade);

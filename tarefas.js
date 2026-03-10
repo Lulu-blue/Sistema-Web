@@ -9,6 +9,7 @@ var subtarefasCache = {};
 var userRoleGlobal = '';
 var userIdGlobal = '';
 var ehGerenteKanban = false;
+var _abrindoDetalhe = false;
 
 // ==========================================
 // INICIALIZAÇÃO
@@ -23,6 +24,16 @@ async function carregarModuloTarefas() {
             userRoleGlobal = perfil ? perfil.role.toLowerCase() : '';
         }
     } catch (e) { console.error(e); }
+
+    // Ocultar sub-abas para Fiscais e Administradores de Posturas
+    var btnTabAtribuidas = document.getElementById('btn-tab-atribuidas');
+    if (btnTabAtribuidas && btnTabAtribuidas.parentElement) {
+        if (userRoleGlobal === 'fiscal de posturas' || userRoleGlobal === 'administrador de posturas' || userRoleGlobal === 'fiscal') {
+            btnTabAtribuidas.parentElement.style.display = 'none';
+        } else {
+            btnTabAtribuidas.parentElement.style.display = 'flex';
+        }
+    }
 
     renderizarCalendario();
     carregarEventos();
@@ -127,7 +138,7 @@ async function carregarEventos() {
             html += '<div style="font-size:15px; font-weight:500; color:#334155;">' + ev.titulo + '</div>';
             if (ev.descricao) html += '<div style="font-size:14px; color:#94a3b8;">' + ev.descricao + '</div>';
             html += '</div>';
-            if (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'admin') {
+            if (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin') {
                 html += '<button onclick="excluirEvento(\'' + ev.id + '\')" style="background:none; border:none; cursor:pointer; color:#ef4444; font-size:14px;" title="Excluir">✕</button>';
             }
             html += '</div>';
@@ -206,10 +217,11 @@ async function carregarTarefas() {
 
         // Buscar responsáveis de todas as tarefas
         var ids = tarefasCache.map(function (t) { return t.id; });
-        var { data: responsaveis } = await supabaseClient
-            .from('tarefa_responsaveis')
-            .select('*')
-            .in('tarefa_id', ids.length > 0 ? ids : ['__none__']);
+        var responsaveis = [];
+        if (ids.length > 0) {
+            var resResp = await supabaseClient.from('tarefa_responsaveis').select('*').in('tarefa_id', ids);
+            responsaveis = resResp.data || [];
+        }
 
         // Buscar avatares dos responsáveis
         var userIdsResp = [];
@@ -223,10 +235,11 @@ async function carregarTarefas() {
         }
 
         // Buscar subtarefas de todas
-        var { data: subtarefas } = await supabaseClient
-            .from('tarefas')
-            .select('*')
-            .in('tarefa_pai_id', ids.length > 0 ? ids : ['__none__']);
+        var subtarefas = [];
+        if (ids.length > 0) {
+            var resSub = await supabaseClient.from('tarefas').select('*').in('tarefa_pai_id', ids);
+            subtarefas = resSub.data || [];
+        }
 
         // Organizar subtarefas por tarefa_pai_id
         subtarefasCache = {};
@@ -244,10 +257,32 @@ async function carregarTarefas() {
             respUserIds[r.tarefa_id].push(r.user_id);
         });
 
+        // Buscar responsáveis das subtarefas para identificar "minha tarefa via subtarefa"
+        var subIds = (subtarefas || []).map(function (s) { return s.id; });
+        var subRespData = [];
+        if (subIds.length > 0) {
+            var resSubR = await supabaseClient.from('tarefa_responsaveis').select('*').in('tarefa_id', subIds);
+            subRespData = resSubR.data || [];
+        }
+        // Mapear: para cada tarefa-pai, verificar se o user é responsável de alguma subtarefa
+        var ehMinhaViaSubMap = {};
+        var minhasSubIds = {};
+        subRespData.forEach(function (r) {
+            if (r.user_id === userIdGlobal) {
+                minhasSubIds[r.tarefa_id] = true;
+                // Encontrar a subtarefa e pegar o tarefa_pai_id
+                var sub = (subtarefas || []).find(function (s) { return s.id === r.tarefa_id; });
+                if (sub && sub.tarefa_pai_id) {
+                    ehMinhaViaSubMap[sub.tarefa_pai_id] = true;
+                }
+            }
+        });
+
         var hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
 
         var atrasadas = [];
+        var pendentes = [];
         var emProgresso = [];
         var concluidas = [];
 
@@ -264,30 +299,39 @@ async function carregarTarefas() {
             } catch (e) { console.error(e); }
         }
 
-        ehGerenteKanban = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'admin');
+        ehGerenteKanban = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin');
         console.log('[Tarefas] role:', userRoleGlobal, '| ehGerente:', ehGerenteKanban, '| total tarefas:', tarefasCache.length);
 
         tarefasCache.forEach(function (t) {
             t._responsaveis = respMap[t.id] || [];
             t._respUserIds = respUserIds[t.id] || [];
             t._subtarefas = subtarefasCache[t.id] || [];
+            t._ehMinhaViaSub = !!ehMinhaViaSubMap[t.id];
+            t._minhasSubIds = minhasSubIds;
 
-            // Fiscal só vê tarefas onde é responsável
-            if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1) return;
+            // Fiscal só vê tarefas onde é responsável (diretamente ou via subtarefa)
+            if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
 
+            // Filtrar do Kanban tarefas concluídas há mais de 30 dias (vão só pro histórico)
             if (t.status === 'concluida') {
-                concluidas.push(t);
+                var dataConclusao = new Date(t.updated_at || t.created_at);
+                var diffTempo = hoje - dataConclusao;
+                var diasPassados = Math.floor(diffTempo / (1000 * 60 * 60 * 24));
+
+                if (diasPassados <= 30) {
+                    concluidas.push(t);
+                }
             } else if (t.prazo && new Date(t.prazo) < hoje) {
                 atrasadas.push(t);
             } else if (t.status === 'em_progresso') {
                 emProgresso.push(t);
             } else {
-                // pendente e não atrasada vai pra em_progresso
-                emProgresso.push(t);
+                pendentes.push(t);
             }
         });
 
         renderizarColunaTarefas('coluna-atrasadas', atrasadas, '#ef4444', 'Atrasadas');
+        renderizarColunaTarefas('coluna-pendentes', pendentes, '#f59e0b', 'Pendentes');
         renderizarColunaTarefas('coluna-em-progresso', emProgresso, '#3b82f6', 'Em Progresso');
         renderizarColunaTarefas('coluna-concluidas', concluidas, '#10b981', 'Concluídas');
 
@@ -316,14 +360,23 @@ function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
         var atrasada = prazoDt && prazoDt < hoje && t.status !== 'concluida';
 
         var borderColor = t.status === 'concluida' ? '#10b981' : (atrasada ? '#ef4444' : '#3b82f6');
-        var ehMinha = t._respUserIds && t._respUserIds.indexOf(userIdGlobal) !== -1;
-        var extraStyle = ehMinha ? 'box-shadow:0 0 0 2px #8b5cf6, 0 2px 8px rgba(139,92,246,0.15);' : 'box-shadow:0 1px 3px rgba(0,0,0,0.06);';
+        var ehMinhaDireta = t._respUserIds && t._respUserIds.indexOf(userIdGlobal) !== -1;
+        var extraStyle = ehMinhaDireta ? 'box-shadow:0 0 0 2px #8b5cf6, 0 2px 8px rgba(139,92,246,0.15);' : 'box-shadow:0 1px 3px rgba(0,0,0,0.06);';
 
         html += '<div onclick="abrirDetalheTarefa(\'' + t.id + '\')" style="background:white; border-radius:10px; padding:12px; margin-bottom:8px; border-left:4px solid ' + borderColor + '; cursor:pointer; ' + extraStyle + ' transition:transform 0.15s;" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'none\'">';
 
-        html += '<div style="font-size:15px; font-weight:600; color:#1e293b; margin-bottom:4px;">' + t.titulo;
-        if (ehMinha) html += ' <span style="font-size:14px; background:#8b5cf6; color:white; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:1px;">VOCÊ</span>';
+        html += '<div style="font-size:15px; font-weight:600; color:#1e293b; margin-bottom:2px;">' + t.titulo;
+        if (ehMinhaDireta) html += ' <span style="font-size:14px; background:#8b5cf6; color:white; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:1px;">VOCÊ</span>';
         html += '</div>';
+
+        // Aviso de prazo próximo (≤5 dias)
+        if (prazoDt && t.status !== 'concluida') {
+            var diasFaltam = Math.ceil((prazoDt - hoje) / (1000 * 60 * 60 * 24));
+            if (diasFaltam <= 5 && diasFaltam >= 0) {
+                var avisoTexto = diasFaltam === 0 ? '⚠ Vence hoje' : (diasFaltam === 1 ? '⚠ Vence amanhã' : '⚠ Faltam ' + diasFaltam + ' dias');
+                html += '<div style="font-size:12px; color:#dc2626; font-weight:500; margin-bottom:4px;">' + avisoTexto + '</div>';
+            }
+        }
 
         // Responsáveis com avatar
         if (t._responsaveis.length > 0) {
@@ -363,16 +416,18 @@ function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
             html += '</div>';
 
             // Lista de subtarefas
-            var ehMinhaTarefa = (t._respUserIds && t._respUserIds.indexOf(userIdGlobal) !== -1) || ehGerenteKanban;
             t._subtarefas.forEach(function (sub) {
                 var subDone = sub.status === 'concluida';
-                html += '<div style="display:flex; align-items:center; gap:5px; padding:2px 0;" onclick="event.stopPropagation()">';
-                if (ehMinhaTarefa) {
-                    html += '<input type="checkbox" ' + (subDone ? 'checked' : '') + ' onchange="toggleSubtarefa(\'' + sub.id + '\', this.checked)" style="width:14px; height:14px; accent-color:#10b981; cursor:pointer;">';
+                var ehMinhaSubtarefa = t._minhasSubIds && t._minhasSubIds[sub.id];
+                var subBg = ehMinhaSubtarefa ? 'background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.3); border-radius:6px; padding:3px 6px;' : 'padding:2px 0;';
+                html += '<div style="display:flex; align-items:flex-start; gap:5px; ' + subBg + ' margin-bottom:2px;" onclick="event.stopPropagation()">';
+                if (ehMinhaSubtarefa || ehGerenteKanban) {
+                    html += '<input type="checkbox" ' + (subDone ? 'checked' : '') + ' disabled title="Abra a tarefa para concluir a subtarefa" style="width:14px; height:14px; accent-color:#10b981; margin-top:2px; flex-shrink:0;">';
                 } else {
-                    html += '<input type="checkbox" ' + (subDone ? 'checked' : '') + ' disabled style="width:14px; height:14px; accent-color:#10b981; opacity:0.5;">';
+                    html += '<input type="checkbox" ' + (subDone ? 'checked' : '') + ' disabled style="width:14px; height:14px; accent-color:#10b981; opacity:0.5; margin-top:2px; flex-shrink:0;">';
                 }
-                html += '<span style="font-size:13px; color:' + (subDone ? '#94a3b8' : '#475569') + '; ' + (subDone ? 'text-decoration:line-through;' : '') + '">' + sub.titulo + '</span>';
+                html += '<span style="font-size:13px; color:' + (subDone ? '#94a3b8' : '#475569') + '; ' + (subDone ? 'text-decoration:line-through;' : '') + ' word-break:break-word; min-width:0;">' + sub.titulo + '</span>';
+                if (ehMinhaSubtarefa) html += ' <span style="font-size:10px; background:#8b5cf6; color:white; padding:1px 5px; border-radius:6px; margin-left:2px; flex-shrink:0; white-space:nowrap;">VOCÊ</span>';
                 html += '</div>';
             });
             html += '</div>';
@@ -395,6 +450,14 @@ function abrirModalNovaTarefa() {
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Tarefa</label><input type="text" id="tarefa-titulo" placeholder="Ex: Vistoria no Bairro Centro"></div>';
     html += '<div class="campo-grupo"><label>Observações</label><textarea id="tarefa-descricao" rows="3" placeholder="Descrição ou instruções..."></textarea></div>';
+    html += '<div class="campo-grupo"><label>Anexos</label>';
+    html += '<label style="display:flex; align-items:center; gap:8px; padding:10px; border:2px dashed #cbd5e1; border-radius:10px; cursor:pointer; background:#f8fafc; transition:border-color 0.2s;" onmouseover="this.style.borderColor=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#cbd5e1\'">';
+    html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+    html += '<span style="font-size:14px; color:#64748b;">Clique para selecionar arquivos (qualquer formato)</span>';
+    html += '<input type="file" id="tarefa-anexos-input" multiple style="display:none;" onchange="previewAnexosCriacao(this)">';
+    html += '</label>';
+    html += '<div id="tarefa-anexos-preview" style="margin-top:8px;"></div>';
+    html += '</div>';
     html += '<div class="campo-grupo"><label>Prazo</label><input type="date" id="tarefa-prazo"></div>';
     html += '<div class="campo-grupo"><label>Responsáveis</label><div id="tarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer"><button class="btn-cancelar" onclick="fecharModal(\'modal-nova-tarefa\')">Cancelar</button>';
@@ -412,21 +475,50 @@ async function carregarListaResponsaveis() {
         var { data: users, error } = await supabaseClient
             .from('profiles')
             .select('id, full_name, role')
-            .in('role', ['fiscal', 'gerente', 'gerente fiscal', 'admin'])
             .order('full_name', { ascending: true });
 
         if (error) throw error;
 
         var html = '';
+        var validRoles = ['fiscal', 'fiscal de posturas', 'administrador de posturas', 'gerente', 'gerente fiscal', 'gerente de posturas', 'admin'];
+
         (users || []).forEach(function (u) {
-            html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
-            html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '" style="width:16px; height:16px; accent-color:#10b981;">';
-            html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + u.role + ')</span></label>';
+            var roleLower = (u.role || '').toLowerCase();
+            if (roleLower === 'inativo') return;
+
+            var isValidRole = validRoles.indexOf(roleLower) !== -1;
+
+            // Aceitar se bate com a lista ou se contém partes da palavra p/ previnir erros de digitação leves
+            if (isValidRole || roleLower.includes('administrador') || roleLower.includes('fiscal') || roleLower.includes('gerente')) {
+                var checked = (u.id === userIdGlobal) ? ' checked' : '';
+                html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
+                html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
+                html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+            }
         });
         container.innerHTML = html || '<p style="color:#94a3b8;">Nenhum usuário encontrado.</p>';
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
     }
+}
+
+// Preview dos anexos selecionados na criação
+function previewAnexosCriacao(inputEl) {
+    var container = document.getElementById('tarefa-anexos-preview');
+    if (!container) return;
+    var files = inputEl.files;
+    if (!files || files.length === 0) { container.innerHTML = ''; return; }
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var sizeMB = (f.size / (1024 * 1024)).toFixed(2);
+        html += '<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#f1f5f9; border-radius:8px; margin-bottom:4px; font-size:14px; color:#334155;">';
+        html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        html += '<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + f.name + '</span>';
+        html += '<span style="color:#94a3b8; font-size:12px;">' + sizeMB + ' MB</span>';
+        html += '</div>';
+    }
+    container.innerHTML = html;
 }
 
 async function salvarTarefa() {
@@ -436,11 +528,24 @@ async function salvarTarefa() {
 
     if (!titulo) { alert('Preencha o título da tarefa.'); return; }
 
+    var btnSalvar = document.querySelector('#modal-nova-tarefa .btn-salvar');
+    var oldText = '';
+    if (btnSalvar) {
+        oldText = btnSalvar.textContent;
+        btnSalvar.textContent = 'Carregando...';
+        btnSalvar.disabled = true;
+        btnSalvar.style.opacity = '0.7';
+    }
+
     var responsaveisCBs = document.querySelectorAll('.cb-responsavel:checked');
     var responsaveis = [];
     responsaveisCBs.forEach(function (cb) {
         responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
     });
+
+    // Capturar arquivos selecionados antes de fechar o modal
+    var anexosInput = document.getElementById('tarefa-anexos-input');
+    var arquivos = anexosInput ? anexosInput.files : [];
 
     try {
         var { data: novaTarefa, error } = await supabaseClient
@@ -465,10 +570,38 @@ async function salvarTarefa() {
             await supabaseClient.from('tarefa_responsaveis').insert(resps);
         }
 
+        // Upload de anexos em paralelo (Otimização de velocidade)
+        if (arquivos.length > 0) {
+            var uploadPromises = [];
+            for (var i = 0; i < arquivos.length; i++) {
+                var file = arquivos[i];
+                var filePath = novaTarefa.id + '/' + Date.now() + '_' + file.name;
+                uploadPromises.push((async function (f, fPath) {
+                    var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(fPath, f);
+                    if (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
+                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(fPath).data.publicUrl;
+                    return { tarefa_id: novaTarefa.id, nome_arquivo: f.name, url: publicUrl };
+                })(file, filePath));
+            }
+
+            var resultadosUploads = await Promise.all(uploadPromises);
+            var anexosValidos = resultadosUploads.filter(function (r) { return r !== null; });
+
+            if (anexosValidos.length > 0) {
+                await supabaseClient.from('tarefa_anexos').insert(anexosValidos);
+            }
+        }
+
         fecharModal('modal-nova-tarefa');
         carregarTarefas();
     } catch (err) {
         alert('Erro ao criar tarefa: ' + err.message);
+    } finally {
+        if (btnSalvar) {
+            btnSalvar.textContent = oldText;
+            btnSalvar.disabled = false;
+            btnSalvar.style.opacity = '1';
+        }
     }
 }
 
@@ -476,205 +609,237 @@ async function salvarTarefa() {
 // DETALHE DA TAREFA (MODAL COMPLETO)
 // ==========================================
 async function abrirDetalheTarefa(id) {
-    var tarefa = tarefasCache.find(function (t) { return t.id === id; });
-    if (!tarefa) return;
+    if (_abrindoDetalhe) return;
+    _abrindoDetalhe = true;
 
-    // Buscar subtarefas atualizadas
-    var { data: subtarefas } = await supabaseClient
-        .from('tarefas')
-        .select('*')
-        .eq('tarefa_pai_id', id)
-        .order('created_at', { ascending: true });
+    try {
+        var tarefa = tarefasCache.find(function (t) { return t.id === id; });
+        if (!tarefa) { _abrindoDetalhe = false; return; }
 
-    // Buscar responsáveis das subtarefas
-    var subIds = (subtarefas || []).map(function (s) { return s.id; });
-    var { data: subResps } = await supabaseClient
-        .from('tarefa_responsaveis')
-        .select('*')
-        .in('tarefa_id', subIds.length > 0 ? subIds : ['__none__']);
-    var subRespMap = {};
-    (subResps || []).forEach(function (r) {
-        subRespMap[r.tarefa_id] = r.user_name || 'Fiscal';
-    });
+        // Buscar subtarefas atualizadas
+        var { data: subtarefas } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .eq('tarefa_pai_id', id)
+            .order('created_at', { ascending: true });
 
-    // Buscar anexos das subtarefas
-    var { data: subAnexos } = await supabaseClient
-        .from('tarefa_anexos')
-        .select('*')
-        .in('tarefa_id', subIds.length > 0 ? subIds : ['__none__']);
-    var subAnexoMap = {};
-    (subAnexos || []).forEach(function (a) {
-        if (!subAnexoMap[a.tarefa_id]) subAnexoMap[a.tarefa_id] = [];
-        subAnexoMap[a.tarefa_id].push(a);
-    });
-
-    // Buscar anexos
-    var { data: anexos } = await supabaseClient
-        .from('tarefa_anexos')
-        .select('*')
-        .eq('tarefa_id', id)
-        .order('uploaded_at', { ascending: true });
-
-    // Buscar responsáveis
-    var { data: responsaveis } = await supabaseClient
-        .from('tarefa_responsaveis')
-        .select('*')
-        .eq('tarefa_id', id);
-
-    var subs = subtarefas || [];
-    var anx = anexos || [];
-    var resps = responsaveis || [];
-
-    var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'admin');
-    var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
-    var podeEditar = ehGerente || ehResponsavel;
-
-    var html = '<div class="modal-overlay ativo" id="modal-detalhe-tarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-tarefa\')">';
-    html += '<div class="modal-container" style="max-width:600px;">';
-    html += '<div class="modal-header"><h2>' + tarefa.titulo + '</h2>';
-    html += '<button class="modal-close" onclick="fecharModal(\'modal-detalhe-tarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
-    html += '</div><div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">';
-
-    // Status — só quem pode editar
-    if (podeEditar) {
-        html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
-        var statusOpts = [
-            { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
-            { val: 'em_progresso', label: 'Em Progresso', cor: '#3b82f6' },
-            { val: 'concluida', label: 'Concluída', cor: '#10b981' }
-        ];
-        statusOpts.forEach(function (s) {
-            var ativo = tarefa.status === s.val;
-            html += '<button onclick="alterarStatusTarefa(\'' + id + '\',\'' + s.val + '\')" style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:pointer; border:2px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? 'white' : s.cor) + ';">' + s.label + '</button>';
+        // Buscar responsáveis das subtarefas
+        var subIds = (subtarefas || []).map(function (s) { return s.id; });
+        var { data: subResps } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('*')
+            .in('tarefa_id', subIds.length > 0 ? subIds : ['__none__']);
+        var subRespMap = {};
+        var subRespUserIdMap = {};
+        (subResps || []).forEach(function (r) {
+            subRespMap[r.tarefa_id] = r.user_name || 'Fiscal';
+            subRespUserIdMap[r.tarefa_id] = r.user_id;
         });
-        html += '</div>';
-    } else {
-        // Só mostra o status atual
-        var statusAtualLabel = tarefa.status === 'em_progresso' ? 'Em Progresso' : (tarefa.status === 'concluida' ? 'Concluída' : 'Pendente');
-        var statusAtualCor = tarefa.status === 'em_progresso' ? '#3b82f6' : (tarefa.status === 'concluida' ? '#10b981' : '#f59e0b');
-        html += '<div><span style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; background:' + statusAtualCor + '; color:white;">' + statusAtualLabel + '</span></div>';
-    }
 
-    // Observações
-    if (tarefa.descricao) {
-        html += '<div style="background:#f8fafc; padding:12px; border-radius:8px; font-size:15px; color:#475569; border:1px solid #e2e8f0;">';
-        html += '<strong style="color:#1e293b;">Observações:</strong><br>' + tarefa.descricao.replace(/\n/g, '<br>');
-        html += '</div>';
-    }
-
-    // Responsáveis com avatar
-    if (resps.length > 0) {
-        // Buscar avatares
-        var respIds = resps.map(function (r) { return r.user_id; });
-        var { data: respPerfis } = await supabaseClient.from('profiles').select('id, avatar_url').in('id', respIds);
-        var avMap = {};
-        (respPerfis || []).forEach(function (p) { avMap[p.id] = p.avatar_url || ''; });
-
-        html += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
-        html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
-        resps.forEach(function (r) {
-            html += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
-            var av = avMap[r.user_id] || '';
-            if (av) {
-                html += '<img src="' + av + '" style="width:22px; height:22px; border-radius:50%; object-fit:cover;">';
-            } else {
-                html += '<svg width="22" height="22" viewBox="0 0 24 24" fill="#cbd5e1" stroke="none"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>';
-            }
-            html += '<span style="font-size:14px;">' + r.user_name + '</span>';
-            html += '</div>';
+        // Buscar anexos das subtarefas
+        var { data: subAnexos } = await supabaseClient
+            .from('tarefa_anexos')
+            .select('*')
+            .in('tarefa_id', subIds.length > 0 ? subIds : ['__none__']);
+        var subAnexoMap = {};
+        (subAnexos || []).forEach(function (a) {
+            if (!subAnexoMap[a.tarefa_id]) subAnexoMap[a.tarefa_id] = [];
+            subAnexoMap[a.tarefa_id].push(a);
         });
-        html += '</div>';
-    }
 
-    // Prazo
-    if (tarefa.prazo) {
-        var pDt = new Date(tarefa.prazo);
-        html += '<div style="font-size:15px; color:#475569;"><strong>Prazo:</strong> ' + pDt.toLocaleDateString('pt-BR') + '</div>';
-    }
+        // Buscar anexos
+        var { data: anexos } = await supabaseClient
+            .from('tarefa_anexos')
+            .select('*')
+            .eq('tarefa_id', id)
+            .order('uploaded_at', { ascending: true });
 
-    // Subtarefas
-    html += '<div>';
-    html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
-    html += '<strong style="font-size:15px; color:#1e293b;">Subtarefas (' + subs.length + ')</strong>';
-    if (ehGerente) {
-        html += '<button onclick="abrirCriarSubtarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer;">+ Subtarefa</button>';
-    }
-    html += '</div>';
+        // Buscar responsáveis
+        var { data: responsaveis } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('*')
+            .eq('tarefa_id', id);
 
-    if (subs.length > 0) {
-        var conclSub = subs.filter(function (s) { return s.status === 'concluida'; }).length;
-        var pctSub = Math.round((conclSub / subs.length) * 100);
-        var barC = pctSub === 100 ? '#10b981' : (pctSub >= 50 ? '#3b82f6' : '#f59e0b');
+        var subs = subtarefas || [];
+        var anx = anexos || [];
+        var resps = responsaveis || [];
 
-        html += '<div style="margin-bottom:8px;">';
-        html += '<div style="display:flex; justify-content:space-between; font-size:14px; color:#94a3b8; margin-bottom:3px;"><span>Progresso</span><span>' + conclSub + '/' + subs.length + ' (' + pctSub + '%)</span></div>';
-        html += '<div style="background:#e2e8f0; border-radius:10px; height:8px; overflow:hidden;">';
-        html += '<div style="background:' + barC + '; height:100%; width:' + pctSub + '%; border-radius:10px; transition:width 0.3s;"></div>';
-        html += '</div></div>';
+        var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin');
+        var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
+        var podeEditar = ehGerente || ehResponsavel;
 
-        subs.forEach(function (s) {
-            var subCheck = s.status === 'concluida' ? 'checked' : '';
-            var subResp = subRespMap[s.id] || '';
-            var subAnx = subAnexoMap[s.id] || [];
+        var html = '<div class="modal-overlay ativo" id="modal-detalhe-tarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-tarefa\')">';
+        html += '<div class="modal-container" style="max-width:600px;">';
+        html += '<div class="modal-header"><h2>' + tarefa.titulo + '</h2>';
+        html += '<button class="modal-close" onclick="fecharModal(\'modal-detalhe-tarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+        html += '</div><div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">';
 
-            html += '<div style="padding:8px 0; border-bottom:1px solid #f1f5f9;">';
-            html += '<div style="display:flex; align-items:center; gap:8px;">';
-            if (podeEditar) {
-                html += '<input type="checkbox" ' + subCheck + ' onchange="toggleSubtarefa(\'' + s.id + '\', this.checked)" style="width:16px; height:16px; accent-color:#10b981;">';
-            } else {
-                html += '<input type="checkbox" ' + subCheck + ' disabled style="width:16px; height:16px; accent-color:#10b981; opacity:0.5;">';
-            }
-            html += '<div style="flex:1;">';
-            html += '<span style="font-size:15px; color:' + (s.status === 'concluida' ? '#94a3b8' : '#334155') + '; ' + (s.status === 'concluida' ? 'text-decoration:line-through;' : '') + '">' + s.titulo + '</span>';
-            if (subResp) html += '<div style="font-size:15px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + subResp + '</div>';
-            html += '</div>';
-            if (podeEditar) {
-                html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar PDF"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" accept=".pdf" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
-            }
-            if (ehGerente) {
-                html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
-            }
-            html += '</div>';
-            // Mostrar anexos da subtarefa
-            if (subAnx.length > 0) {
-                subAnx.forEach(function (a) {
-                    html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
-                    html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-                    html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none;">' + a.nome_arquivo + '</a>';
-                    html += '</div>';
-                });
-            }
-            html += '</div>';
-        });
-    }
-    html += '</div>';
+        // Verificar se todas as subtarefas estão concluídas
+        var todasSubConcluidas = subs.length === 0 || subs.every(function (s) { return s.status === 'concluida'; });
 
-    // Anexos
-    html += '<div>';
-    html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
-    html += '<strong style="font-size:15px; color:#1e293b;">Anexos (' + anx.length + ')</strong>';
-    html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Anexar PDF<input type="file" accept=".pdf" onchange="uploadAnexo(\'' + id + '\', this)" style="display:none;"></label>';
-    html += '</div>';
-
-    anx.forEach(function (a) {
-        html += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
-        html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-        html += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
+        // Status — só quem pode editar a TAREFA PRINCIPAL (apenas gerente)
         if (ehGerente) {
-            html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
+            html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
+            var statusOpts = [
+                { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
+                { val: 'em_progresso', label: 'Em Progresso', cor: '#3b82f6' },
+                { val: 'concluida', label: 'Concluída', cor: '#10b981' }
+            ];
+            statusOpts.forEach(function (s) {
+                var ativo = tarefa.status === s.val;
+                var bloqueado = (s.val === 'concluida' && !todasSubConcluidas);
+                if (bloqueado) {
+                    html += '<button disabled style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:not-allowed; border:2px solid #cbd5e1; background:#f1f5f9; color:#94a3b8; opacity:0.6;" title="Conclua todas as subtarefas primeiro">' + s.label + '</button>';
+                } else {
+                    html += '<button onclick="alterarStatusTarefa(\'' + id + '\',\'' + s.val + '\')" style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:pointer; border:2px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? 'white' : s.cor) + ';">' + s.label + '</button>';
+                }
+            });
+            if (!todasSubConcluidas) {
+                html += '<div style="font-size:12px; color:#94a3b8; align-self:center; margin-left:4px;">Conclua as subtarefas para finalizar</div>';
+            }
+            html += '</div>';
+        } else {
+            // Só mostra o status atual
+            var statusAtualLabel = tarefa.status === 'em_progresso' ? 'Em Progresso' : (tarefa.status === 'concluida' ? 'Concluída' : 'Pendente');
+            var statusAtualCor = tarefa.status === 'em_progresso' ? '#3b82f6' : (tarefa.status === 'concluida' ? '#10b981' : '#f59e0b');
+            html += '<div><span style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; background:' + statusAtualCor + '; color:white;">' + statusAtualLabel + '</span></div>';
+        }
+
+        // Observações
+        if (tarefa.descricao) {
+            html += '<div style="background:#f8fafc; padding:12px; border-radius:8px; font-size:15px; color:#475569; border:1px solid #e2e8f0;">';
+            html += '<strong style="color:#1e293b;">Observações:</strong><br>' + tarefa.descricao.replace(/\n/g, '<br>');
+            html += '</div>';
+        }
+
+        // Responsáveis com avatar
+        if (resps.length > 0) {
+            // Buscar avatares
+            var respIds = resps.map(function (r) { return r.user_id; });
+            var { data: respPerfis } = await supabaseClient.from('profiles').select('id, avatar_url').in('id', respIds);
+            var avMap = {};
+            (respPerfis || []).forEach(function (p) { avMap[p.id] = p.avatar_url || ''; });
+
+            html += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
+            html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
+            resps.forEach(function (r) {
+                html += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
+                var av = avMap[r.user_id] || '';
+                if (av) {
+                    html += '<img src="' + av + '" style="width:22px; height:22px; border-radius:50%; object-fit:cover;">';
+                } else {
+                    html += '<svg width="22" height="22" viewBox="0 0 24 24" fill="#cbd5e1" stroke="none"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>';
+                }
+                html += '<span style="font-size:14px;">' + r.user_name + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Prazo
+        if (tarefa.prazo) {
+            var pDt = new Date(tarefa.prazo);
+            html += '<div style="font-size:15px; color:#475569;"><strong>Prazo:</strong> ' + pDt.toLocaleDateString('pt-BR') + '</div>';
+        }
+
+        // Subtarefas
+        html += '<div>';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
+        html += '<strong style="font-size:15px; color:#1e293b;">Subtarefas (' + subs.length + ')</strong>';
+        if (ehGerente) {
+            html += '<button onclick="abrirCriarSubtarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer;">+ Subtarefa</button>';
         }
         html += '</div>';
-    });
-    html += '</div>';
 
-    // Botão excluir tarefa (gerente)
-    if (ehGerente) {
-        html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
+        if (subs.length > 0) {
+            var conclSub = subs.filter(function (s) { return s.status === 'concluida'; }).length;
+            var pctSub = Math.round((conclSub / subs.length) * 100);
+            var barC = pctSub === 100 ? '#10b981' : (pctSub >= 50 ? '#3b82f6' : '#f59e0b');
+
+            html += '<div style="margin-bottom:8px;">';
+            html += '<div style="display:flex; justify-content:space-between; font-size:14px; color:#94a3b8; margin-bottom:3px;"><span>Progresso</span><span>' + conclSub + '/' + subs.length + ' (' + pctSub + '%)</span></div>';
+            html += '<div style="background:#e2e8f0; border-radius:10px; height:8px; overflow:hidden;">';
+            html += '<div style="background:' + barC + '; height:100%; width:' + pctSub + '%; border-radius:10px; transition:width 0.3s;"></div>';
+            html += '</div></div>';
+
+            subs.forEach(function (s) {
+                var subCheck = s.status === 'concluida' ? 'checked' : '';
+                var subResp = subRespMap[s.id] || '';
+                var subAnx = subAnexoMap[s.id] || [];
+
+                html += '<div style="padding:8px 0; border-bottom:1px solid #f1f5f9;">';
+                html += '<div style="display:flex; align-items:center; gap:8px;">';
+                var subRespUserId = subRespUserIdMap[s.id] || '';
+                var podeConcluirSub = ehGerente || (subRespUserId === userIdGlobal);
+                var subTemAnexo = subAnx.length > 0;
+                var subJaConcluida = s.status === 'concluida';
+                if (podeConcluirSub && (subTemAnexo || subJaConcluida)) {
+                    html += '<input type="checkbox" ' + subCheck + ' onchange="toggleSubtarefa(\'' + s.id + '\', this.checked)" style="width:16px; height:16px; accent-color:#10b981;">';
+                } else if (podeConcluirSub && !subTemAnexo) {
+                    html += '<input type="checkbox" disabled style="width:16px; height:16px; accent-color:#10b981; opacity:0.4;" title="Anexe um documento antes de concluir">';
+                } else {
+                    // Não é responsável: mostra apenas um indicador visual
+                    html += '<span style="width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; color:' + (subJaConcluida ? '#10b981' : '#cbd5e1') + '; font-size:14px;">' + (subJaConcluida ? '✔' : '○') + '</span>';
+                }
+                html += '<div style="flex:1;">';
+                html += '<span style="font-size:15px; color:' + (s.status === 'concluida' ? '#94a3b8' : '#334155') + '; ' + (s.status === 'concluida' ? 'text-decoration:line-through;' : '') + '">' + s.titulo + '</span>';
+                if (subResp) html += '<div style="font-size:15px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + subResp + '</div>';
+                html += '</div>';
+                if (podeConcluirSub) {
+                    html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar arquivo"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
+                    if (!subTemAnexo && !subJaConcluida) {
+                        html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc</span>';
+                    }
+                }
+                if (ehGerente) {
+                    html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
+                }
+                html += '</div>';
+                // Mostrar anexos da subtarefa
+                if (subAnx.length > 0) {
+                    subAnx.forEach(function (a) {
+                        html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
+                        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none;">' + a.nome_arquivo + '</a>';
+                        html += '</div>';
+                    });
+                }
+                html += '</div>';
+            });
+        }
+        html += '</div>';
+
+        // Anexos
+        html += '<div>';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
+        html += '<strong style="font-size:15px; color:#1e293b;">Anexos (' + anx.length + ')</strong>';
+        html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Anexar<input type="file" onchange="uploadAnexo(\'' + id + '\', this)" style="display:none;"></label>';
+        html += '</div>';
+
+        anx.forEach(function (a) {
+            html += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
+            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+            html += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
+            if (ehGerente) {
+                html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+
+        // Botão excluir tarefa (gerente)
+        if (ehGerente) {
+            html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
+        }
+
+        html += '</div></div></div>';
+
+        document.body.insertAdjacentHTML('beforeend', html);
+    } catch (err) {
+        console.error('Erro ao abrir detalhe:', err);
+    } finally {
+        _abrindoDetalhe = false;
     }
-
-    html += '</div></div></div>';
-
-    document.body.insertAdjacentHTML('beforeend', html);
 }
 
 async function alterarStatusTarefa(id, novoStatus) {
@@ -698,68 +863,101 @@ async function excluirTarefa(id) {
 // SUBTAREFAS
 // ==========================================
 function abrirCriarSubtarefa(tarefaPaiId) {
-    var html = '<div class="modal-overlay ativo" id="modal-nova-subtarefa" onclick="if(event.target===this)fecharModal(\'modal-nova-subtarefa\')"\'>';
+    var html = '<div class="modal-overlay ativo" id="modal-nova-subtarefa" onclick="if(event.target===this)fecharModal(\'modal-nova-subtarefa\')">';
     html += '<div class="modal-container" style="max-width:420px;">';
     html += '<div class="modal-header"><h2>Nova Subtarefa</h2>';
     html += '<button class="modal-close" onclick="fecharModal(\'modal-nova-subtarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Subtarefa</label><input type="text" id="subtarefa-titulo" placeholder="Ex: Verificar documentos"></div>';
-    html += '<div class="campo-grupo"><label>Responsável</label><select id="subtarefa-responsavel" style="padding:10px; width:100%; border:1px solid #e2e8f0; border-radius:8px;"><option value="">Nenhum (opcional)</option></select></div>';
+    html += '<div class="campo-grupo"><label>Responsáveis</label><div id="subtarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer">';
     html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-nova-subtarefa\')">Cancelar</button>';
     html += '<button class="btn-salvar" onclick="confirmarSubtarefa(\'' + tarefaPaiId + '\')">Criar</button>';
     html += '</div></div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
-    carregarSelectResponsavelSubtarefa();
+    carregarListaResponsaveisSubtarefa();
 }
 
-async function carregarSelectResponsavelSubtarefa() {
-    var select = document.getElementById('subtarefa-responsavel');
-    if (!select) return;
+async function carregarListaResponsaveisSubtarefa() {
+    var container = document.getElementById('subtarefa-responsaveis-list');
+    if (!container) return;
     try {
-        var { data: users } = await supabaseClient
+        var { data: users, error } = await supabaseClient
             .from('profiles')
             .select('id, full_name, role')
-            .in('role', ['fiscal', 'gerente', 'gerente fiscal'])
+            .neq('role', 'inativo') // Fetch all active users
             .order('full_name', { ascending: true });
+
+        if (error) throw error;
+
+        var validRoles = ['fiscal', 'fiscal de posturas', 'administrador de posturas', 'gerente', 'gerente fiscal', 'gerente de posturas', 'admin'];
+
+        var html = '';
         (users || []).forEach(function (u) {
-            var opt = document.createElement('option');
-            opt.value = u.id + '|' + u.full_name;
-            opt.textContent = u.full_name + ' (' + u.role + ')';
-            select.appendChild(opt);
+            var roleLower = (u.role || '').toLowerCase();
+            if (roleLower === 'inativo') return; // Double check for 'inativo' just in case
+
+            var isValidRole = validRoles.indexOf(roleLower) !== -1;
+
+            // Also allow roles that contain 'administrador', 'fiscal', or 'gerente'
+            if (isValidRole || roleLower.includes('administrador') || roleLower.includes('fiscal') || roleLower.includes('gerente')) {
+                html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
+                html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '" style="width:16px; height:16px; accent-color:#10b981;">';
+                html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+            }
         });
-    } catch (e) { console.error(e); }
+        container.innerHTML = html || '<p style="color:#94a3b8;">Nenhum usuário encontrado.</p>';
+    } catch (err) {
+        container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
+    }
 }
 
 async function confirmarSubtarefa(tarefaPaiId) {
     var titulo = document.getElementById('subtarefa-titulo').value.trim();
     if (!titulo) { alert('Preencha o título da subtarefa.'); return; }
 
-    var respVal = document.getElementById('subtarefa-responsavel').value;
+    var responsaveisCBs = document.querySelectorAll('.cb-resp-sub:checked');
+    var responsaveis = [];
+    responsaveisCBs.forEach(function (cb) {
+        responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
+    });
+
     fecharModal('modal-nova-subtarefa');
 
     try {
-        var { data: nova, error } = await supabaseClient.from('tarefas').insert({
-            titulo: titulo,
-            status: 'pendente',
-            tarefa_pai_id: tarefaPaiId,
-            criado_por: userIdGlobal
-        }).select().single();
-        if (error) throw error;
-
-        if (respVal) {
-            var parts = respVal.split('|');
-            await supabaseClient.from('tarefa_responsaveis').insert({
-                tarefa_id: nova.id,
-                user_id: parts[0],
-                user_name: parts[1]
+        if (responsaveis.length === 0) {
+            // Sem responsável: cria uma única subtarefa
+            var { error } = await supabaseClient.from('tarefas').insert({
+                titulo: titulo,
+                status: 'pendente',
+                tarefa_pai_id: tarefaPaiId,
+                criado_por: userIdGlobal
             });
+            if (error) throw error;
+        } else {
+            // Cria uma subtarefa para cada responsável selecionado
+            for (var i = 0; i < responsaveis.length; i++) {
+                var r = responsaveis[i];
+                var { data: nova, error: errSub } = await supabaseClient.from('tarefas').insert({
+                    titulo: titulo,
+                    status: 'pendente',
+                    tarefa_pai_id: tarefaPaiId,
+                    criado_por: userIdGlobal
+                }).select().single();
+                if (errSub) throw errSub;
+
+                await supabaseClient.from('tarefa_responsaveis').insert({
+                    tarefa_id: nova.id,
+                    user_id: r.user_id,
+                    user_name: r.user_name
+                });
+            }
         }
 
         fecharModal('modal-detalhe-tarefa');
-        carregarTarefas();
-        setTimeout(function () { abrirDetalheTarefa(tarefaPaiId); }, 300);
+        abrirDetalheTarefa(tarefaPaiId);
+        carregarTarefas(); // background
     } catch (err) { alert('Erro: ' + err.message); }
 }
 
@@ -772,21 +970,49 @@ async function salvarSubtarefa(tarefaPaiId, titulo) {
             criado_por: userIdGlobal
         });
         fecharModal('modal-detalhe-tarefa');
-        carregarTarefas();
-        setTimeout(function () { abrirDetalheTarefa(tarefaPaiId); }, 300);
+        abrirDetalheTarefa(tarefaPaiId);
+        carregarTarefas(); // background
     } catch (err) { alert('Erro: ' + err.message); }
 }
 
 async function toggleSubtarefa(subId, checked) {
     var novoStatus = checked ? 'concluida' : 'pendente';
     try {
+        // Se marcando como concluída, verificar se tem anexo
+        if (checked) {
+            var { data: anexos } = await supabaseClient
+                .from('tarefa_anexos')
+                .select('id')
+                .eq('tarefa_id', subId);
+            if (!anexos || anexos.length === 0) {
+                alert('Anexe pelo menos um documento antes de concluir esta subtarefa.');
+                var { data: sub2 } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).single();
+                if (sub2 && sub2.tarefa_pai_id) {
+                    fecharModal('modal-detalhe-tarefa');
+                    abrirDetalheTarefa(sub2.tarefa_pai_id);
+                }
+                return;
+            }
+        }
         await supabaseClient.from('tarefas').update({ status: novoStatus }).eq('id', subId);
-        // Recarregar o detalhe da tarefa pai
         var { data: sub } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).single();
         if (sub && sub.tarefa_pai_id) {
+            // Atualizar status da tarefa pai automaticamente
+            if (checked) {
+                var { data: todasSubs } = await supabaseClient
+                    .from('tarefas')
+                    .select('id, status')
+                    .eq('tarefa_pai_id', sub.tarefa_pai_id);
+                var todasConcluidas = (todasSubs || []).every(function (s) { return s.status === 'concluida'; });
+                if (todasConcluidas && todasSubs && todasSubs.length > 0) {
+                    await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', sub.tarefa_pai_id);
+                } else {
+                    await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', sub.tarefa_pai_id);
+                }
+            }
             fecharModal('modal-detalhe-tarefa');
-            carregarTarefas();
-            setTimeout(function () { abrirDetalheTarefa(sub.tarefa_pai_id); }, 300);
+            abrirDetalheTarefa(sub.tarefa_pai_id);
+            carregarTarefas(); // Atualiza Kanban em background
         }
     } catch (err) { console.error(err); }
 }
@@ -795,22 +1021,17 @@ async function excluirSubtarefa(subId, tarefaPaiId) {
     try {
         await supabaseClient.from('tarefas').delete().eq('id', subId);
         fecharModal('modal-detalhe-tarefa');
-        carregarTarefas();
-        setTimeout(function () { abrirDetalheTarefa(tarefaPaiId); }, 300);
+        abrirDetalheTarefa(tarefaPaiId);
+        carregarTarefas(); // Atualiza Kanban em background
     } catch (err) { alert('Erro: ' + err.message); }
 }
 
 // ==========================================
-// ANEXOS (PDF)
+// ANEXOS
 // ==========================================
 async function uploadAnexo(tarefaId, inputEl) {
     var file = inputEl.files[0];
     if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-        alert('Apenas arquivos PDF são permitidos.');
-        return;
-    }
 
     try {
         var filePath = tarefaId + '/' + Date.now() + '_' + file.name;
@@ -825,8 +1046,12 @@ async function uploadAnexo(tarefaId, inputEl) {
             url: publicUrl
         });
 
+        // Detectar se é subtarefa para reabrir o modal correto
+        var { data: tarefaInfo } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', tarefaId).single();
+        var modalId = (tarefaInfo && tarefaInfo.tarefa_pai_id) ? tarefaInfo.tarefa_pai_id : tarefaId;
         fecharModal('modal-detalhe-tarefa');
-        setTimeout(function () { abrirDetalheTarefa(tarefaId); }, 300);
+        abrirDetalheTarefa(modalId);
+        carregarTarefas(); // Atualiza Kanban em background
     } catch (err) {
         alert('Erro no upload: ' + err.message);
     }
@@ -837,7 +1062,8 @@ async function excluirAnexo(anexoId, tarefaId) {
     try {
         await supabaseClient.from('tarefa_anexos').delete().eq('id', anexoId);
         fecharModal('modal-detalhe-tarefa');
-        setTimeout(function () { abrirDetalheTarefa(tarefaId); }, 300);
+        abrirDetalheTarefa(tarefaId);
+        carregarTarefas(); // Atualiza em background
     } catch (err) { alert('Erro: ' + err.message); }
 }
 
@@ -847,6 +1073,164 @@ async function excluirAnexo(anexoId, tarefaId) {
 function fecharModal(id) {
     var m = document.getElementById(id);
     if (m) m.remove();
+    if (id === 'modal-detalhe-tarefa') _abrindoDetalhe = false;
+}
+
+// ==========================================
+// HISTÓRICO DE TAREFAS
+// ==========================================
+var historicoTarefasDados = [];
+
+async function abrirHistoricoTarefas() {
+    var html = '<div class="modal-overlay ativo" id="modal-historico-tarefas" onclick="if(event.target===this)fecharModal(\'modal-historico-tarefas\')">';
+    html += '<div class="modal-container" style="max-width:700px; width:95%; height:80vh; display:flex; flex-direction:column;">';
+    html += '<div class="modal-header"><h2>Histórico de Tarefas Concluídas</h2>';
+    html += '<button class="modal-close" onclick="fecharModal(\'modal-historico-tarefas\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+    html += '</div>';
+
+    html += '<div style="padding:16px; border-bottom:1px solid #e2e8f0; display:flex; gap:12px; background:#f8fafc;">';
+    html += '<input type="text" id="filtro-hist-nome" placeholder="Pesquisar por título..." style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" oninput="filtrarHistoricoTarefas()">';
+    html += '<input type="date" id="filtro-hist-data" style="padding:10px; border:1px solid #cbd5e1; border-radius:8px;" onchange="filtrarHistoricoTarefas()">';
+    html += '</div>';
+
+    html += '<div class="modal-body" id="modal-historico-lista" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;">';
+    html += '<div id="hst-msg" style="text-align:center; padding:40px; color:#64748b;">Carregando histórico... <i class="fas fa-spinner fa-spin"></i></div>';
+    html += '</div>';
+
+    html += '<div class="modal-footer">';
+    html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-historico-tarefas\')">Fechar</button>';
+    html += '</div></div></div>';
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    var container = document.getElementById('modal-historico-lista');
+
+    try {
+        if (container) container.innerHTML = '<div style="padding:20px;">Buscando dados no servidor...</div>';
+
+        // Buscar tarefas concluídas (limitado as 200 mais recentes)
+        var query = supabaseClient
+            .from('tarefas')
+            .select('*')
+            .eq('status', 'concluida')
+            .is('tarefa_pai_id', null)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+        var { data: tarefas, error } = await query;
+        if (error) {
+            throw new Error(error.message || JSON.stringify(error));
+        }
+
+        historicoTarefasDados = tarefas || [];
+
+        if (container) container.innerHTML = '<div style="padding:20px;">Filtrando dados (' + historicoTarefasDados.length + ' encontrados)...</div>';
+
+        // Filtragem Baseada no Papel do Usuário
+        if (typeof userRoleGlobal !== 'undefined') {
+
+            // Regra Específica: Gerente de Posturas só vê o que ELE criou
+            if (userRoleGlobal === 'gerente de posturas') {
+                historicoTarefasDados = historicoTarefasDados.filter(function (t) {
+                    return t.criado_por === userIdGlobal;
+                });
+            }
+            // Regra Específica: Fiscal e outros não-gerentes só veem o que foram ATRIBUÍDOS
+            else if (!ehGerenteKanban && userRoleGlobal !== 'admin') {
+                var { data: minhasResp } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
+                var meusIdsTasks = minhasResp ? minhasResp.map(function (r) { return r.tarefa_id; }) : [];
+
+                var meusIdsPai = [];
+                if (meusIdsTasks.length > 0) {
+                    var { data: minhasSub } = await supabaseClient.from('tarefas').select('tarefa_pai_id').in('id', meusIdsTasks).not('tarefa_pai_id', 'is', null);
+                    meusIdsPai = minhasSub ? minhasSub.map(function (s) { return s.tarefa_pai_id; }) : [];
+                }
+
+                var idsPermitidos = meusIdsTasks.concat(meusIdsPai);
+
+                historicoTarefasDados = historicoTarefasDados.filter(function (t) {
+                    return idsPermitidos.indexOf(t.id) !== -1;
+                });
+            }
+            // OBS: Adiministradores e outros Gerentes continuam enxergando tudo.
+        }
+
+        filtrarHistoricoTarefas();
+    } catch (err) {
+        console.error("Erro abrirHistoricoTarefas:", err);
+        if (container) {
+            container.innerHTML = '<div style="color:red; padding:20px;">Erro ao carregar histórico: ' + String(err) + '</div>';
+        } else {
+            alert('Erro ao carregar histórico: ' + String(err));
+        }
+    }
+}
+
+function filtrarHistoricoTarefas() {
+    var container = document.getElementById('modal-historico-lista');
+    if (!container) return;
+
+    try {
+        var elNome = document.getElementById('filtro-hist-nome');
+        var termo = (elNome ? elNome.value.toLowerCase().trim() : '');
+
+        var elData = document.getElementById('filtro-hist-data');
+        var dataFiltro = (elData ? elData.value : '');
+
+        var filtradas = (historicoTarefasDados || []).filter(function (t) {
+            var tit = (t && t.titulo) ? String(t.titulo).toLowerCase() : '';
+            var desc = (t && t.descricao) ? String(t.descricao).toLowerCase() : '';
+            var matchNome = tit.includes(termo) || desc.includes(termo);
+
+            var matchData = true;
+            if (dataFiltro && t) {
+                var dataT = t.updated_at ? String(t.updated_at).substring(0, 10) : (t.created_at ? String(t.created_at).substring(0, 10) : '');
+                matchData = (dataT === dataFiltro);
+            }
+            return matchNome && matchData;
+        });
+
+        if (filtradas.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">Nenhuma tarefa encontrada neste filtro.</div>';
+            return;
+        }
+
+        var html = '';
+        filtradas.forEach(function (t) {
+            if (!t) return;
+            var dataD = t.updated_at || t.created_at;
+            var dataFeita = dataD ? new Date(dataD).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Data indefinida';
+
+            html += '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:16px; cursor:pointer; transition:all 0.2s; margin-bottom:8px;" onmouseover="this.style.borderColor=\'#cbd5e1\';this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.05)\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.boxShadow=\'none\'" onclick="abrirDetalheTarefa(\'' + t.id + '\')">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">';
+            html += '<h4 style="margin:0; font-size:16px; color:#1e293b; font-weight:600;">' + (t.titulo || 'Sem título') + '</h4>';
+            html += '<span style="background:#dcfce7; color:#166534; font-size:12px; font-weight:600; padding:4px 8px; border-radius:20px;">Concluída</span>';
+            html += '</div>';
+
+            if (t.descricao) {
+                html += '<p style="margin:0 0 12px 0; font-size:14px; color:#64748b; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">' + t.descricao + '</p>';
+            }
+
+            html += '<div style="display:flex; gap:16px; font-size:13px; color:#94a3b8;">';
+            html += '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + dataFeita + '</span>';
+
+            if (t.prioridade) {
+                var prioStr = String(t.prioridade);
+                var prioFormatada = prioStr.charAt(0).toUpperCase() + prioStr.slice(1);
+                html += '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' + prioFormatada + '</span>';
+            }
+            html += '</div>';
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error("Erro filtrarHistoricoTarefas:", e);
+        var container = document.getElementById('modal-historico-lista');
+        if (container) {
+            container.innerHTML = '<div style="color:red; padding:20px; text-align:center;">Erro na formatação da lista: ' + String(e) + '</div>';
+        }
+    }
 }
 
 // ==========================================
@@ -926,10 +1310,14 @@ async function carregarMinhasTarefasHome() {
 
         // Buscar subtarefas para calcular progresso
         var ids = tarefas.map(function (t) { return t.id; });
-        var { data: subs } = await supabaseClient
-            .from('tarefas')
-            .select('id, tarefa_pai_id, status')
-            .in('tarefa_pai_id', ids);
+        var subs = [];
+        if (ids.length > 0) {
+            var { data: sData } = await supabaseClient
+                .from('tarefas')
+                .select('id, tarefa_pai_id, status')
+                .in('tarefa_pai_id', ids);
+            subs = sData || [];
+        }
 
         var subMap = {};
         (subs || []).forEach(function (s) {
@@ -1020,5 +1408,43 @@ async function carregarMinhasTarefasHome() {
     } catch (err) {
         console.error('Erro ao carregar minhas tarefas:', err);
         container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px; font-size:15px;">Erro ao carregar tarefas.</div>';
+    }
+}
+
+function trocarAbaTarefas(aba) {
+    var btnAtribuidas = document.getElementById('btn-tab-atribuidas');
+    var btnMinhas = document.getElementById('btn-tab-minhas');
+    var contAtribuidas = document.getElementById('tarefas-atribuidas-container');
+    var contMinhas = document.getElementById('minhas-tarefas-container');
+
+    if (!btnAtribuidas || !btnMinhas || !contAtribuidas || !contMinhas) return;
+
+    // Reset styles
+    btnAtribuidas.className = 'sub-aba-btn';
+    btnAtribuidas.style.background = 'transparent';
+    btnAtribuidas.style.color = '#475569';
+    btnAtribuidas.style.border = '1px solid #cbd5e1';
+    btnAtribuidas.style.boxShadow = 'none';
+
+    btnMinhas.className = 'sub-aba-btn';
+    btnMinhas.style.background = 'transparent';
+    btnMinhas.style.color = '#475569';
+    btnMinhas.style.border = '1px solid #cbd5e1';
+    btnMinhas.style.boxShadow = 'none';
+
+    var btnAtivo = aba === 'atribuidas' ? btnAtribuidas : btnMinhas;
+    btnAtivo.className = 'sub-aba-btn active';
+    btnAtivo.style.background = 'linear-gradient(135deg, #062117, #0c3e2b)';
+    btnAtivo.style.color = 'white';
+    btnAtivo.style.border = 'none';
+    btnAtivo.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+
+    if (aba === 'atribuidas') {
+        contAtribuidas.style.display = 'block';
+        contMinhas.style.display = 'none';
+        carregarTarefas(); // Refresh
+    } else {
+        contAtribuidas.style.display = 'none';
+        contMinhas.style.display = 'block';
     }
 }
