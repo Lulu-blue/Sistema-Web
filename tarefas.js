@@ -16,7 +16,7 @@ var _abrindoDetalhe = false;
 // ==========================================
 async function carregarModuloTarefas() {
     try {
-        var authResult = await supabaseClient.auth.getUser();
+        var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (user) {
             userIdGlobal = user.id;
@@ -289,7 +289,7 @@ async function carregarTarefas() {
         // Garantir que temos o role atualizado
         if (!userRoleGlobal || !userIdGlobal) {
             try {
-                var authCheck = await supabaseClient.auth.getUser();
+        var authCheck = await getAuthUser();
                 var uCheck = authCheck.data.user;
                 if (uCheck) {
                     userIdGlobal = uCheck.id;
@@ -1241,7 +1241,7 @@ async function carregarMinhasTarefasHome() {
     if (!container) return;
 
     try {
-        var authResult = await supabaseClient.auth.getUser();
+        var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (!user) return;
 

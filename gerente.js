@@ -603,114 +603,138 @@ async function abrirModalAtribuirFiscal(areaId, areaNome, fiscalAtual) {
 // Relatorio individual de um fiscal (chamado ao clicar no ranking)
 async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
     try {
-        // 1. Buscar todos os registros do fiscal
-        var { data: regProd } = await supabaseClient
+        // 1. Buscar todos os registros do fiscal (Produtividade e Controle Processual)
+        const { data: regProd } = await supabaseClient
             .from('registros_produtividade')
             .select('*')
             .eq('user_id', fiscalId)
             .order('created_at', { ascending: false });
 
-        var { data: regCP } = await supabaseClient
+        const { data: regCP } = await supabaseClient
             .from('controle_processual')
             .select('*')
             .eq('user_id', fiscalId)
             .order('created_at', { ascending: false });
 
-        var todosRegs = (regProd || []).concat(regCP || []);
+        const todosRegs = (regProd || []).concat(regCP || []);
 
-        if (todosRegs.length === 0) {
-            alert('Nenhum registro encontrado para ' + nomeFiscal);
+        // Filtrar registros omitindo pontuação 0
+        const registrosFiltrados = todosRegs.filter(r => (r.pontuacao || 0) !== 0);
+
+        if (registrosFiltrados.length === 0) {
+            alert('Nenhum registro com pontuação encontrado para ' + nomeFiscal);
             return;
         }
 
-        var anoAtual = new Date().getFullYear();
+        const anoAtual = new Date().getFullYear();
 
-        // 2. Agrupar por categoria_id
-        var porCategoria = {};
-        todosRegs.forEach(function (r) {
-            var catId = r.categoria_id || 'outros';
+        // 2. Agrupar registros por categoria
+        const porCategoria = {};
+        registrosFiltrados.forEach(r => {
+            const catId = r.categoria_id || 'outros';
+            // Tenta encontrar o nome da categoria usando a global CATEGORIAS se disponível
+            let catNome = 'Categoria ' + catId;
+            if (typeof CATEGORIAS !== 'undefined') {
+                const cDef = CATEGORIAS.find(c => c.id === catId);
+                if (cDef) catNome = cDef.nome;
+            } else if (r.categoria_nome) {
+                catNome = r.categoria_nome;
+            }
+
             if (!porCategoria[catId]) {
-                porCategoria[catId] = { registros: [] };
+                porCategoria[catId] = { nome: catNome, registros: [] };
             }
             porCategoria[catId].registros.push(r);
         });
 
-        var pontuacaoTotal = todosRegs.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
+        const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
 
         // 3. Gerar tabelas por categoria
-        var secoesHTML = '';
-        var catIds = Object.keys(porCategoria);
+        let secoesHTML = '';
+        Object.values(porCategoria).forEach(cat => {
+            // Tenta obter a definição da categoria para saber quais campos exibir
+            const catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(c => c.nome === cat.nome) : null;
+            
+            const temNumero = cat.registros.some(r => r.numero_sequencial);
+            const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco) || [];
 
-        catIds.forEach(function (catId) {
-            var cat = porCategoria[catId];
-            var catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(function (c) { return c.id === catId; }) : null;
-            var catNome = catDef ? catDef.nome : ('Categoria ' + catId);
-            var camposDef = catDef ? catDef.campos.filter(function (c) { return c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco; }) : [];
+            let headerCols = '';
+            if (temNumero) headerCols += '<th>N°</th>';
+            headerCols += camposDef.map(c => `<th>${c.label}</th>`).join('');
+            headerCols += '<th>Data</th>';
+            headerCols += '<th>Pontos</th>';
 
-            var temNumero = cat.registros.some(function (r) { return r.numero_sequencial; });
+            let linhas = cat.registros.map(r => {
+                let tds = '';
+                if (temNumero) tds += `<td contenteditable="true">${r.numero_sequencial || '-'}</td>`;
+                tds += camposDef.map(c => `<td contenteditable="true">${(r.campos && r.campos[c.nome]) || '-'}</td>`).join('');
+                
+                // Formatação de data (usa obterDataReal se disponível, senão fallback)
+                let dataFormatada = '-';
+                if (typeof obterDataReal === 'function') {
+                    dataFormatada = obterDataReal(r).toLocaleDateString('pt-BR');
+                } else {
+                    dataFormatada = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
+                }
 
-            var headerCols = '';
-            if (temNumero) headerCols += '<th>N\u00b0</th>';
-            camposDef.forEach(function (c) { headerCols += '<th>' + c.label + '</th>'; });
-            headerCols += '<th>Data</th><th>Pontos</th>';
+                tds += `<td contenteditable="true">${dataFormatada}</td>`;
+                tds += `<td contenteditable="true">${r.pontuacao || 0}</td>`;
+                return `<tr>${tds}</tr>`;
+            }).join('');
 
-            var linhas = '';
-            cat.registros.forEach(function (r) {
-                var tds = '';
-                if (temNumero) tds += '<td>' + (r.numero_sequencial || '-') + '</td>';
-                camposDef.forEach(function (c) {
-                    tds += '<td>' + ((r.campos && r.campos[c.nome]) || '-') + '</td>';
-                });
-                var dataReg = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
-                tds += '<td>' + dataReg + '</td>';
-                tds += '<td>' + (r.pontuacao || 0) + '</td>';
-                linhas += '<tr>' + tds + '</tr>';
-            });
+            const subtotal = cat.registros.reduce((s, r) => s + (r.pontuacao || 0), 0);
+            const colSpanSubtotal = (temNumero ? 1 : 0) + camposDef.length + 1;
 
-            var subtotal = cat.registros.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
-            var colSpan = (temNumero ? 1 : 0) + camposDef.length + 1;
-
-            secoesHTML += '<div class="relatorio-secao">';
-            secoesHTML += '<h3>' + catNome + '</h3>';
-            secoesHTML += '<table><thead><tr>' + headerCols + '</tr></thead>';
-            secoesHTML += '<tbody>' + linhas + '</tbody>';
-            secoesHTML += '<tfoot><tr><td colspan="' + colSpan + '" style="text-align:right;font-weight:600;">Subtotal:</td><td style="font-weight:600;">' + subtotal + '</td></tr></tfoot>';
-            secoesHTML += '</table></div>';
+            secoesHTML += `
+                <div class="relatorio-secao">
+                    <h3>${cat.nome}</h3>
+                    <table>
+                        <thead><tr>${headerCols}</tr></thead>
+                        <tbody>${linhas}</tbody>
+                        <tfoot><tr><td colspan="${colSpanSubtotal}" style="text-align:right; font-weight:600;">Subtotal:</td><td style="font-weight:600;">${subtotal}</td></tr></tfoot>
+                    </table>
+                </div>
+            `;
         });
 
-        // 4. Criar modal
-        var modalHTML = '<div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()">';
-        modalHTML += '<div class="relatorio-preview" id="relatorio-gerente-conteudo">';
-        modalHTML += '<h1 contenteditable="true">RELAT\u00d3RIO DE PRODUTIVIDADE \u2014 ' + anoAtual + '</h1>';
-        modalHTML += '<div class="relatorio-info">';
-        modalHTML += '<div><strong>Fiscal:</strong> <span contenteditable="true">' + nomeFiscal + '</span></div>';
-        modalHTML += '<div><strong>Ano:</strong> <span contenteditable="true">' + anoAtual + '</span></div>';
-        modalHTML += '<div><strong>Pontua\u00e7\u00e3o Total:</strong> <span contenteditable="true">' + pontuacaoTotal + '</span></div>';
-        modalHTML += '<div><strong>Total de Registros:</strong> ' + todosRegs.length + '</div>';
-        modalHTML += '</div>';
-        modalHTML += secoesHTML;
+        // 4. Criar modal do relatório (id diferente para não conflitar com o do fiscal caso ambos estejam abertos)
+        const modalHTML = `
+            <div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()">
+                <div class="relatorio-preview" id="relatorio-gerente-conteudo">
+                    <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
+                    <div class="relatorio-info">
+                        <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
+                        <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
+                        <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
+                        <div><strong>Total de Registros:</strong> ${todosRegs.length}</div>
+                    </div>
+                    ${secoesHTML}
 
-        // Assinaturas
-        modalHTML += '<div class="relatorio-assinaturas" style="display:flex;justify-content:space-around;margin-top:60px;padding-bottom:30px;text-align:center;">';
-        modalHTML += '<div><p style="margin:0;">_________________________________________</p>';
-        modalHTML += '<p style="margin:5px 0 0 0;"><strong><span contenteditable="true">' + nomeFiscal + '</span></strong></p>';
-        modalHTML += '<p style="margin:2px 0 0 0;">Fiscal de Posturas</p></div>';
-        modalHTML += '<div><p style="margin:0;">_________________________________________</p>';
-        modalHTML += '<p style="margin:5px 0 0 0;"><strong>Gerente de Alvar\u00e1s e Posturas</strong></p></div>';
-        modalHTML += '</div>';
+                    <div class="relatorio-assinaturas" style="display: flex; justify-content: space-around; margin-top: 60px; padding-bottom: 30px; text-align: center; page-break-inside: avoid;">
+                        <div>
+                            <p style="margin: 0;">_________________________________________</p>
+                            <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
+                            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+                        </div>
+                        <div>
+                            <p style="margin: 0;">_________________________________________</p>
+                            <p style="margin: 5px 0 0 0;"><strong>Gerente de Alvarás e Posturas</strong></p>
+                        </div>
+                    </div>
 
-        // Botoes
-        modalHTML += '<div class="relatorio-acoes" id="relatorio-gerente-acoes">';
-        modalHTML += '<button class="btn-cancelar-rel" onclick="fecharRelatorioGerente()">Cancelar</button>';
-        modalHTML += '<button class="btn-salvar-pdf" onclick="salvarPDFGerente()">💾 Salvar como PDF</button>';
-        modalHTML += '</div>';
-        modalHTML += '</div></div>';
+                    <div class="relatorio-acoes" id="relatorio-gerente-acoes">
+                        <button class="btn-cancelar-rel" onclick="fecharRelatorioGerente()">Cancelar</button>
+                        <button class="btn-salvar-pdf" onclick="salvarPDFGerente()">💾 Salvar como PDF</button>
+                    </div>
+                </div>
+            </div>
+        `;
 
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
     } catch (err) {
-        console.error("Erro ao gerar relatorio do fiscal:", err);
-        alert("Erro ao gerar relatorio: " + (err.message || err));
+        console.error("Erro ao gerar relatório do fiscal:", err);
+        alert("Erro ao gerar relatório: " + (err.message || err));
     }
 }
 

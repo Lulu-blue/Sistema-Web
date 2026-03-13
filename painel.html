@@ -472,6 +472,13 @@
             <!-- ABA: HISTÓRICO GERAL (Controle Processual) -->
             <section id="aba-historico-geral" class="content-section" style="display: none;">
                 <h1>Histórico Geral — Controle Processual</h1>
+                <button id="btn-teste-clique" class="btn-sidebar btn-fechamento" onclick="executarFechamentoAnualWrapper()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    Fechamento anual
+                </button>
 
                 <div class="sub-abas-cp">
                     <button class="sub-aba-btn active" onclick="mudarSubAbaCP('1.1', this)">NP</button>
@@ -735,7 +742,11 @@
                     <div class="perfil-dados-sec">
                         <div class="input-group">
                             <label>Nome Completo</label>
-                            <input type="text" id="perfil-nome" readonly>
+                            <input type="text" id="perfil-nome">
+                        </div>
+                        <div class="input-group">
+                            <label>E-mail</label>
+                            <input type="email" id="perfil-email" placeholder="seu@email.com">
                         </div>
                         <div class="input-group">
                             <label>Login (CPF)</label>
@@ -749,6 +760,9 @@
                             <label>Cargo Atual</label>
                             <input type="text" id="perfil-cargo" readonly class="input-destaque">
                         </div>
+                        <button class="btn-sidebar" style="width: 100%; margin-top: 20px; background: #22c55e;" onclick="salvarDadosPerfil()">
+                            Salvar Alterações
+                        </button>
                     </div>
                 </div>
             </section>
@@ -884,6 +898,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="protecao.js"></script>
     <script src="painel.js"></script>
@@ -891,6 +908,7 @@
     <script src="gerente.js"></script>
     <script src="tarefas.js"></script>
     <script src="projetos.js"></script>
+    <script src="fechamento.js"></script>
 </body>
 
 </html>

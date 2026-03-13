@@ -13,6 +13,40 @@
     --border-soft: #e2e8f0;
 }
 
+.btn-sidebar {
+    background: var(--sidebar-gradient);
+    color: var(--text-white);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: -10px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-fechamento {
+    padding: 14px 28px;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+    margin-bottom: 25px;
+}
+
+.btn-sidebar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+    filter: brightness(1.1);
+}
+
+.btn-sidebar:active {
+    transform: translateY(0);
+}
+
 * {
     margin: 0;
     padding: 0;

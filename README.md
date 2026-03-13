@@ -51,6 +51,16 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
     - **⚠️ Integridade**: O botão **NÃO apaga** os registros da tabela `controle_processual` (Notificações, Autos, Ofícios, etc), garantindo que os documentos oficiais continuem existindo no Histórico Geral, apenas remove a pontuação associada ao fiscal no histórico pessoal.
 - **Alerta de Encerramento Mensal**: Um banner verde translúcido aparece automaticamente no topo da Home no **último dia de cada mês**, lembrando o fiscal de gerar seu relatório antes da virada do calendário.
 
+---
+
+## 📅 Fechamento Anual
+- **Mecanismo de Consolidação**: Reúne todos os registros de produtividade e controle processual do ano vigente.
+- **Geração de Anexo**: Cria automaticamente uma planilha de dados e um arquivo ZIP contendo todos os anexos PDF enviados pelo fiscal durante o ano.
+- **Envio Direto (Google Apps Script)**: Para garantir a privacidade e evitar intermediários, o sistema utiliza um script hospedado na própria conta do Google do usuário (`google.com`).
+    - O envio é processado via API personalizada que dispara o arquivo ZIP diretamente para o e-mail cadastrado.
+    - **Vantagem**: Contorna bloqueios de DNS de serviços externos e utiliza o Gmail nativo para o disparo.
+- **Limpeza de Dados**: Após o recebimento do ZIP por e-mail, o fiscal pode proceder com a limpeza dos dados no Supabase, mantendo apenas os registros oficiais de Controle Processual.
+
 ### Tabela "Minhas Tarefas" na Home
 - Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos.
 - Mostra somente tarefas onde o usuário é **responsável direto** + subtarefas dessas tarefas.
@@ -201,3 +211,5 @@ Bucket para armazenamento dos PDFs anexados às tarefas. Políticas: upload/down
 - **Fix (Referência de Botão)**: Resolvido erro `ReferenceError` que impedia o carregamento do histórico quando o ouvinte do botão de limpeza tentava acessar funções removidas.
 - **Sincronização**: Adicionado delay de 500ms pós-save para garantir que o Supabase finalize a escrita antes da releitura do histórico.
 - **Refatoração do Histórico e Limpeza**: Ajustada a lógica de limpeza para zerar a pontuação do Controle Processual e restaurado o filtro global de pontuação > 0 no histórico pessoal.
+- **Migração de E-mail (Google Apps Script)**: Substituído o envio via servidores externos por uma solução própria baseada em Google Apps Script, garantindo entrega direta e contornando bloqueios de rede/DNS.
+- **Fix (UI/SweetAlert2)**: Corrigidos erros de concorrência e parâmetros inválidos na interface de carregamento do fechamento anual.

@@ -688,7 +688,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     }
 
     // 2. Obter usuário logado
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await getAuthUser();
     if (!user) {
         alert('Sessão expirada! Faça login novamente.');
         salvando = false;
@@ -874,8 +874,8 @@ async function carregarHistorico() {
     const pontuacaoEl = document.getElementById('pontuacao-total');
     if (!container) return;
 
-    // Buscar usuário atual
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    // Usar promessa global via helper em painel.js
+    const { data: { user } } = await getAuthUser();
     if (!user) return;
 
     // Buscar registros de produtividade (RLS filtra pelo próprio fiscal)
@@ -1307,7 +1307,7 @@ function removerOpcaoCustom(catId, campoNome, valor) {
 }
 // --- NUMERAÇÃO SEQUENCIAL AUTOMÁTICA ---
 async function gerarNumeroSequencial(categoriaId) {
-    const anoAtual = new Date().getFullYear().toString().slice(-2); // ex: "26"
+    const anoAtual = new Date().getFullYear(); // ex: 2026
     const digitos = categoriaId === '1.4' ? 4 : 3; // Ofício = 4 dígitos, resto = 3
 
     // Buscar o maior número do ano atual nessa categoria
@@ -1694,7 +1694,7 @@ async function abrirDetalhesAdminHist(id) {
 
     htmlCampos += '<hr style="border:0; border-top:1px dashed #cbd5e1; margin:16px 0;">';
 
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await getAuthUser();
     const userIdAtual = user ? user.id : null;
 
     const isAdmin = window.userRoleGlobal === 'administrador de posturas' || window.userRoleGlobal === 'admin';
@@ -1958,7 +1958,7 @@ function verificarMeta2000(pontuacaoTotal) {
 // --- RELATÓRIO DE PRODUTIVIDADE ---
 async function abrirRelatorio() {
     // Pegar dados do fiscal
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await getAuthUser();
     if (!user) return;
 
     const { data: perfil } = await supabaseClient
@@ -1970,16 +1970,19 @@ async function abrirRelatorio() {
     const nomeFiscal = perfil?.full_name || 'Fiscal';
     const anoAtual = new Date().getFullYear();
 
+    // Filtrar registros omitindo pontuação 0
+    const registrosFiltrados = todosRegistros.filter(r => (r.pontuacao || 0) !== 0);
+
     // Agrupar registros por categoria
     const porCategoria = {};
-    todosRegistros.forEach(r => {
+    registrosFiltrados.forEach(r => {
         if (!porCategoria[r.categoria_id]) {
             porCategoria[r.categoria_id] = { nome: r.categoria_nome, registros: [] };
         }
         porCategoria[r.categoria_id].registros.push(r);
     });
 
-    const pontuacaoTotal = todosRegistros.reduce((s, r) => s + r.pontuacao, 0);
+    const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + r.pontuacao, 0);
 
     // Gerar tabelas por categoria
     let secoesHTML = '';
@@ -2029,7 +2032,7 @@ async function abrirRelatorio() {
                         <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
                         <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
                         <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
-                        <div><strong>Total de Registros:</strong> ${todosRegistros.length}</div>
+                        <div><strong>Total de Registros:</strong> ${registrosFiltrados.length}</div>
                     </div>
                     ${secoesHTML}
 
@@ -2114,7 +2117,7 @@ function confirmarLimpeza() {
             });
 
             try {
-                const { data: { user } } = await supabaseClient.auth.getUser();
+                const { data: { user } } = await getAuthUser();
                 if (!user) {
                     Swal.fire('Erro', 'Usuário não autenticado.', 'error');
                     return;
@@ -2384,7 +2387,7 @@ async function abrirEditorAutoInfracao() {
         const prazoDefesa = campos.prazo_defesa ? campos.prazo_defesa : '_____';
 
         // Pegar informações do Fiscal (Nome logado) e Data de Hoje para Assinatura
-        const { data: { user } } = await supabaseClient.auth.getUser();
+        const { data: { user } } = await getAuthUser();
         let nomeFiscal = 'Nome do Fiscal';
         if (user) {
             const { data: perfil } = await supabaseClient
@@ -2512,7 +2515,7 @@ async function abrirEditorOficio() {
         const numSequencial = await gerarNumeroSequencial('1.4');
 
         // Pegar informações do Fiscal (Nome logado e Matrícula) e Data de Hoje para Assinatura
-        const { data: { user } } = await supabaseClient.auth.getUser();
+        const { data: { user } } = await getAuthUser();
         let nomeFiscal = 'Nome do Fiscal';
         let matriculaFiscal = 'XXXXXXXX';
         if (user) {
@@ -2630,7 +2633,7 @@ async function abrirEditorRelatorio() {
         const numSequencial = await gerarNumeroSequencial('1.5');
 
         // Pegar informações do Fiscal (Nome logado e Matrícula) e Data de Hoje para Assinatura
-        const { data: { user } } = await supabaseClient.auth.getUser();
+        const { data: { user } } = await getAuthUser();
         let nomeFiscal = 'Nome do Fiscal';
         let matriculaFiscal = 'XXXXXXXX';
         if (user) {
@@ -2746,7 +2749,7 @@ async function abrirEditorReplica() {
         const numSequencial = await gerarNumeroSequencial('1.7');
 
         // Pegar informações do Fiscal (Nome logado e Matrícula)
-        const { data: { user } } = await supabaseClient.auth.getUser();
+        const { data: { user } } = await getAuthUser();
         let nomeFiscal = 'Nome do Fiscal';
         let matriculaFiscal = 'XXXXXXXX';
 
@@ -2935,7 +2938,7 @@ let npaiAtendidos = [];
 let npaiAbaAtual = 'vencidos';
 
 async function carregarNPAIHome() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await getAuthUser();
     if (!user) return;
 
     const { data: registros, error } = await supabaseClient

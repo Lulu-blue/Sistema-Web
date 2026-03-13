@@ -14,15 +14,34 @@ async function sair() {
     }
 }
 
-async function carregarDadosIniciais() {
+// Helper global para buscar o usuário de forma segura evitando erros de Lock do Supabase
+async function getAuthUser() {
+    if (!window.authUserPromise) {
+        window.authUserPromise = supabaseClient.auth.getUser();
+    }
     try {
-        var authResult = await supabaseClient.auth.getUser();
+        const res = await window.authUserPromise;
+        if (res.error) window.authUserPromise = null; 
+        return res;
+    } catch (err) {
+        window.authUserPromise = null;
+        throw err;
+    }
+}
+window.getAuthUser = getAuthUser;
+
+async function carregarDadosIniciais() {
+    // Verificar se há limpeza agendada
+    verificarLimpezaAgendada();
+
+    try {
+        var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (!user) return;
 
         var resultado = await supabaseClient
             .from('profiles')
-            .select('full_name, role, cpf, avatar_url, matricula')
+            .select('full_name, role, cpf, avatar_url, matricula, email_real')
             .eq('id', user.id)
             .single();
 
@@ -30,7 +49,12 @@ async function carregarDadosIniciais() {
         var erro = resultado.error;
 
         if (erro) {
-            console.error("Erro na busca de perfil: ", erro);
+            if (erro.code === 'PGRST106' || (erro.status === 400 && erro.message.includes('email_real'))) {
+                console.error("Erro: Colunas email_real/email_verificado não encontradas. Rode o SQL de atualização!");
+                Swal.fire('Banco Desatualizado', 'As colunas de e-mail não foram encontradas no banco de dados. Por favor, execute o SQL de atualização no Dashboard.', 'warning');
+            } else {
+                console.error("Erro na busca de perfil: ", erro);
+            }
             return;
         }
 
@@ -53,6 +77,9 @@ async function carregarDadosIniciais() {
 
             var inputMatricula = document.getElementById('perfil-matricula');
             if (inputMatricula) inputMatricula.value = perfil.matricula || '';
+
+            var inputEmail = document.getElementById('perfil-email');
+            if (inputEmail) inputEmail.value = perfil.email_real || '';
 
             var inputCargo = document.getElementById('perfil-cargo');
             if (inputCargo) inputCargo.value = (perfil.role || '').toUpperCase();
@@ -198,7 +225,7 @@ async function uploadAvatarLocal(event) {
             statusMsg.style.color = "#eab308";
         }
 
-        var authResult = await supabaseClient.auth.getUser();
+        var authResult = await getAuthUser();
         var user = authResult.data.user;
         var authErr = authResult.error;
         if (authErr || !user) throw new Error("Usuario nao autenticado.");
@@ -307,7 +334,7 @@ async function alterarSenha() {
     msgSenha.style.color = "#64748b";
 
     try {
-        var authResult = await supabaseClient.auth.getUser();
+        var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (!user || !user.email) throw new Error("Erro de sessao, saia e faca login novamente.");
 
@@ -357,7 +384,7 @@ function verificarUltimoDiaMes() {
 
     const hoje = new Date();
     const diaAtual = hoje.getDate();
-    
+
     // Calcula o último dia do mês atual (mês + 1 no dia 0 retrocede para o último dia do mês atual)
     const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
 
@@ -367,3 +394,216 @@ function verificarUltimoDiaMes() {
 }
 window.addEventListener('load', verificarUltimoDiaMes);
 
+// Trava para evitar execuções paralelas do fechamento
+let fechamentoEmAndamento = false;
+
+async function executarFechamentoAnualWrapper() {
+    if (fechamentoEmAndamento) {
+        console.warn("Fechamento já está em andamento.");
+        return;
+    }
+
+    if (typeof executarFechamentoAnual === 'function') {
+        try {
+            fechamentoEmAndamento = true;
+            await executarFechamentoAnual();
+        } catch (err) {
+            console.error("Erro no wrapper do fechamento:", err);
+        } finally {
+            fechamentoEmAndamento = false;
+        }
+    } else {
+        console.error("Função executarFechamentoAnual não carregada.");
+        alert("Erro: O módulo de fechamento ainda não foi carregado.");
+    }
+}
+
+console.log("painel.js carregado com sucesso.");
+if (typeof supabaseClient === 'undefined') {
+    console.error("ERRO: supabaseClient não foi definido! Verifique se protecao.js está sendo carregado corretamente.");
+} else {
+    console.log("supabaseClient detectado.");
+}
+
+async function verificarLimpezaAgendada() {
+    const dataAgendada = localStorage.getItem('agendamento_limpeza_data');
+    const anoParaLimpar = localStorage.getItem('agendamento_limpeza_ano');
+
+    if (!dataAgendada || !anoParaLimpar) return;
+
+    const agora = Date.now();
+    if (agora < parseInt(dataAgendada)) {
+        const falta = Math.ceil((parseInt(dataAgendada) - agora) / 1000);
+        console.log(`[Limpeza] Agendamento para ${anoParaLimpar} ainda não venceu. Faltam ~${falta} segundos.`);
+        return;
+    }
+
+    console.log(`[Limpeza] Prazo vencido! Iniciando processo para o ano ${anoParaLimpar}...`);
+
+    // Tentar pegar o papel do usuário (role)
+    let userRole = 'fiscal';
+    try {
+        const { data: { user } } = await getAuthUser();
+        if (user) {
+            const { data: profile } = await supabaseClient.from('profiles').select('role').eq('id', user.id).single();
+            if (profile && profile.role) userRole = profile.role;
+        }
+    } catch (e) { console.error("[Limpeza] Falha ao verificar role:", e); }
+
+    const isGerencial = userRole.trim() === 'Gerente de Posturas';
+
+    let swalActive = false;
+    try {
+        Swal.fire({
+            title: 'Executando Limpeza Agendada',
+            text: `Removendo dados de ${anoParaLimpar}. Isso pode levar um momento...`,
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+        swalActive = true;
+    } catch (e) { }
+
+    try {
+        // Usar fuso horário local para o filtro se necessário, ou manter Z para UTC
+        const inicioAno = `${anoParaLimpar}-01-01T00:00:00.000Z`;
+        const fimAno = `${anoParaLimpar}-12-31T23:59:59.999Z`;
+
+        console.log(`[Limpeza] Perfil Detectado: "${userRole}"`);
+        console.log(`[Limpeza] Modo Gerencial?: ${isGerencial ? 'SIM' : 'NÃO (RLS pode limitar a exclusão apenas aos SEUS próprios dados)'}`);
+        console.log(`[Limpeza] Filtro de Data: ${inicioAno} até ${fimAno}`);
+
+        // TESTE DE VISIBILIDADE: Ver se o usuário consegue ver algum registro antes de tentar deletar
+        const { data: visivelCP } = await supabaseClient
+            .from('controle_processual')
+            .select('id')
+            .gte('created_at', inicioAno)
+            .lte('created_at', fimAno)
+            .limit(5);
+
+        console.log(`[Limpeza] Registros CP visíveis para este filtro: ${visivelCP ? visivelCP.length : 0}`);
+
+        // 1. Limpar Controle Processual
+        console.log("[Limpeza] Tentando deletar de controle_processual...");
+        const resCP = await supabaseClient
+            .from('controle_processual')
+            .delete()
+            .gte('created_at', inicioAno)
+            .lte('created_at', fimAno)
+            .select('id');
+
+        if (resCP.error) {
+            console.error("[Limpeza] Erro CP:", resCP.error);
+            if (resCP.error.code === '42501') {
+                throw new Error("Permissão negada (42501). Você não tem autorização no Supabase para deletar estes registros. Verifique as políticas de RLS.");
+            }
+            throw resCP.error;
+        }
+
+        // 2. Limpar Produtividade
+        console.log("[Limpeza] Tentando deletar de registros_produtividade...");
+        const resProd = await supabaseClient
+            .from('registros_produtividade')
+            .delete()
+            .gte('created_at', inicioAno)
+            .lte('created_at', fimAno)
+            .select('id');
+
+        if (resProd.error) {
+            console.error("[Limpeza] Erro Produtividade:", resProd.error);
+            throw resProd.error;
+        }
+
+        const deletadosCP = resCP.data?.length || 0;
+        const deletadosProd = resProd.data?.length || 0;
+        console.log(`[Limpeza] Resultado: ${deletadosCP} registros CP deletados, ${deletadosProd} registros Prod deletados.`);
+
+        // --- DIAGNÓSTICO DE RLS ---
+        if (deletadosCP === 0 && visivelCP && visivelCP.length > 0) {
+            const msgRLS = "[Limpeza] ATENÇÃO: Os registros são VISÍVEIS mas NÃO puderam ser DELETADOS. " +
+                          "Isso indica bloqueio por RLS (Row Level Security) no Supabase. " +
+                          "Apenas o criador do registro ou um usuário com permissão de DELETE na política do banco pode excluir.";
+            console.error(msgRLS);
+            console.info("%c[SUPABASE FIX] Execute este SQL no Dashboard do Supabase para corrigir:\n\n" +
+                         "ALTER POLICY \"Permitir exclusão para gerentes\" ON controle_processual \n" +
+                         "FOR DELETE TO authenticated \n" +
+                         "USING ( (SELECT role FROM profiles WHERE id = auth.uid()) = 'Gerente de Posturas' );", "color: orange; font-weight: bold;");
+            
+            if (swalActive) {
+                Swal.fire({
+                    title: 'Bloqueio de Permissão',
+                    html: `O sistema encontrou ${visivelCP.length} registros de ${anoParaLimpar}, mas o <b>Supabase</b> não permitiu a exclusão.<br><br>` +
+                          `Certifique-se de que a política RLS da tabela <code>controle_processual</code> permite o <i>DELETE</i> para o seu cargo.`,
+                    icon: 'warning'
+                });
+            }
+            return;
+        }
+
+        // Se realmente não havia nada para deletar
+        if (deletadosCP === 0 && deletadosProd === 0) {
+            console.warn(`[Limpeza] Aviso: Nenhum registro encontrado para o ano ${anoParaLimpar}.`);
+            if (swalActive) {
+                Swal.fire('Nada para Limpar', `Não foram encontrados registros do ano de ${anoParaLimpar} no seu histórico.`, 'info');
+            }
+        } else {
+            if (swalActive) {
+                Swal.fire('Limpeza Concluída', `Foram removidos ${deletadosCP} registros de Controle Processual e ${deletadosProd} de Produtividade do ano de ${anoParaLimpar}.`, 'success');
+            }
+        }
+
+        // Remover agendamento apenas se o processo rodou (para não ficar em loop se o erro for permissão permanente)
+        localStorage.removeItem('agendamento_limpeza_data');
+        localStorage.removeItem('agendamento_limpeza_ano');
+
+        if (typeof carregarHistorico === 'function') carregarHistorico();
+        if (typeof renderizarHistoricoGeral === 'function') renderizarHistoricoGeral();
+
+    } catch (err) {
+        console.error('[Limpeza] Falha Crítica:', err);
+        if (swalActive) {
+            Swal.fire('Erro na Limpeza', err.message || 'Ocorreu um erro ao tentar limpar os dados antigos.', 'error');
+        }
+    }
+}
+window.verificarLimpezaAgendada = verificarLimpezaAgendada;
+
+async function salvarDadosPerfil() {
+    try {
+        var authResult = await getAuthUser();
+        var user = authResult.data.user;
+        if (!user) {
+            Swal.fire('Erro', 'Usuário não autenticado.', 'error');
+            return;
+        }
+
+        var novoNome = document.getElementById('perfil-nome').value;
+        var novoEmail = document.getElementById('perfil-email').value;
+
+        Swal.fire({
+            title: 'Salvando...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({
+                full_name: novoNome,
+                email_real: novoEmail,
+                email_verificado: false // Resetar para obrigar nova verificação no fechamento
+            })
+            .eq('id', user.id);
+
+        if (error) throw error;
+
+        // Atualizar o nome na barra lateral
+        document.getElementById('user-name').innerText = novoNome || "Usuario";
+
+        Swal.fire('Sucesso!', 'Seus dados foram atualizados.', 'success');
+
+    } catch (err) {
+        console.error("Erro ao salvar perfil:", err);
+        Swal.fire('Erro', 'Não foi possível salvar as alterações: ' + err.message, 'error');
+    }
+}
+window.salvarDadosPerfil = salvarDadosPerfil;
