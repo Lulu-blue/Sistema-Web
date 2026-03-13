@@ -22,6 +22,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
 | `supabase_setup.sql` | Scripts SQL de criação de tabelas, Políticas RLS e configuração de Storage (Anexos) |
 | `setup_tarefas.sql` | Script SQL para as tabelas do módulo de Tarefas: `eventos`, `tarefas`, `tarefa_responsaveis`, `tarefa_anexos`, bucket de storage e índices |
+| `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2 e outras dependências para garantir funcionamento vital sem internet ou em redes com restrição de DNS. |
 
 ---
 
@@ -31,6 +32,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 - Baseado em **Cargos (Roles)** via tabela `profiles`:
   - **Admin**: Acesso a configurações globais (Visão de gestão futura).
   - **Fiscal**: Acesso liberado às abas **Home**, **Produtividade**, **Histórico (Pessoal)** e **Histórico Geral**.
+  - **Diretor de Meio Ambiente**: Perfil de supervisão com interface dinâmica. Possui menu lateral expansível ("Gerência de Posturas") e visão de gestão de produtividade da equipe.
 
 ### Aba de Configurações (Meu Perfil)
 - Fica disponível para qualquer um na navegação inferior esquerda.
@@ -50,6 +52,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 - **Botão "Limpeza Geral"**: Localizado ao lado do relatório, permite que o fiscal limpe permanentemente seus dados da tabela `registros_produtividade` e **zere a pontuação** da tabela `controle_processual` vinculada a ele.
     - **⚠️ Integridade**: O botão **NÃO apaga** os registros da tabela `controle_processual` (Notificações, Autos, Ofícios, etc), garantindo que os documentos oficiais continuem existindo no Histórico Geral, apenas remove a pontuação associada ao fiscal no histórico pessoal.
 - **Alerta de Encerramento Mensal**: Um banner verde translúcido aparece automaticamente no topo da Home no **último dia de cada mês**, lembrando o fiscal de gerar seu relatório antes da virada do calendário.
+- **Visão de Diretoria (Home)**: Quando o **Diretor de Meio Ambiente** expande o menu de gestão, a Home alterna automaticamente para exibir os gráficos de desempenho dos fiscais e outras ferramentas de supervisão.
 
 ---
 
@@ -151,16 +154,16 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 
 ### Permissões por Role
 
-| Ação | Fiscal | Gerente/Admin |
-|------|--------|---------------|
-| Ver tarefas no Kanban | Só as suas | Todas |
-| Alterar status | Apenas das suas | Todas |
-| Criar tarefa/evento | ✗ | ✓ |
-| Criar subtarefa | ✗ | ✓ |
-| Excluir tarefa/subtarefa/evento | ✗ | ✓ |
-| Marcar subtarefa como concluída | Só nas suas tarefas | Todas |
-| Anexar PDF em subtarefa | Só nas suas tarefas | Todas |
-| Ver eventos | ✓ | ✓ |
+| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente |
+|------|--------|---------------|--------------------------|
+| Ver tarefas no Kanban | Só as suas | Todas | Todas |
+| Alterar status | Apenas das suas | Todas | Todas |
+| Criar tarefa/evento | ✗ | ✓ | ✓ |
+| Criar subtarefa | ✗ | ✓ | ✓ |
+| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ |
+| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas |
+| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas |
+| Ver eventos | ✓ | ✓ | ✓ |
 
 ### Ícones SVG
 - Todos os ícones do módulo utilizam **SVGs inline stroke-only** (estilo minimalista da sidebar), sem emojis.
@@ -213,3 +216,5 @@ Bucket para armazenamento dos PDFs anexados às tarefas. Políticas: upload/down
 - **Refatoração do Histórico e Limpeza**: Ajustada a lógica de limpeza para zerar a pontuação do Controle Processual e restaurado o filtro global de pontuação > 0 no histórico pessoal.
 - **Migração de E-mail (Google Apps Script)**: Substituído o envio via servidores externos por uma solução própria baseada em Google Apps Script, garantindo entrega direta e contornando bloqueios de rede/DNS.
 - **Fix (UI/SweetAlert2)**: Corrigidos erros de concorrência e parâmetros inválidos na interface de carregamento do fechamento anual.
+- **Implementação do Perfil Diretor**: Criado o papel de **Diretor de Meio Ambiente** com menu lateral expansível e alternância dinâmica de visualização na Home.
+- **Robustez de Rede**: Migração de bibliotecas externas para a pasta local `lib/`, evitando erros de carregamento em redes com restrição de DNS (`ERR_NAME_NOT_RESOLVED`).

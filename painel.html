@@ -8,8 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style_painel.css">
     <link rel="stylesheet" href="style_produtividade.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="lib/supabase.js"></script>
+    <script src="lib/mammoth.browser.min.js"></script>
 </head>
 
 <body>
@@ -126,15 +126,50 @@
                     </button>
                 </div> <!-- /gerente-posturas-options -->
 
-                <!-- Botão Tarefas — visível para TODOS -->
-                <button class="nav-btn" onclick="mudarAba('tarefas')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 11l3 3L22 4" />
-                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                    </svg>
-                    Tarefas
-                </button>
+                <!-- Seção exclusiva para Diretor de Meio Ambiente -->
+                <div id="diretor-options" style="display: none;">
+                    <div class="nav-divider">DIRETORIA DE MEIO AMBIENTE</div>
+                    <button class="nav-btn" onclick="mudarAba('projetos')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Projetos
+                    </button>
+                    <!-- Botão Toggle Gerencia -->
+                    <button class="nav-btn" onclick="toggleGerenciaPosturas()" id="btn-toggle-gerencia">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Gerência de Posturas
+                    </button>
+                    <!-- Submenu expansível -->
+                    <div id="diretor-submenu-gerencia" style="display: none; padding-left: 20px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 4px;">
+                        <button class="nav-btn" onclick="mudarAba('bairros')" style="font-size: 0.85rem;">
+                            Bairros
+                        </button>
+                        <button class="nav-btn" onclick="mudarAba('historico-geral')" style="font-size: 0.85rem;">
+                            Histórico Geral
+                        </button>
+                        <button class="nav-btn" onclick="mudarAba('tarefas')" style="font-size: 0.85rem;">
+                            Tarefas
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Botão Tarefas — visível para TODOS (exceto diretor inicialmente, que vê no submenu) -->
+                <div id="tarefas-comum">
+                    <button class="nav-btn" onclick="mudarAba('tarefas')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11l3 3L22 4" />
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        Tarefas
+                    </button>
+                </div>
 
                 <div class="nav-divider"></div>
                 <button class="nav-btn" onclick="mudarAba('configuracoes')">
@@ -896,12 +931,12 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="lib/chart.js"></script>
+    <script src="lib/html2pdf.bundle.min.js"></script>
+    <script src="lib/jszip.min.js"></script>
+    <script src="lib/FileSaver.min.js"></script>
+    <script src="lib/xlsx.bundle.js"></script>
+    <script src="lib/sweetalert2.all.min.js"></script>
     <script src="protecao.js"></script>
     <script src="painel.js"></script>
     <script src="produtividade.js"></script>

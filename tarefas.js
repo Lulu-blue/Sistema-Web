@@ -138,7 +138,7 @@ async function carregarEventos() {
             html += '<div style="font-size:15px; font-weight:500; color:#334155;">' + ev.titulo + '</div>';
             if (ev.descricao) html += '<div style="font-size:14px; color:#94a3b8;">' + ev.descricao + '</div>';
             html += '</div>';
-            if (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin') {
+            if (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin' || userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'Diretor de Meio Ambiente') {
                 html += '<button onclick="excluirEvento(\'' + ev.id + '\')" style="background:none; border:none; cursor:pointer; color:#ef4444; font-size:14px;" title="Excluir">✕</button>';
             }
             html += '</div>';
@@ -299,7 +299,7 @@ async function carregarTarefas() {
             } catch (e) { console.error(e); }
         }
 
-        ehGerenteKanban = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin');
+        ehGerenteKanban = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin' || userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'Diretor de Meio Ambiente');
         console.log('[Tarefas] role:', userRoleGlobal, '| ehGerente:', ehGerenteKanban, '| total tarefas:', tarefasCache.length);
 
         tarefasCache.forEach(function (t) {
@@ -664,7 +664,7 @@ async function abrirDetalheTarefa(id) {
         var anx = anexos || [];
         var resps = responsaveis || [];
 
-        var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin');
+        var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin' || userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'Diretor de Meio Ambiente');
         var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
         var podeEditar = ehGerente || ehResponsavel;
 

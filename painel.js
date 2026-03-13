@@ -134,6 +134,11 @@ async function carregarDadosIniciais() {
                 var ghg = document.getElementById('gerente-historico-geral');
                 if (ghg) ghg.style.display = 'block';
             }
+
+            if (userRole === 'diretor de meio ambiente' || userRole === 'Diretor de Meio Ambiente') {
+                document.getElementById('diretor-options').style.display = 'block';
+                document.getElementById('tarefas-comum').style.display = 'none';
+            }
         }
     } catch (erroGeral) {
         console.error("Erro Critico no carregamento inicial:", erroGeral);
@@ -178,6 +183,42 @@ carregarDadosIniciais();
 window.addEventListener('load', function () {
     if (typeof carregarMinhasTarefasHome === 'function') carregarMinhasTarefasHome();
 });
+
+// --- LÓGICA DE DIRETOR: TOGGLE GERENCIA ---
+function toggleGerenciaPosturas() {
+    var submenu = document.getElementById('diretor-submenu-gerencia');
+    var btn = document.getElementById('btn-toggle-gerencia');
+    
+    if (!submenu || !btn) return;
+
+    var estaAberto = submenu.style.display === 'block';
+    var naHomeGerente = estaAberto && document.getElementById('aba-home').style.display === 'block' && document.getElementById('home-gerente-container').style.display === 'block';
+
+    if (!estaAberto) {
+        // ABRIR
+        submenu.style.display = 'block';
+        btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+        
+        // Mudar para Home e mostrar containers de gerente
+        mudarAba('home');
+        document.getElementById('home-gerente-container').style.display = 'block';
+        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+    } else if (estaAberto && !naHomeGerente) {
+        // JÁ ESTÁ ABERTO, MAS O USUÁRIO ESTÁ EM OUTRA ABA (ex: Projetos)
+        // Apenas volta para a Home do Gerente sem fechar a barra
+        mudarAba('home');
+        document.getElementById('home-gerente-container').style.display = 'block';
+        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+    } else {
+        // FECHAR (Só se já estiver na aba dele)
+        submenu.style.display = 'none';
+        btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>'; // Plus sign
+        
+        // Esconder containers de gerente na home
+        document.getElementById('home-gerente-container').style.display = 'none';
+    }
+}
+window.toggleGerenciaPosturas = toggleGerenciaPosturas;
 
 // --- RAMINHOS DECORATIVOS NO FUNDO ---
 function gerarRaminhos() {

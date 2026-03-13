@@ -302,27 +302,37 @@ async function iniciarFluxoEmail(zipBlob, anoAtual) {
         let emailDestino = perfil?.email_real;
         let verificado = perfil?.email_verificado || false;
 
-        // 1. Validar ou Registrar E-mail (Loop até ser válido)
-        while (!emailDestino || !validarEmailFmt(emailDestino)) {
-            emailDestino = await registrarEmailNoAto(user.id);
-            if (!emailDestino) {
-                const { isConfirmed } = await Swal.fire({
-                    title: 'E-mail Obrigatório',
-                    text: 'O envio por e-mail é obrigatório para concluir o fechamento e liberar a limpeza de dados.',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Informar E-mail',
-                    cancelButtonText: 'Cancelar Fechamento'
-                });
-                if (!isConfirmed) return;
+        // Loop de obrigatoriedade: Garante e-mail válido E verificado
+        while (true) {
+            // 1. Validar ou Registrar E-mail (Loop até ser válido)
+            while (!emailDestino || !validarEmailFmt(emailDestino)) {
+                emailDestino = await registrarEmailNoAto(user.id);
+                if (!emailDestino) {
+                    const { isConfirmed } = await Swal.fire({
+                        title: 'E-mail Obrigatório',
+                        text: 'O envio por e-mail é obrigatório para concluir o fechamento e liberar a limpeza de dados.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Informar E-mail',
+                        cancelButtonText: 'Cancelar Fechamento'
+                    });
+                    if (!isConfirmed) return; // Cancela tudo se desistir do fechamento
+                }
+                verificado = false; // Novo e-mail exige nova verificação
             }
-            verificado = false; // Novo e-mail exige nova verificação
-        }
 
-        // 2. Fluxo de Verificação (Garante que o e-mail "realmente existe" e pertence ao usuário)
-        if (!verificado) {
-            const sucessoV = await realizarVerificacaoOTP(user.id, emailDestino);
-            if (!sucessoV) return;
+            // 2. Fluxo de Verificação (Garante que o e-mail "realmente existe")
+            if (!verificado) {
+                const sucessoV = await realizarVerificacaoOTP(user.id, emailDestino);
+                if (!sucessoV) {
+                    // Se clicou em "Voltar", limpa para pedir um novo no início do loop
+                    emailDestino = null;
+                    continue;
+                }
+            }
+            
+            // Se chegou aqui, está validado e verificado
+            break;
         }
 
         // 3. Envio Obrigatório do ZIP
@@ -343,12 +353,27 @@ async function realizarVerificacaoOTP(userId, email) {
     const codigoGerado = Math.floor(100000 + Math.random() * 900000).toString();
     const remetenteOficial = "gerenciasemac.documentacao@gmail.com";
 
-    // Simulação de Envio (Aparece no Console F12)
-    console.log(`%c[SISTEMA] CÓDIGO DE VERIFICAÇÃO PARA ${email}: ${codigoGerado} (De: ${remetenteOficial})`, "color: white; background: blue; padding: 5px; font-weight: bold; font-size: 1.2rem;");
+    console.log(`[Verificação] Enviando código ${codigoGerado} para ${email}`);
+
+    try {
+        // Disparar e-mail com o código via Google Apps Script (sem anexo)
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            cache: 'no-cache',
+            body: JSON.stringify({
+                to: email,
+                subject: `Código de Verificação SEMAC: ${codigoGerado}`,
+                body: `Olá,\n\nSeu código de verificação para o sistema SEMAC é: ${codigoGerado}\n\nEste código é necessário para validar seu e-mail e permitir o fechamento anual.`
+            })
+        });
+    } catch (err) {
+        console.error("Erro ao enviar código via Google:", err);
+    }
 
     const { value: codigoInserido } = await Swal.fire({
         title: 'Verificando E-mail',
-        html: `O remetente <b>${remetenteOficial}</b> enviou um código para <b>${email}</b>.<br><br>Verifique sua caixa de entrada (ou o Console F12 no teste) e insira o código:`,
+        html: `O remetente <b>${remetenteOficial}</b> enviou um código para <b>${email}</b>.<br><br>Verifique sua caixa de entrada e insira o código:`,
         icon: 'info',
         input: 'text',
         inputAttributes: { maxlength: 6, style: 'text-align: center; letter-spacing: 5px; font-size: 2rem;' },
