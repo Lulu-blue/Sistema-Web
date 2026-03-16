@@ -290,7 +290,7 @@ async function iniciarFluxoEmail(zipBlob, anoAtual) {
             .from('profiles')
             .select('email_real, email_verificado')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
         if (errPerfil) {
             if (errPerfil.status === 400) {

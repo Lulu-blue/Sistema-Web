@@ -740,7 +740,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     .from('profiles')
                     .select('full_name')
                     .eq('id', user.id)
-                    .single();
+                    .maybeSingle();
                 const fiscalNome = perfil?.full_name || 'Fiscal';
 
                 // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Dívida Ativa)
@@ -1965,7 +1965,7 @@ async function abrirRelatorio() {
         .from('profiles')
         .select('full_name, cpf')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
     const nomeFiscal = perfil?.full_name || 'Fiscal';
     const anoAtual = new Date().getFullYear();
@@ -2394,7 +2394,7 @@ async function abrirEditorAutoInfracao() {
                 .from('profiles')
                 .select('full_name')
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
         }
 
@@ -2523,7 +2523,7 @@ async function abrirEditorOficio() {
                 .from('profiles')
                 .select('full_name, matricula')
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
@@ -2641,7 +2641,7 @@ async function abrirEditorRelatorio() {
                 .from('profiles')
                 .select('full_name, matricula')
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
@@ -2758,7 +2758,7 @@ async function abrirEditorReplica() {
                 .from('profiles')
                 .select('full_name, matricula')
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }

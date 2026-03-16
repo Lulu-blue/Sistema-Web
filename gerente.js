@@ -830,64 +830,68 @@ async function salvarNovoFiscal() {
         return;
     }
 
-    btnSalvar.textContent = 'Cadastrando...';
+    btnSalvar.textContent = 'Processando...';
     btnSalvar.disabled = true;
     msgEl.textContent = '';
 
     try {
-        // Salvar sessao atual do gerente
-        var sessaoAtual = await supabaseClient.auth.getSession();
-        var tokenGerente = sessaoAtual.data.session ? sessaoAtual.data.session.access_token : null;
-        var refreshGerente = sessaoAtual.data.session ? sessaoAtual.data.session.refresh_token : null;
-
-        // Criar usuario no Supabase Auth
+        // Padronização universal: email sempre @email.com (usado no login)
         var emailFicticio = cpfRaw + '@email.com';
 
-        var { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
-            email: emailFicticio,
-            password: '123456'
-        });
+        // 1. Verificar se o perfil já existe (Idempotência)
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id, role')
+            .eq('cpf', cpfRaw)
+            .maybeSingle();
 
-        if (signUpErr) {
-            if (signUpErr.message && signUpErr.message.includes('already registered')) {
-                throw new Error('Esse CPF ja esta cadastrado no sistema.');
+        if (searchErr) throw searchErr;
+
+        var userId;
+
+        if (existingProfile) {
+            // Se já existe, apenas reativamos e atualizamos dados
+            userId = existingProfile.id;
+            console.log("Perfil encontrado. Atualizando/Reativando...");
+        } else {
+            // Se não existe, criamos no Auth
+            console.log("Novo perfil. Criando no Auth...");
+            var { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (signUpErr) {
+                if (signUpErr.message && signUpErr.message.includes('already registered')) {
+                     throw new Error('Usuário já registrado no Auth. Contate o suporte.');
+                }
+                throw signUpErr;
             }
-            throw signUpErr;
+            userId = signUpData.user ? signUpData.user.id : null;
         }
 
-        var novoUserId = signUpData.user ? signUpData.user.id : null;
-        if (!novoUserId) throw new Error('Falha ao criar usuario.');
+        if (!userId) throw new Error('Falha ao obter ID do usuário.');
 
-        // Criar perfil na tabela profiles
+        // 2. Upsert no Perfil (Funciona tanto para novo quanto para atualização)
         var { error: profileErr } = await supabaseClient
             .from('profiles')
             .upsert({
-                id: novoUserId,
+                id: userId,
                 email: emailFicticio,
                 full_name: nome,
                 cpf: cpfRaw,
                 matricula: matricula,
                 role: 'Fiscal de Posturas'
-            });
+            }, { onConflict: 'id' });
 
         if (profileErr) throw profileErr;
 
-        // Restaurar sessao do gerente
-        if (refreshGerente) {
-            await supabaseClient.auth.setSession({
-                access_token: tokenGerente,
-                refresh_token: refreshGerente
-            });
-        }
-
-        msgEl.textContent = 'Fiscal cadastrado com sucesso!';
+        msgEl.textContent = 'Fiscal processado com sucesso!';
         msgEl.style.color = '#10b981';
 
-        // Fechar e atualizar ranking apos 1.5s
         setTimeout(function () {
             var modal = document.getElementById('modal-novo-fiscal');
             if (modal) modal.remove();
-            // Recarregar ranking
             if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
         }, 1500);
 
@@ -895,14 +899,6 @@ async function salvarNovoFiscal() {
         console.error('Erro ao cadastrar fiscal:', err);
         msgEl.textContent = 'Erro: ' + (err.message || err);
         msgEl.style.color = '#ef4444';
-
-        // Restaurar sessao do gerente em caso de erro
-        try {
-            var sessao = await supabaseClient.auth.getSession();
-            if (!sessao.data.session) {
-                window.location.reload();
-            }
-        } catch (e) { }
     } finally {
         btnSalvar.textContent = 'Cadastrar Fiscal';
         btnSalvar.disabled = false;
@@ -2031,14 +2027,16 @@ function abrirFormNovoGerente() {
 
 // Salva o novo Gerente no banco
 async function salvarNovoGerente() {
-    var cpf = document.getElementById('novo-gerente-cpf').value.trim();
+    var cpfInput = document.getElementById('novo-gerente-cpf').value.trim();
     var nome = document.getElementById('novo-gerente-nome').value.trim();
-    var email = document.getElementById('novo-gerente-email').value.trim();
+    var emailReal = document.getElementById('novo-gerente-email').value.trim();
     var matricula = document.getElementById('novo-gerente-matricula').value.trim();
     var msgEl = document.getElementById('msg-novo-gerente');
     var btn = document.getElementById('btn-salvar-novo-gerente');
 
-    if (!cpf || cpf.length < 14) {
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
         msgEl.textContent = 'CPF inválido.';
         msgEl.style.color = '#ef4444';
         return;
@@ -2049,43 +2047,61 @@ async function salvarNovoGerente() {
         return;
     }
 
-    btn.textContent = 'Cadastrando...';
+    btn.textContent = 'Processando...';
     btn.disabled = true;
 
     try {
-        var cpfLimpo = cpf.replace(/\D/g, '');
-        var emailFicticio = cpfLimpo + '@semac.local';
+        // PADRONIZAÇÃO: Usar @email.com para bater com o login (script.js)
+        var emailFicticio = cpfLimpo + '@email.com';
 
-        var { data: authData, error: authError } = await supabaseClient.auth.signUp({
-            email: emailFicticio,
-            password: '123456',
-            options: { data: { full_name: nome } }
-        });
+        // 1. Verificar se o perfil já existe
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
 
-        if (authError) throw authError;
+        if (searchErr) throw searchErr;
 
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        // 2. Atualizar perfil (upsert)
         var { error: profileError } = await supabaseClient
             .from('profiles')
-            .update({
+            .upsert({
+                id: userId,
                 full_name: nome,
-                cpf: cpf,
+                cpf: cpfLimpo,
                 matricula: matricula,
                 role: 'gerente de posturas',
-                email_real: email
-            })
-            .eq('id', authData.user.id);
+                email_real: emailReal,
+                email: emailFicticio
+            }, { onConflict: 'id' });
 
         if (profileError) throw profileError;
 
-        msgEl.innerHTML = '<span style="color:#10b981;">Gerente cadastrado com sucesso!</span>';
+        msgEl.innerHTML = '<span style="color:#10b981;">Gerente processado com sucesso!</span>';
         
         setTimeout(function() {
-            document.getElementById('modal-novo-gerente').remove();
+            var modal = document.getElementById('modal-novo-gerente');
+            if (modal) modal.remove();
             if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
         }, 1500);
 
     } catch (err) {
-        console.error('Erro ao criar gerente:', err);
+        console.error('Erro ao salvar gerente:', err);
         msgEl.textContent = err.message || 'Erro ao cadastrar gerente.';
         msgEl.style.color = '#ef4444';
         btn.textContent = 'Cadastrar Gerente';
@@ -2291,14 +2307,16 @@ function abrirFormNovoDiretor() {
 
 // Salva o novo Diretor no banco
 async function salvarNovoDiretor() {
-    var cpf = document.getElementById('novo-diretor-cpf').value.trim();
+    var cpfInput = document.getElementById('novo-diretor-cpf').value.trim();
     var nome = document.getElementById('novo-diretor-nome').value.trim();
-    var email = document.getElementById('novo-diretor-email').value.trim();
+    var emailReal = document.getElementById('novo-diretor-email').value.trim();
     var matricula = document.getElementById('novo-diretor-matricula').value.trim();
     var msgEl = document.getElementById('msg-novo-diretor');
     var btn = document.getElementById('btn-salvar-novo-diretor');
 
-    if (!cpf || cpf.length < 14) {
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
         msgEl.textContent = 'CPF inválido.';
         msgEl.style.color = '#ef4444';
         return;
@@ -2309,43 +2327,61 @@ async function salvarNovoDiretor() {
         return;
     }
 
-    btn.textContent = 'Cadastrando...';
+    btn.textContent = 'Processando...';
     btn.disabled = true;
 
     try {
-        var cpfLimpo = cpf.replace(/\D/g, '');
-        var emailFicticio = cpfLimpo + '@semac.local';
+        // PADRONIZAÇÃO: Usar @email.com para bater com o login
+        var emailFicticio = cpfLimpo + '@email.com';
 
-        var { data: authData, error: authError } = await supabaseClient.auth.signUp({
-            email: emailFicticio,
-            password: '123456',
-            options: { data: { full_name: nome } }
-        });
+        // 1. Verificar se o perfil já existe
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
 
-        if (authError) throw authError;
+        if (searchErr) throw searchErr;
 
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        // 2. Atualizar perfil
         var { error: profileError } = await supabaseClient
             .from('profiles')
-            .update({
+            .upsert({
+                id: userId,
                 full_name: nome,
-                cpf: cpf,
+                cpf: cpfLimpo,
                 matricula: matricula,
                 role: 'diretor de meio ambiente',
-                email_real: email
-            })
-            .eq('id', authData.user.id);
+                email_real: emailReal,
+                email: emailFicticio
+            }, { onConflict: 'id' });
 
         if (profileError) throw profileError;
 
-        msgEl.innerHTML = '<span style="color:#10b981;">Diretor cadastrado com sucesso!</span>';
+        msgEl.innerHTML = '<span style="color:#10b981;">Diretor processado com sucesso!</span>';
         
         setTimeout(function() {
-            document.getElementById('modal-novo-diretor').remove();
+            var modal = document.getElementById('modal-novo-diretor');
+            if (modal) modal.remove();
             if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
         }, 1500);
 
     } catch (err) {
-        console.error('Erro ao criar diretor:', err);
+        console.error('Erro ao salvar diretor:', err);
         msgEl.textContent = err.message || 'Erro ao cadastrar diretor.';
         msgEl.style.color = '#ef4444';
         btn.textContent = 'Cadastrar Diretor';

@@ -33,7 +33,7 @@ async function carregarModuloTarefas() {
             var user = authResult.data.user;
             if (user) {
                 userIdGlobal = user.id;
-                var { data: perfil } = await supabaseClient.from('profiles').select('role').eq('id', user.id).single();
+                var { data: perfil } = await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 userRoleGlobal = perfil ? perfil.role.toLowerCase() : '';
             }
 
@@ -555,7 +555,7 @@ async function carregarTarefas() {
                 var uCheck = authCheck.data.user;
                 if (uCheck) {
                     userIdGlobal = uCheck.id;
-                    var { data: pCheck } = await supabaseClient.from('profiles').select('role').eq('id', uCheck.id).single();
+                    var { data: pCheck } = await supabaseClient.from('profiles').select('role').eq('id', uCheck.id).maybeSingle();
                     userRoleGlobal = pCheck ? pCheck.role.toLowerCase() : '';
                 }
             } catch (e) { console.error(e); }
@@ -917,7 +917,7 @@ async function salvarTarefa() {
                 evento_id: _vincularEventoId
             })
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
 
@@ -1215,7 +1215,7 @@ async function alterarStatusTarefa(id, novoStatus) {
             const { data: anexos } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', id).limit(1);
             // Verificar resposta (supondo que resposta seja um campo na tabela tarefas ou em outra vinculada)
             // Por enquanto, verificamos se há anexos ou se a tarefa tem algum metadado de resposta se existir
-            const { data: tarefa } = await supabaseClient.from('tarefas').select('resposta').eq('id', id).single();
+            const { data: tarefa } = await supabaseClient.from('tarefas').select('resposta').eq('id', id).maybeSingle();
 
             if ((!anexos || anexos.length === 0) && (!tarefa || !tarefa.resposta)) {
                 Swal.fire('Ação Bloqueada', 'Para concluir esta tarefa, é obrigatório anexar um documento ou inserir uma resposta detalhada.', 'warning');
@@ -1326,7 +1326,7 @@ async function confirmarSubtarefa(tarefaPaiId) {
                     status: 'pendente',
                     tarefa_pai_id: tarefaPaiId,
                     criado_por: userIdGlobal
-                }).select().single();
+                }).select().maybeSingle();
                 if (errSub) throw errSub;
 
                 await supabaseClient.from('tarefa_responsaveis').insert({
@@ -1368,7 +1368,7 @@ async function toggleSubtarefa(subId, checked) {
                 .eq('tarefa_id', subId);
             if (!anexos || anexos.length === 0) {
                 alert('Anexe pelo menos um documento antes de concluir esta subtarefa.');
-                var { data: sub2 } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).single();
+                var { data: sub2 } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).maybeSingle();
                 if (sub2 && sub2.tarefa_pai_id) {
                     fecharModal('modal-detalhe-tarefa');
                     abrirDetalheTarefa(sub2.tarefa_pai_id);
@@ -1377,7 +1377,7 @@ async function toggleSubtarefa(subId, checked) {
             }
         }
         await supabaseClient.from('tarefas').update({ status: novoStatus }).eq('id', subId);
-        var { data: sub } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).single();
+        var { data: sub } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).maybeSingle();
         if (sub && sub.tarefa_pai_id) {
             // Atualizar status da tarefa pai automaticamente
             if (checked) {
@@ -1432,7 +1432,7 @@ async function uploadAnexo(tarefaId, inputEl) {
         });
 
         // Detectar se é subtarefa para reabrir o modal correto
-        var { data: tarefaInfo } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', tarefaId).single();
+        var { data: tarefaInfo } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', tarefaId).maybeSingle();
         var modalId = (tarefaInfo && tarefaInfo.tarefa_pai_id) ? tarefaInfo.tarefa_pai_id : tarefaId;
         fecharModal('modal-detalhe-tarefa');
         abrirDetalheTarefa(modalId);
@@ -2118,7 +2118,7 @@ async function salvarEventoAvancado() {
             data_inicio: dataInicio + 'T09:00:00',
             cor: cor,
             criado_por: userIdGlobal
-        }).select('*').single();
+        }).select('*').maybeSingle();
 
         if (evError) throw evError;
         var eventoId = evData.id;
@@ -2140,7 +2140,7 @@ async function salvarEventoAvancado() {
                 status: 'pendente',
                 criado_por: userIdGlobal,
                 evento_id: eventoId
-            }).select().single();
+            }).select().maybeSingle();
 
             if (tError) throw tError;
 

@@ -46,15 +46,22 @@ form.addEventListener('submit', async (e) => {
             submitBtn.disabled = false;
         } else {
             // Busca o cargo na tabela profiles usando o ID do usuário logado
-            const { data: perfil } = await supabaseClient
+            const { data: perfil, error: perfilErr } = await supabaseClient
                 .from('profiles')
                 .select('role, cpf')
                 .eq('id', data.user.id)
-                .single();
+                .maybeSingle();
 
-            if (perfil) {
+            if (perfilErr) {
+                console.error("Erro ao buscar perfil:", perfilErr);
+                alert("Erro ao carregar seu perfil. Tente novamente.");
+            } else if (perfil) {
                 // Redirecionamento baseado no cargo
                 window.location.href = "painel.html";
+            } else {
+                console.warn("Perfil não encontrado após login.");
+                alert("Cadastro incompleto. Favor procurar um administrador.");
+                await supabaseClient.auth.signOut();
             }
         }
     } catch (err) {

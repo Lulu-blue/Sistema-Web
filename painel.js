@@ -43,7 +43,7 @@ async function carregarDadosIniciais() {
             .from('profiles')
             .select('full_name, role, cpf, avatar_url, matricula, email_real')
             .eq('id', user.id)
-            .single();
+            .maybeSingle(); // Usar maybeSingle para evitar erro PGRST116 se não houver perfil
 
         var perfil = resultado.data;
         var erro = resultado.error;
@@ -55,6 +55,19 @@ async function carregarDadosIniciais() {
             } else {
                 console.error("Erro na busca de perfil: ", erro);
             }
+            return;
+        }
+
+        if (!perfil) {
+            console.warn("Perfil não encontrado para o usuário:", user.id);
+            Swal.fire({
+                title: 'Perfil não encontrado',
+                text: 'Não localizamos seu registro de perfil. Por favor, entre em contato com o suporte ou tente logar novamente.',
+                icon: 'error',
+                confirmButtonText: 'Sair e Logar'
+            }).then(() => {
+                sair();
+            });
             return;
         }
 
