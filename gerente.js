@@ -1903,3 +1903,523 @@ async function reverterRotacaoAreas() {
         alert('Erro ao restaurar backup: ' + err.message);
     }
 }
+
+
+// ==========================================
+// DASHBOARD DO DIRETOR - GESTAO DE GERENTES
+// ==========================================
+
+// Funcao principal que carrega o dashboard do Diretor
+async function carregarDashboardDiretor() {
+    try {
+        await carregarGerentesHierarquiaDiretor();
+        // Carregar tarefas do diretor
+        if (typeof carregarMinhasTarefasHome === 'function') {
+            carregarMinhasTarefasHome('diretor-minhas-tarefas');
+        }
+    } catch (err) {
+        console.error("Erro ao carregar dashboard do diretor:", err);
+    }
+}
+
+// Carrega a lista de Gerentes
+async function carregarGerentesHierarquiaDiretor() {
+    var container = document.getElementById('diretor-gerentes-hierarquia');
+    if (!container) return;
+
+    try {
+        // Buscar todos os gerentes
+        var { data: gerentes, error: errGerentes } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, email_real, matricula')
+            .in('role', ['gerente', 'Gerente', 'gerente fiscal', 'Gerente Fiscal', 'gerente de posturas', 'Gerente de Posturas']);
+
+        if (errGerentes) throw errGerentes;
+
+        // Atualizar contador
+        var elTotal = document.getElementById('diretor-total-gerentes');
+        if (elTotal) elTotal.innerText = gerentes ? gerentes.length : 0;
+
+        if (!gerentes || gerentes.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum gerente cadastrado.</div>';
+            return;
+        }
+
+        var html = '';
+        var cores = ['#8b5cf6', '#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#06b6d4'];
+
+        gerentes.forEach(function(gerente, index) {
+            var cor = cores[index % cores.length];
+            
+            var fotoHtml = '';
+            if (gerente.avatar_url) {
+                fotoHtml = '<img src="' + gerente.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + ';">';
+            } else {
+                fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + ';">' + (gerente.full_name ? gerente.full_name.charAt(0).toUpperCase() : 'G') + '</div>';
+            }
+
+            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';">';
+            
+            html += '<div style="display:flex;align-items:center;gap:12px;">';
+            html += fotoHtml;
+            html += '<div style="flex:1;">';
+            html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (gerente.full_name || 'Sem Nome') + '</div>';
+            html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (gerente.matricula || '---') + '</div>';
+            if (gerente.email_real) {
+                html += '<div style="font-size:11px;color:#94a3b8;">' + gerente.email_real + '</div>';
+            }
+            html += '</div>';
+            
+            // Botao de exclusao
+            html += '<div style="display:flex;gap:8px;">';
+            html += '<button onclick="abrirExcluirGerenteDiretor(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        // Botao + Novo Gerente no final
+        html += '<div style="margin-top:16px;text-align:center;">';
+        html += '<button onclick="abrirFormNovoGerente()" style="background:transparent;border:2px dashed #8b5cf6;color:#8b5cf6;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:100%;transition:all 0.2s;" onmouseover="this.style.background=\'#8b5cf6\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#8b5cf6\'">+ Novo Gerente</button>';
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar gerentes:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar gerentes.</div>';
+    }
+}
+
+// Abre modal para criar novo Gerente
+function abrirFormNovoGerente() {
+    var existente = document.getElementById('modal-novo-gerente');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-gerente';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-novo-gerente\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<h2 style="margin:0 0 20px 0;color:#1e293b;">Cadastrar Novo Gerente</h2>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">CPF</label>'
+        + '<input type="text" id="novo-gerente-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Nome Completo</label>'
+        + '<input type="text" id="novo-gerente-nome" placeholder="Nome do gerente" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">E-mail</label>'
+        + '<input type="email" id="novo-gerente-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matrícula</label>'
+        + '<input type="text" id="novo-gerente-matricula" placeholder="Matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Gerente de Posturas</strong> | Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-gerente" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoGerente()" id="btn-salvar-novo-gerente" style="width:100%;padding:12px;background:#8b5cf6;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Gerente</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva o novo Gerente no banco
+async function salvarNovoGerente() {
+    var cpf = document.getElementById('novo-gerente-cpf').value.trim();
+    var nome = document.getElementById('novo-gerente-nome').value.trim();
+    var email = document.getElementById('novo-gerente-email').value.trim();
+    var matricula = document.getElementById('novo-gerente-matricula').value.trim();
+    var msgEl = document.getElementById('msg-novo-gerente');
+    var btn = document.getElementById('btn-salvar-novo-gerente');
+
+    if (!cpf || cpf.length < 14) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Cadastrando...';
+    btn.disabled = true;
+
+    try {
+        var cpfLimpo = cpf.replace(/\D/g, '');
+        var emailFicticio = cpfLimpo + '@semac.local';
+
+        var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            email: emailFicticio,
+            password: '123456',
+            options: { data: { full_name: nome } }
+        });
+
+        if (authError) throw authError;
+
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .update({
+                full_name: nome,
+                cpf: cpf,
+                matricula: matricula,
+                role: 'gerente de posturas',
+                email_real: email
+            })
+            .eq('id', authData.user.id);
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Gerente cadastrado com sucesso!</span>';
+        
+        setTimeout(function() {
+            document.getElementById('modal-novo-gerente').remove();
+            if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao criar gerente:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar gerente.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Cadastrar Gerente';
+        btn.disabled = false;
+    }
+}
+
+// Modal de confirmacao para excluir Gerente
+function abrirExcluirGerenteDiretor(gerenteId, nomeGerente) {
+    var existente = document.getElementById('modal-excluir-gerente');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-excluir-gerente';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-excluir-gerente\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<div style="text-align:center;margin-bottom:20px;">'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#fef2f2;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">\u26a0\ufe0f</div>'
+        + '<h2 style="margin:0;color:#dc2626;">Excluir Gerente</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a excluir:</p>'
+        + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeGerente + '</p>'
+        + '</div>'
+        + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#dc2626;font-size:13px;margin:0;"><strong>\u26a0 Esta ação é irreversível!</strong></p>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">EXCLUIR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-gerente-confirmacao" placeholder="EXCLUIR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div id="msg-excluir-gerente" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
+        + '<button onclick="excluirGerenteDiretor(\'' + gerenteId + '\', \'' + nomeGerente.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-gerente" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Exclusão</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Exclui o Gerente
+async function excluirGerenteDiretor(gerenteId, nomeGerente) {
+    var confirmacao = document.getElementById('excluir-gerente-confirmacao').value.trim();
+    var msgEl = document.getElementById('msg-excluir-gerente');
+    var btn = document.getElementById('btn-confirmar-excluir-gerente');
+
+    if (confirmacao !== 'EXCLUIR') {
+        msgEl.textContent = 'Digite EXCLUIR para confirmar.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Excluindo...';
+    btn.disabled = true;
+
+    try {
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo' })
+            .eq('id', gerenteId);
+
+        if (error) throw error;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Gerente excluído com sucesso!</span>';
+        
+        setTimeout(function() {
+            document.getElementById('modal-excluir-gerente').remove();
+            if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao excluir gerente:', err);
+        msgEl.textContent = err.message || 'Erro ao excluir gerente.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Confirmar Exclusão';
+        btn.disabled = false;
+    }
+}
+
+
+// ==========================================
+// DASHBOARD DO SECRETÁRIO - GESTÃO DE DIRETORES
+// ==========================================
+
+// Funcao principal que carrega o dashboard do Secretario
+async function carregarDashboardSecretario() {
+    try {
+        await carregarDiretoresSecretario();
+        // Carregar tarefas do secretario
+        if (typeof carregarMinhasTarefasHome === 'function') {
+            carregarMinhasTarefasHome('secretario-minhas-tarefas');
+        }
+    } catch (err) {
+        console.error("Erro ao carregar dashboard do secretario:", err);
+    }
+}
+
+// Carrega a lista de Diretores
+async function carregarDiretoresSecretario() {
+    var container = document.getElementById('secretario-diretores-lista');
+    if (!container) return;
+
+    try {
+        // Buscar todos os diretores
+        var { data: diretores, error: errDiretores } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, email_real, matricula')
+            .in('role', ['diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente']);
+
+        if (errDiretores) throw errDiretores;
+
+        // Atualizar contador
+        var elTotal = document.getElementById('secretario-total-diretores');
+        if (elTotal) elTotal.innerText = diretores ? diretores.length : 0;
+
+        if (!diretores || diretores.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum diretor cadastrado.</div>';
+            return;
+        }
+
+        var html = '';
+        var cores = ['#7c3aed', '#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#06b6d4'];
+
+        diretores.forEach(function(diretor, index) {
+            var cor = cores[index % cores.length];
+            
+            var fotoHtml = '';
+            if (diretor.avatar_url) {
+                fotoHtml = '<img src="' + diretor.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + ';">';
+            } else {
+                fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + ';">' + (diretor.full_name ? diretor.full_name.charAt(0).toUpperCase() : 'D') + '</div>';
+            }
+
+            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';">';
+            
+            html += '<div style="display:flex;align-items:center;gap:12px;">';
+            html += fotoHtml;
+            html += '<div style="flex:1;">';
+            html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (diretor.full_name || 'Sem Nome') + '</div>';
+            html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (diretor.matricula || '---') + '</div>';
+            if (diretor.email_real) {
+                html += '<div style="font-size:11px;color:#94a3b8;">' + diretor.email_real + '</div>';
+            }
+            html += '</div>';
+            
+            // Botao de exclusao
+            html += '<div style="display:flex;gap:8px;">';
+            html += '<button onclick="abrirExcluirDiretorSecretario(\'' + diretor.id + '\', \'' + (diretor.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        // Botao + Novo Diretor no final
+        html += '<div style="margin-top:16px;text-align:center;">';
+        html += '<button onclick="abrirFormNovoDiretor()" style="background:transparent;border:2px dashed #7c3aed;color:#7c3aed;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:100%;transition:all 0.2s;" onmouseover="this.style.background=\'#7c3aed\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#7c3aed\'">+ Novo Diretor</button>';
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar diretores:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar diretores.</div>';
+    }
+}
+
+// Abre modal para criar novo Diretor
+function abrirFormNovoDiretor() {
+    var existente = document.getElementById('modal-novo-diretor');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-diretor';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-novo-diretor\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<h2 style="margin:0 0 20px 0;color:#1e293b;">Cadastrar Novo Diretor</h2>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">CPF</label>'
+        + '<input type="text" id="novo-diretor-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Nome Completo</label>'
+        + '<input type="text" id="novo-diretor-nome" placeholder="Nome do diretor" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">E-mail</label>'
+        + '<input type="email" id="novo-diretor-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matrícula</label>'
+        + '<input type="text" id="novo-diretor-matricula" placeholder="Matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Diretor de Meio Ambiente</strong> | Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-diretor" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoDiretor()" id="btn-salvar-novo-diretor" style="width:100%;padding:12px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Diretor</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva o novo Diretor no banco
+async function salvarNovoDiretor() {
+    var cpf = document.getElementById('novo-diretor-cpf').value.trim();
+    var nome = document.getElementById('novo-diretor-nome').value.trim();
+    var email = document.getElementById('novo-diretor-email').value.trim();
+    var matricula = document.getElementById('novo-diretor-matricula').value.trim();
+    var msgEl = document.getElementById('msg-novo-diretor');
+    var btn = document.getElementById('btn-salvar-novo-diretor');
+
+    if (!cpf || cpf.length < 14) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Cadastrando...';
+    btn.disabled = true;
+
+    try {
+        var cpfLimpo = cpf.replace(/\D/g, '');
+        var emailFicticio = cpfLimpo + '@semac.local';
+
+        var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            email: emailFicticio,
+            password: '123456',
+            options: { data: { full_name: nome } }
+        });
+
+        if (authError) throw authError;
+
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .update({
+                full_name: nome,
+                cpf: cpf,
+                matricula: matricula,
+                role: 'diretor de meio ambiente',
+                email_real: email
+            })
+            .eq('id', authData.user.id);
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Diretor cadastrado com sucesso!</span>';
+        
+        setTimeout(function() {
+            document.getElementById('modal-novo-diretor').remove();
+            if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao criar diretor:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar diretor.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Cadastrar Diretor';
+        btn.disabled = false;
+    }
+}
+
+// Modal de confirmacao para excluir Diretor
+function abrirExcluirDiretorSecretario(diretorId, nomeDiretor) {
+    var existente = document.getElementById('modal-excluir-diretor');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-excluir-diretor';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-excluir-diretor\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<div style="text-align:center;margin-bottom:20px;">'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#fef2f2;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">\u26a0\ufe0f</div>'
+        + '<h2 style="margin:0;color:#dc2626;">Excluir Diretor</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a excluir:</p>'
+        + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeDiretor + '</p>'
+        + '</div>'
+        + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#dc2626;font-size:13px;margin:0;"><strong>\u26a0 Esta ação é irreversível!</strong></p>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">EXCLUIR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-diretor-confirmacao" placeholder="EXCLUIR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div id="msg-excluir-diretor" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
+        + '<button onclick="excluirDiretorSecretario(\'' + diretorId + '\', \'' + nomeDiretor.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-diretor" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Exclusão</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Exclui o Diretor
+async function excluirDiretorSecretario(diretorId, nomeDiretor) {
+    var confirmacao = document.getElementById('excluir-diretor-confirmacao').value.trim();
+    var msgEl = document.getElementById('msg-excluir-diretor');
+    var btn = document.getElementById('btn-confirmar-excluir-diretor');
+
+    if (confirmacao !== 'EXCLUIR') {
+        msgEl.textContent = 'Digite EXCLUIR para confirmar.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Excluindo...';
+    btn.disabled = true;
+
+    try {
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo' })
+            .eq('id', diretorId);
+
+        if (error) throw error;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Diretor excluído com sucesso!</span>';
+        
+        setTimeout(function() {
+            document.getElementById('modal-excluir-diretor').remove();
+            if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao excluir diretor:', err);
+        msgEl.textContent = err.message || 'Erro ao excluir diretor.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Confirmar Exclusão';
+        btn.disabled = false;
+    }
+}

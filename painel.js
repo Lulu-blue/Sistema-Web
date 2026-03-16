@@ -139,6 +139,14 @@ async function carregarDadosIniciais() {
                 document.getElementById('diretor-options').style.display = 'block';
                 document.getElementById('tarefas-comum').style.display = 'none';
             }
+
+            if (userRole === 'secretario' || userRole === 'secretaria' || userRole === 'secretário' || userRole === 'secretária' || userRole === 'secretário(a)') {
+                document.getElementById('secretario-options').style.display = 'block';
+                document.getElementById('tarefas-comum').style.display = 'none';
+                // Inicializa modo do secretário
+                window.secretarioModoVisualizacao = window.secretarioModoVisualizacao || 'normal';
+                window.secretarioModoGerencia = window.secretarioModoGerencia || false;
+            }
         }
     } catch (erroGeral) {
         console.error("Erro Critico no carregamento inicial:", erroGeral);
@@ -147,11 +155,146 @@ async function carregarDadosIniciais() {
 }
 
 function mudarAba(idAba) {
+    // Se for Diretor, fechar submenu ao mudar para abas fora dele
+    if (window.userRoleGlobal === 'diretor de meio ambiente' || window.userRoleGlobal === 'diretor') {
+        var submenu = document.getElementById('diretor-submenu-gerencia');
+        if (submenu && submenu.style.display === 'block') {
+            var btnClicado = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+            var dentroSubmenu = btnClicado ? submenu.contains(btnClicado) : false;
+            var ehBotaoToggle = btnClicado ? (btnClicado.id === 'btn-toggle-gerencia') : false;
+            
+            if (!dentroSubmenu && !ehBotaoToggle) {
+                fecharGerenciaDiretor();
+            }
+        }
+    }
+
+    // Se for Secretario, fechar submenu ao mudar para abas fora dele
+    if (window.userRoleGlobal === 'secretario' || window.userRoleGlobal === 'secretaria' || 
+        window.userRoleGlobal === 'secretário' || window.userRoleGlobal === 'secretária' ||
+        window.userRoleGlobal === 'secretário(a)') {
+        var submenu = document.getElementById('secretario-submenu-direcao');
+        var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+        if (submenu && submenu.style.display === 'block') {
+            var btnClicado = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+            var dentroSubmenu = btnClicado ? submenu.contains(btnClicado) : false;
+            var ehBotaoToggle = btnClicado ? (btnClicado.id === 'btn-toggle-direcao') : false;
+            var ehBotaoGerencia = btnClicado ? (btnClicado.id === 'btn-toggle-gerencia-secretario') : false;
+            var dentroSubmenuGerencia = btnClicado && submenuGerencia ? submenuGerencia.contains(btnClicado) : false;
+            
+            // Se clicou dentro do submenu mas FORA do sub-submenu, fechar o sub-submenu
+            if (dentroSubmenu && !dentroSubmenuGerencia && !ehBotaoGerencia) {
+                // Fechar apenas o sub-submenu de gerencia
+                if (submenuGerencia) submenuGerencia.style.display = 'none';
+                window.secretarioModoGerencia = false;
+                var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
+                if (btnGerencia && btnGerencia.querySelector('svg')) {
+                    btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+                }
+            }
+            
+            // Se clicou fora de tudo, fechar o submenu principal também
+            if (!dentroSubmenu && !ehBotaoToggle && !ehBotaoGerencia && !dentroSubmenuGerencia) {
+                fecharDirecaoSecretario();
+            }
+        }
+    }
+
     document.querySelectorAll('.content-section').forEach(function (s) { s.style.display = 'none'; });
     document.querySelectorAll('.nav-btn').forEach(function (b) { b.classList.remove('active'); });
 
     var abaEl = document.getElementById('aba-' + idAba);
     if (abaEl) abaEl.style.display = 'block';
+
+    if (idAba === 'home') {
+        var hgc = document.getElementById('home-gerente-container');
+        var hdc = document.getElementById('home-diretor-container');
+        var hsc = document.getElementById('home-secretario-container');
+        var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+        
+        // SECRETARIO: tem prioridade pois é nivel mais alto
+        if (window.userRoleGlobal === 'secretario' || window.userRoleGlobal === 'secretaria' || 
+            window.userRoleGlobal === 'secretário' || window.userRoleGlobal === 'secretária' ||
+            window.userRoleGlobal === 'secretário(a)') {
+            // Manter submenu aberto se estiver em modo direcao
+            var submenuSec = document.getElementById('secretario-submenu-direcao');
+            var btnSec = document.getElementById('btn-toggle-direcao');
+            var submenuGerenciaSec = document.getElementById('secretario-submenu-gerencia');
+            
+            if (window.secretarioModoVisualizacao === 'direcao') {
+                if (window.secretarioModoGerencia) {
+                    // Sub-modo GERENCIA: mostra home do gerente (igual Diretor)
+                    if (hsc) hsc.style.display = 'none';
+                    if (hdc) hdc.style.display = 'none';
+                    if (hgc) {
+                        hgc.style.display = 'block';
+                        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                    }
+                    if (mtWrapper) mtWrapper.style.display = 'none';
+                    // Manter submenus abertos
+                    if (submenuSec) submenuSec.style.display = 'block';
+                    if (submenuGerenciaSec) submenuGerenciaSec.style.display = 'block';
+                    if (btnSec && btnSec.querySelector('svg')) btnSec.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+                } else {
+                    // Modo DIRECAO normal: espelha o modo Diretor (gerencia)
+                    if (hsc) hsc.style.display = 'none';
+                    if (hdc) {
+                        hdc.style.display = 'block';
+                        if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+                    }
+                    if (mtWrapper) mtWrapper.style.display = 'none';
+                    // Manter submenu direcao aberto, fechar submenu gerencia
+                    if (submenuSec) submenuSec.style.display = 'block';
+                    if (submenuGerenciaSec) submenuGerenciaSec.style.display = 'none';
+                    if (btnSec && btnSec.querySelector('svg')) btnSec.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+                }
+            } else {
+                // Modo normal: mostra gestao de diretores
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hsc) {
+                    hsc.style.display = 'block';
+                    if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                // Garantir submenus fechados
+                if (submenuSec) submenuSec.style.display = 'none';
+                if (submenuGerenciaSec) submenuGerenciaSec.style.display = 'none';
+                if (btnSec && btnSec.querySelector('svg')) btnSec.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+            }
+        }
+        // DIRETOR: Verifica o modo de visualizacao
+        else if (window.userRoleGlobal === 'diretor de meio ambiente' || window.userRoleGlobal === 'diretor') {
+            if (window.diretorModoVisualizacao === 'gerencia') {
+                // Modo GERENCIA: mostra o mesmo painel do Gerente (fiscais)
+                if (hdc) hdc.style.display = 'none';
+                if (hsc) hsc.style.display = 'none';
+                if (hgc) {
+                    hgc.style.display = 'block';
+                    if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                }
+                // Mostra tabela minhas tarefas original
+                if (mtWrapper) mtWrapper.style.display = 'block';
+            } else {
+                // Modo DIRECAO (normal): mostra gestao de gerentes
+                if (hgc) hgc.style.display = 'none';
+                if (hsc) hsc.style.display = 'none';
+                if (hdc) {
+                    hdc.style.display = 'block';
+                    if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+                }
+                // Oculta tabela minhas tarefas original (esta embaixo na gestao)
+                if (mtWrapper) mtWrapper.style.display = 'none';
+            }
+        }
+        // GERENTE: mantem comportamento original
+        else if (userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas') {
+            if (hgc) hgc.style.display = 'block';
+            if (hdc) hdc.style.display = 'none';
+            if (hsc) hsc.style.display = 'none';
+            if (mtWrapper) mtWrapper.style.display = 'block';
+        }
+    }
 
     if (event && event.currentTarget) {
         event.currentTarget.classList.add('active');
@@ -173,6 +316,7 @@ function mudarAba(idAba) {
 
     if (idAba === 'projetos') {
         if (typeof inicializarCalendario === 'function') inicializarCalendario();
+        if (typeof carregarEventos === 'function') carregarEventos();
     }
 }
 
@@ -185,6 +329,19 @@ window.addEventListener('load', function () {
 });
 
 // --- LÓGICA DE DIRETOR: TOGGLE GERENCIA ---
+function fecharGerenciaDiretor() {
+    var submenu = document.getElementById('diretor-submenu-gerencia');
+    var btn = document.getElementById('btn-toggle-gerencia');
+    if (submenu) submenu.style.display = 'none';
+    if (btn) {
+        var svg = btn.querySelector('svg');
+        if (svg) svg.innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+    }
+    if (typeof window.configurarModoTarefas === 'function') {
+        window.configurarModoTarefas('direcao');
+    }
+}
+
 function toggleGerenciaPosturas() {
     var submenu = document.getElementById('diretor-submenu-gerencia');
     var btn = document.getElementById('btn-toggle-gerencia');
@@ -197,28 +354,105 @@ function toggleGerenciaPosturas() {
     if (!estaAberto) {
         // ABRIR
         submenu.style.display = 'block';
-        btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+        if (btn.querySelector('svg')) {
+            btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+        }
         
         // Mudar para Home e mostrar containers de gerente
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia');
         mudarAba('home');
-        document.getElementById('home-gerente-container').style.display = 'block';
-        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
     } else if (estaAberto && !naHomeGerente) {
         // JÁ ESTÁ ABERTO, MAS O USUÁRIO ESTÁ EM OUTRA ABA (ex: Projetos)
         // Apenas volta para a Home do Gerente sem fechar a barra
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia');
         mudarAba('home');
-        document.getElementById('home-gerente-container').style.display = 'block';
-        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
     } else {
         // FECHAR (Só se já estiver na aba dele)
-        submenu.style.display = 'none';
-        btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>'; // Plus sign
-        
-        // Esconder containers de gerente na home
-        document.getElementById('home-gerente-container').style.display = 'none';
+        fecharGerenciaDiretor();
+        mudarAba('home');
     }
 }
 window.toggleGerenciaPosturas = toggleGerenciaPosturas;
+window.fecharGerenciaDiretor = fecharGerenciaDiretor;
+
+// --- LÓGICA DE SECRETÁRIO: TOGGLE DIREÇÃO ---
+window.secretarioModoVisualizacao = 'normal'; // 'normal' ou 'direcao'
+
+function fecharDirecaoSecretario() {
+    var submenu = document.getElementById('secretario-submenu-direcao');
+    var btn = document.getElementById('btn-toggle-direcao');
+    var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+    if (submenu) submenu.style.display = 'none';
+    if (submenuGerencia) submenuGerencia.style.display = 'none';
+    if (btn) {
+        var svg = btn.querySelector('svg');
+        if (svg) svg.innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+    }
+    window.secretarioModoVisualizacao = 'normal';
+    window.secretarioModoGerencia = false;
+}
+
+// Toggle Gerência de Posturas para Secretário (sub-submenu)
+function toggleGerenciaPosturasSecretario() {
+    var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+    var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
+    
+    if (!submenuGerencia) return;
+
+    var estaAberto = submenuGerencia.style.display === 'block';
+
+    if (!estaAberto) {
+        // ABRIR - modo gerencia
+        submenuGerencia.style.display = 'block';
+        if (btnGerencia && btnGerencia.querySelector('svg')) {
+            btnGerencia.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+        }
+        window.secretarioModoGerencia = true;
+        // Mudar para home do gerente
+        mudarAba('home');
+    } else {
+        // FECHAR
+        submenuGerencia.style.display = 'none';
+        if (btnGerencia && btnGerencia.querySelector('svg')) {
+            btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        }
+        window.secretarioModoGerencia = false;
+        mudarAba('home');
+    }
+}
+window.toggleGerenciaPosturasSecretario = toggleGerenciaPosturasSecretario;
+
+function toggleDirecaoMeioAmbiente() {
+    var submenu = document.getElementById('secretario-submenu-direcao');
+    var btn = document.getElementById('btn-toggle-direcao');
+    var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+    
+    if (!submenu || !btn) return;
+
+    var estaAberto = submenu.style.display === 'block';
+
+    if (!estaAberto) {
+        // ABRIR - modo direcao (espelha o modo diretor)
+        submenu.style.display = 'block';
+        if (btn.querySelector('svg')) {
+            btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+        }
+        
+        window.secretarioModoVisualizacao = 'direcao';
+        window.secretarioModoGerencia = false;
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+        mudarAba('home');
+    } else {
+        // FECHAR - volta para modo normal (gestao de diretores)
+        // Fechar também o sub-submenu de gerencia
+        if (submenuGerencia) submenuGerencia.style.display = 'none';
+        window.secretarioModoGerencia = false;
+        fecharDirecaoSecretario();
+        mudarAba('home');
+    }
+}
+window.toggleDirecaoMeioAmbiente = toggleDirecaoMeioAmbiente;
+window.fecharDirecaoSecretario = fecharDirecaoSecretario;
 
 // --- RAMINHOS DECORATIVOS NO FUNDO ---
 function gerarRaminhos() {

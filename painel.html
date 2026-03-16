@@ -29,7 +29,7 @@
             </div>
 
             <nav class="nav-menu">
-                <button class="nav-btn active" onclick="mudarAba('home')">
+                <button class="nav-btn active" onclick="mudarAba('home'); if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
@@ -128,7 +128,7 @@
 
                 <!-- Seção exclusiva para Diretor de Meio Ambiente -->
                 <div id="diretor-options" style="display: none;">
-                    <div class="nav-divider">DIRETORIA DE MEIO AMBIENTE</div>
+
                     <button class="nav-btn" onclick="mudarAba('projetos')">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -137,6 +137,14 @@
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
                         Projetos
+                    </button>
+                    <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao'); mudarAba('tarefas');">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11l3 3L22 4" />
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        Tarefas
                     </button>
                     <!-- Botão Toggle Gerencia -->
                     <button class="nav-btn" onclick="toggleGerenciaPosturas()" id="btn-toggle-gerencia">
@@ -153,9 +161,55 @@
                         <button class="nav-btn" onclick="mudarAba('historico-geral')" style="font-size: 0.85rem;">
                             Histórico Geral
                         </button>
-                        <button class="nav-btn" onclick="mudarAba('tarefas')" style="font-size: 0.85rem;">
-                            Tarefas
+                        <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia'); mudarAba('tarefas');" style="font-size: 0.85rem;">
+                            Tarefas (Gerência)
                         </button>
+                    </div>
+                </div>
+
+                <!-- Seção exclusiva para Secretário(a) -->
+                <div id="secretario-options" style="display: none;">
+                    <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao'); mudarAba('tarefas');">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11l3 3L22 4" />
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        Tarefas
+                    </button>
+                    <!-- Botão Toggle Direção -->
+                    <button class="nav-btn" onclick="toggleDirecaoMeioAmbiente()" id="btn-toggle-direcao">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Direção de Meio Ambiente
+                    </button>
+                    <!-- Submenu expansível Direção -->
+                    <div id="secretario-submenu-direcao" style="display: none; padding-left: 20px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 4px;">
+                        <button class="nav-btn" onclick="mudarAba('projetos')" style="font-size: 0.85rem;">
+                            Projetos
+                        </button>
+                        <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia'); mudarAba('tarefas');" style="font-size: 0.85rem;">
+                            Tarefas (Direção)
+                        </button>
+                        <!-- Botão Toggle Gerência de Posturas (sub-submenu) -->
+                        <button class="nav-btn" onclick="toggleGerenciaPosturasSecretario()" id="btn-toggle-gerencia-secretario" style="font-size: 0.85rem; background: rgba(0,0,0,0.03);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                                <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                            Gerência de Posturas
+                        </button>
+                        <!-- Submenu Gerência de Posturas -->
+                        <div id="secretario-submenu-gerencia" style="display: none; padding-left: 15px; background: rgba(0,0,0,0.03); border-radius: 8px; margin-top: 2px;">
+                            <button class="nav-btn" onclick="mudarAba('bairros')" style="font-size: 0.8rem;">
+                                Bairros
+                            </button>
+                            <button class="nav-btn" onclick="mudarAba('historico-geral')" style="font-size: 0.8rem;">
+                                Histórico Geral
+                            </button>
+                            <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia'); mudarAba('tarefas');" style="font-size: 0.8rem;">
+                                Tarefas (Gerência)
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -345,7 +399,7 @@
                     </div>
 
                     <!-- Tabela Minhas Tarefas -->
-                    <div
+                    <div id="minhas-tarefas-wrapper"
                         style="flex: 1; min-width: 300px; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
@@ -366,6 +420,88 @@
                         </div>
                     </div>
 
+                </div>
+
+                <!-- Container exclusivo do DIRETOR: Gestão de Gerentes -->
+                <div id="home-diretor-container" style="display:none; margin-top: 24px;">
+                    <div class="pontuacao-resumo" style="margin-top: 2rem;">
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #0c3e2b, #062117); color: white;">
+                            <h3>Total de Gerentes</h3>
+                            <div class="valor" id="diretor-total-gerentes">0</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="grafico-container" style="width: 100%;">
+                            <div style="margin-bottom: 16px;">
+                                <h3 style="margin: 0;">Gestão de Gerentes</h3>
+                            </div>
+                            <div id="diretor-gerentes-hierarquia" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Minhas Tarefas -->
+                    <div style="margin-top: 24px;">
+                        <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                        <line x1="16" y1="2" x2="16" y2="6" />
+                                        <line x1="8" y1="2" x2="8" y2="6" />
+                                        <line x1="3" y1="10" x2="21" y2="10" />
+                                    </svg>
+                                    Minhas Tarefas
+                                </h3>
+                            </div>
+                            <div id="diretor-minhas-tarefas">
+                                <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 15px;">Carregando tarefas...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Container exclusivo do SECRETÁRIO: Gestão de Diretores -->
+                <div id="home-secretario-container" style="display:none; margin-top: 24px;">
+                    <div class="pontuacao-resumo" style="margin-top: 2rem;">
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #0c3e2b, #062117); color: white;">
+                            <h3>Total de Diretores</h3>
+                            <div class="valor" id="secretario-total-diretores">0</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="grafico-container" style="width: 100%;">
+                            <div style="margin-bottom: 16px;">
+                                <h3 style="margin: 0;">Gestão de Diretores</h3>
+                            </div>
+                            <div id="secretario-diretores-lista" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Minhas Tarefas -->
+                    <div style="margin-top: 24px;">
+                        <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                        <line x1="16" y1="2" x2="16" y2="6" />
+                                        <line x1="8" y1="2" x2="8" y2="6" />
+                                        <line x1="3" y1="10" x2="21" y2="10" />
+                                    </svg>
+                                    Minhas Tarefas
+                                </h3>
+                            </div>
+                            <div id="secretario-minhas-tarefas">
+                                <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 15px;">Carregando tarefas...</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -706,47 +842,69 @@
             <!-- ABA: PROJETOS (Calendário do Gerente) -->
             <section id="aba-projetos" class="content-section" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h1>Projetos - Calendário Geral</h1>
+                    <h1>Projetos</h1>
                 </div>
 
-                <div class="calendario-container"
-                    style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); max-width: 900px; margin: 0 auto;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <button onclick="mudarMesCalendario(-1)"
-                            style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
-                            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <polyline points="15 18 9 12 15 6"></polyline>
-                            </svg>
-                        </button>
-                        <h2 id="calendario-mes-ano" style="margin: 0; color: #1e293b; font-size: 1.25rem;">Novembro 2026
-                        </h2>
-                        <button onclick="mudarMesCalendario(1)"
-                            style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
-                            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        </button>
+                <div style="display: flex; gap: 24px; align-items: flex-start;">
+                    <!-- LADO ESQUERDO: CALENDÁRIO (MAIS COMPACTO) -->
+                    <div class="calendario-container"
+                        style="flex: 0.8; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 320px; border: 1px solid #e2e8f0;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <button onclick="mudarMesCalendario(-1)"
+                                style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
+                                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+                            <h2 id="calendario-mes-ano" style="margin: 0; color: #1e293b; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Novembro 2026</h2>
+                            <button onclick="mudarMesCalendario(1)"
+                                style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
+                                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div
+                            style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; margin-bottom: 8px;">
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">DOM</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">SEG</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">TER</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUA</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUI</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SEX</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SÁB</div>
+                        </div>
+
+                        <div id="calendario-grid"
+                            style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; grid-auto-rows: minmax(45px, auto);">
+                            <!-- Dias serão injetados pelo JS -->
+                        </div>
                     </div>
 
-                    <div
-                        style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; text-align: center; margin-bottom: 10px;">
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Dom</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Seg</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Ter</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Qua</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Qui</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Sex</div>
-                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; padding: 8px 0;">Sáb</div>
-                    </div>
+                    <!-- LADO DIREITO: TABELA DE EVENTOS (MAIS ESPAÇOSA E REFINADA) -->
+                    <div style="flex: 2.2; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 600px; border: 1px solid #e2e8f0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h2 style="color: #1e293b; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; font-weight: 700;">
+                                <div style="width: 4px; height: 24px; background: #0c3e2b; border-radius: 2px;"></div>
+                                Eventos
+                            </h2>
+                            <button id="btn-novo-evento-diretor" class="nav-btn" onclick="abrirModalNovoEventoAvancado()" style="display: none; width: auto; height: auto; background: #0c3e2b; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(12, 62, 43, 0.2);" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 15px rgba(12, 62, 43, 0.3)';" onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 10px rgba(12, 62, 43, 0.2)';">
+                                + Novo Evento
+                            </button>
+                        </div>
 
-                    <div id="calendario-grid"
-                        style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; grid-auto-rows: minmax(80px, auto);">
-                        <!-- Dias serão injetados pelo JS -->
+                        <div id="lista-eventos-container" style="max-height: 600px; overflow-y: auto; padding: 5px;">
+                            <!-- Cards de eventos injetados pelo tarefas.js -->
+                            <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 1rem;">
+                                Carregando eventos do mês...
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

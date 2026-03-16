@@ -13,16 +13,22 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `script.js` | Lógica de autenticação via Supabase e geração do fundo da tela de login |
 | `painel.html` | Dashboard principal (Home, sidebar + abas Produtividade/Históricos/Tarefas) |
 | `style_painel.css` | Estilos comuns do painel e sidebar |
-| `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil e carregamento do módulo de Tarefas na Home |
+| `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento do módulo de Tarefas na Home |
 | `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
 | `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
 | `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
+| `gerente.js` | **Gestão de Fiscais**: Ranking de desempenho, gráficos de pontuação, cadastro e exclusão de fiscais, visualização de documentos por tipo |
+| `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
+| `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
+| `visibility_plan.md` | Documentação do plano de refinamento de visibilidade e permissões |
 | `cabecalho.js` | Script para modularização offline do cabeçalho HTML e menu do dashboard principal |
 | `cabecalho_export.js` | Base64 e renderização da injeção de timbre (identidade visual) do WYSIWYG PDF/Word |
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
+| `fix.js`, `debug_script.js`, `test_history.js` | Scripts auxiliares de desenvolvimento, debug e testes |
+| `visibility_plan.md` | Plano de refinamento de visibilidade e permissões de projetos |
 | `supabase_setup.sql` | Scripts SQL de criação de tabelas, Políticas RLS e configuração de Storage (Anexos) |
 | `setup_tarefas.sql` | Script SQL para as tabelas do módulo de Tarefas: `eventos`, `tarefas`, `tarefa_responsaveis`, `tarefa_anexos`, bucket de storage e índices |
-| `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2 e outras dependências para garantir funcionamento vital sem internet ou em redes com restrição de DNS. |
+| `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
 
 ---
 
@@ -34,9 +40,24 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
   - **Fiscal**: Acesso liberado às abas **Home**, **Produtividade**, **Histórico (Pessoal)** e **Histórico Geral**.
   - **Diretor de Meio Ambiente**: Perfil de supervisão com interface dinâmica. Possui menu lateral expansível ("Gerência de Posturas") e visão de gestão de produtividade da equipe.
 
+### Perfis de Usuário (Roles)
+
+O sistema possui **6 cargos distintos** com permissões específicas:
+
+| Cargo | Permissões Principais |
+|-------|----------------------|
+| **Admin** | Acesso total, incluindo gerenciamento de usuários |
+| **Fiscal** | Produtividade, Histórico Pessoal, Histórico Geral, Tarefas |
+| **Fiscal de Posturas** | Mesmas permissões do Fiscal (variação de cargo) |
+| **Gerente Fiscal** | Histórico Geral, Bairros, visão de gestão de fiscais |
+| **Gerente de Posturas** | Projetos, Bairros, Tarefas, Calendário de Eventos |
+| **Administrador de Posturas** | Acesso ao Histórico Geral (visor apenas) |
+| **Diretor de Meio Ambiente** | Acesso total com menu expansível "Gerência de Posturas", alternância entre modo Direção e Gerência |
+| **Secretário(a)** | Acesso total com menu expansível "Direção de Meio Ambiente", gestão de Diretores, criação de tarefas para qualquer usuário |
+
 ### Aba de Configurações (Meu Perfil)
 - Fica disponível para qualquer um na navegação inferior esquerda.
-- Exibe o **Cargo**, **Nome**, **CPF**, e agora também a **Matrícula** (Carregados via tabela de perfis `profiles`).
+- Exibe o **Cargo**, **Nome**, **CPF**, **Matrícula** e **E-mail Real** (Carregados via tabela de perfis `profiles`).
 - **Upload de Avatar**: Clique na foto do perfil permite o envio de imagem local `.jpg/.png` dimensionada, que será carregada usando o *Storage (`avatars`)* do supabase com chave única por usuário, atualizando dinamicamente na Sidebar.
 - **Redefinição de Senha Segura**: Um modal central de redefinição garante a segurança exigindo que a **Senha Antiga** passe pelo `signInWithPassword()` atrás das cortinas, somado a uma **dupla verificação** da digitação da nova credencial, para só então ativar a trigger de alteração.
 
@@ -56,13 +77,26 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 
 ---
 
-## 📅 Fechamento Anual
+## 📊 Relatório Individual do Fiscal (Gestão)
+- **Acesso**: Clique no nome do fiscal no ranking de desempenho (Home do Gerente/Diretor).
+- **Dados exibidos**: Todos os registros de produtividade e controle processual do fiscal selecionado.
+- **Filtragem por período**: Visualização dos últimos 30 dias por padrão.
+- **Pontuação detalhada**: Soma de pontos por categoria e total acumulado.
+
+---
+
+## 📅 Fechamento Anual (`fechamento.js`)
 - **Mecanismo de Consolidação**: Reúne todos os registros de produtividade e controle processual do ano vigente.
-- **Geração de Anexo**: Cria automaticamente uma planilha de dados e um arquivo ZIP contendo todos os anexos PDF enviados pelo fiscal durante o ano.
-- **Envio Direto (Google Apps Script)**: Para garantir a privacidade e evitar intermediários, o sistema utiliza um script hospedado na própria conta do Google do usuário (`google.com`).
-    - O envio é processado via API personalizada que dispara o arquivo ZIP diretamente para o e-mail cadastrado.
-    - **Vantagem**: Contorna bloqueios de DNS de serviços externos e utiliza o Gmail nativo para o disparo.
-- **Limpeza de Dados**: Após o recebimento do ZIP por e-mail, o fiscal pode proceder com a limpeza dos dados no Supabase, mantendo apenas os registros oficiais de Controle Processual.
+- **Geração de Anexos (ZIP)**: Cria automaticamente um arquivo ZIP organizado por pastas:
+  - Estrutura: `Ano/Documentos/Categoria/NumeroSequencial.pdf`
+  - Exemplo: `2025/Documentos/Notificação Preliminar/0116/2025.pdf`
+- **Geração de Planilha Excel**: Planilha formatada com:
+  - Uma aba para cada categoria de documento
+  - Cabeçalhos estilizados (negrito, fundo cinza)
+  - Linhas congeladas para facilitar navegação
+  - Colunas de: N°, campos específicos, Fiscal, Data, Pontos, Datas de Entrada/Vencimento (para NP/AI), Histórico Admin, Resposta do Fiscal
+- **Envio via Google Apps Script**: Disparo direto para o e-mail cadastrado, contornando bloqueios de rede.
+- **Limpeza Agendada**: Após confirmação de recebimento, limpeza automática dos dados do ano fechado.
 
 ### Tabela "Minhas Tarefas" na Home
 - Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos.
@@ -70,6 +104,63 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 - **Ordenação**: atrasadas primeiro (fundo vermelho com badge `ATRASADA`), depois por prazo mais próximo.
 - **Colunas**: Tarefa (com nome da tarefa-pai se for subtarefa, prefixo `↳`), Prazo, Status (badge colorido), Progresso (barra visual de subtarefas).
 - **Clique** em qualquer linha navega direto para a aba Tarefas.
+
+### Alertas de NP / AI na Home (Fiscal)
+- Seção exclusiva para fiscais mostrando **Notificações Preliminares** e **Autos de Infração**.
+- Duas abas: **Vencidos** (alertas vermelhos) e **Atendidos** (confirmados).
+- Contadores em badges coloridos indicando quantidade de itens em cada status.
+- Permite acompanhamento rápido de prazos processuais diretamente na Home.
+
+---
+
+## 📅 Módulo de Projetos e Calendário (`projetos.js`)
+
+Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projetos.
+
+### Calendário Mensal
+- **Navegação intuitiva**: Botões para mudar entre meses (← →).
+- **Visualização de eventos**: Barras coloridas indicam eventos nos dias.
+- **Dia atual destacado**: Círculo azul no dia corrente.
+- **Filtro por data**: Clique em um dia para filtrar eventos específicos.
+- **Eventos multi-dia**: Suporte a eventos com data de início e fim.
+
+### Gestão de Eventos
+- **Criar evento** (Diretor/Gerente): Modal com título, descrição, data início/fim, cor (Azul, Verde, Amarelo, Vermelho, Roxo).
+- **Listar eventos**: Cards com título, datas, descrição e cor identificadora.
+- **Expandir detalhes**: Clique no card para ver descrição completa e tarefas vinculadas.
+- **Excluir evento**: Botão de exclusão visível apenas para quem tem permissão.
+
+### Visibilidade por Perfil
+| Perfil | Visualizar | Criar/Editar | Excluir |
+|--------|------------|--------------|---------|
+| Diretor | Todos os eventos | ✓ | ✓ |
+| Fiscal | Todos os eventos | ✗ | ✗ |
+| Gerente | Eventos onde é responsável ou tem tarefa vinculada | ✗ | ✗ |
+
+---
+
+## 🗺️ Módulo de Bairros e Áreas (`gerente.js`)
+
+Gestão completa de áreas de atuação e mapeamento de bairros para fiscais.
+
+### Áreas de Atuação
+- **Cadastro de áreas**: Nome da área e fiscal responsável.
+- **Lista de áreas**: Visualização com fiscal vinculado e quantidade de bairros.
+- **Edição/Exclusão**: Modificar dados ou remover áreas existentes.
+
+### Mapeamento de Bairros
+- **Cadastro de bairros**: Nome do bairro, área vinculada, fiscal responsável.
+- **Busca rápida**: Filtro de bairros por nome.
+- **Contador**: Total de bairros cadastrados.
+
+### Sistema de Rotação
+- **Rotação de Áreas**: Troca automática de fiscais entre áreas de atuação.
+- **Rotação de Bairros**: Realocação de responsáveis por bairros específicos.
+- **Painel visual**: Interface dedicada para gerenciar rotações.
+
+### Gráficos Estatísticos
+- **Top 10 Bairros - NP**: Gráfico de barras horizontais com os bairros com mais Notificações Preliminares.
+- **Top 10 Bairros - AI**: Gráfico de barras horizontais com os bairros com mais Autos de Infração.
 
 ---
 
@@ -154,16 +245,18 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 
 ### Permissões por Role
 
-| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente |
-|------|--------|---------------|--------------------------|
-| Ver tarefas no Kanban | Só as suas | Todas | Todas |
-| Alterar status | Apenas das suas | Todas | Todas |
-| Criar tarefa/evento | ✗ | ✓ | ✓ |
-| Criar subtarefa | ✗ | ✓ | ✓ |
-| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ |
-| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas |
-| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas |
-| Ver eventos | ✓ | ✓ | ✓ |
+| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) |
+|------|--------|---------------|--------------------------|---------------|
+| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas |
+| Alterar status | Apenas das suas | Todas | Todas | Todas |
+| Criar tarefa/evento | ✗ | ✓ | ✓ | ✓ |
+| Criar subtarefa | ✗ | ✓ | ✓ | ✓ |
+| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ |
+| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas |
+| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas |
+| Ver eventos | ✓ | ✓ | ✓ | ✓ |
+| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ |
+| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ |
 
 ### Ícones SVG
 - Todos os ícones do módulo utilizam **SVGs inline stroke-only** (estilo minimalista da sidebar), sem emojis.
@@ -191,10 +284,10 @@ A seguridade ocorre camada a camada no BD:
 - No Bucket de Storage `anexos` e `avatars`, usuários têm pastas sob seus `user_ids` nas quais podem criar/atualizar/excluir arquivos livremente. Arquivos baixados têm políticas de SELECT puramente público.
 
 ### `eventos` (Módulo de Tarefas)
-Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_evento`, `cor` (hex), `criado_por` (FK → auth.users).
+Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_inicio`, `data_fim`, `cor` (hex), `criado_por` (FK → auth.users), `responsavel_id`.
 
 ### `tarefas` (Módulo de Tarefas)
-Tabela de tarefas e subtarefas. Campos: `titulo`, `descricao`, `status` (pendente/em_progresso/concluida), `prazo` (date), `criado_por`, `tarefa_pai_id` (FK → tarefas, para subtarefas). RLS permite leitura para todos autenticados.
+Tabela de tarefas e subtarefas. Campos: `titulo`, `descricao`, `status` (pendente/em_progresso/concluida), `prazo` (date), `criado_por`, `tarefa_pai_id` (FK → tarefas, para subtarefas), `evento_id` (FK → eventos). RLS permite leitura para todos autenticados.
 
 ### `tarefa_responsaveis` (Módulo de Tarefas)
 Relação N:N entre tarefas e usuários. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name` (texto desnormalizado para display rápido).
@@ -202,10 +295,132 @@ Relação N:N entre tarefas e usuários. Campos: `tarefa_id` (FK → tarefas), `
 ### `tarefa_anexos` (Módulo de Tarefas)
 Anexos PDF vinculados a tarefas/subtarefas. Campos: `tarefa_id` (FK → tarefas), `nome_arquivo`, `url` (public URL do Storage).
 
-### Storage Bucket `tarefa_anexos`
-Bucket para armazenamento dos PDFs anexados às tarefas. Políticas: upload/download para todos autenticados.
+### `areas_atuacao` (Módulo de Bairros)
+Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → auth.users), `created_at`.
+
+### `bairros` (Módulo de Bairros)
+Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `fiscal_id` (FK → auth.users), `created_at`.
+
+### Variáveis de Controle de Modo (Frontend)
+| Variável | Valores | Descrição |
+|----------|---------|-----------|
+| `diretorModoVisualizacao` | `'direcao'`, `'gerencia'` | Modo atual do Diretor |
+| `secretarioModoVisualizacao` | `'normal'`, `'direcao'` | Modo atual do Secretário |
+| `secretarioModoGerencia` | `true`, `false` | Sub-modo Gerência do Secretário |
 
 ---
+
+## 🏛️ Módulo do Secretário(a)
+
+O Secretário(a) possui visão hierárquica completa do sistema, gerenciando Diretores.
+
+### Funcionalidades:
+- **Gestão de Diretores**: Visualização, criação e exclusão de Diretores
+- **Minhas Tarefas**: Tarefas atribuídas ao Secretário
+- **Direção de Meio Ambiente**: Menu expansível com sub-submenu "Gerência de Posturas"
+- **Criação de Tarefas**: Pode criar tarefas para qualquer usuário do sistema
+- **Filtros de Tarefas**: 
+  - Modo Direção: vê tarefas de Diretores
+  - Modo Gerência (sub-modo): vê tarefas de Gerentes
+
+### Hierarquia de Cargos:
+```
+Secretário(a) → Diretor → Gerente → Fiscal
+```
+
+### Menu Sidebar do Secretário:
+```
+📋 Tarefas
+📁 Direção de Meio Ambiente (toggle)
+   📁 Projetos
+   📁 Tarefas (Direção)
+   📁 Gerência de Posturas (sub-toggle)
+      📁 Bairros
+      📁 Histórico Geral
+      📁 Tarefas (Gerência)
+```
+
+### Comportamento do Sub-menu:
+- **Clicar em "Direção de Meio Ambiente"**: Abre submenu, muda para modo Direção
+- **Clicar em "Gerência de Posturas"**: Abre sub-submenu, muda para modo Gerente
+- **Clicar em outros botões do submenu**: Fecha sub-submenu, volta para modo Direção
+- **Clicar fora do menu**: Fecha todo o menu, volta para modo normal
+
+### Storage Buckets
+- **`anexos`**: PDFs de documentos do controle processual
+- **`avatars`**: Fotos de perfil dos usuários
+- **`tarefa_anexos`**: Anexos de tarefas e subtarefas
+
+Políticas: Upload/download para usuários autenticados, arquivos organizados em pastas por `user_id`.
+
+---
+
+## 🎨 Estilos e UI
+
+### Sidebar Rolável (`style_painel.css`)
+- **Comportamento**: A sidebar se torna rolável automaticamente quando o conteúdo excede a altura da tela
+- **Scrollbar customizada**: Barra de rolagem discreta com cor semitransparente (`rgba(255, 255, 255, 0.2)`)
+- **Transparência**: A scrollbar só aparece quando necessário (overflow-y: auto)
+- **Cor no hover**: Efeito de destaque ao passar o mouse sobre a scrollbar
+
+### Hierarquia Visual dos Cards
+| Container | Cor do Card | Descrição |
+|-----------|-------------|-----------|
+| Home do Diretor | `#0c3e2b → #062117` | Total de Gerentes (verde escuro) |
+| Home do Secretário | `#0c3e2b → #062117` | Total de Diretores (verde escuro) |
+| Home do Gerente | `#1e293b → #0f172a` | Total de Fiscais (cinza escuro) |
+
+---
+
+## 📚 Bibliotecas Locais (`lib/`)
+
+Todas as dependências são mantidas localmente para garantir funcionamento **offline** ou em redes corporativas com restrições de DNS.
+
+| Biblioteca | Versão | Função |
+|------------|--------|--------|
+| `supabase.js` | v2.x | Cliente Supabase para autenticação e banco de dados |
+| `chart.js` | v4.x | Geração de gráficos (barras, doughnut, linhas) |
+| `sweetalert2.all.min.js` | v11.x | Modais e alertas estilizados |
+| `html2pdf.bundle.min.js` | v0.10.x | Exportação de HTML para PDF |
+| `jszip.min.js` | v3.x | Compressão de arquivos em ZIP |
+| `FileSaver.min.js` | v2.x | Download de arquivos no navegador |
+| `xlsx.bundle.js` | v0.18.x | Geração e manipulação de planilhas Excel |
+| `mammoth.browser.min.js` | v1.x | Leitura de arquivos Word (.docx) para extração de texto |
+
+---
+
+## 🔧 Funções JavaScript Principais
+
+### painel.js
+| Função | Descrição |
+|--------|-----------|
+| `toggleDirecaoMeioAmbiente()` | Toggle do menu "Direção de Meio Ambiente" do Secretário |
+| `toggleGerenciaPosturasSecretario()` | Toggle do sub-menu "Gerência de Posturas" |
+| `fecharDirecaoSecretario()` | Fecha o menu e sub-menu do Secretário |
+| `toggleGerenciaPosturas()` | Toggle do menu "Gerência de Posturas" do Diretor |
+| `fecharGerenciaDiretor()` | Fecha o menu do Diretor |
+
+### gerente.js
+| Função | Descrição |
+|--------|-----------|
+| `carregarDashboardSecretario()` | Carrega a Home do Secretário com gestão de Diretores |
+| `carregarDiretoresSecretario()` | Lista todos os Diretores com foto e ações |
+| `abrirFormNovoDiretor()` | Modal para cadastrar novo Diretor |
+| `salvarNovoDiretor()` | Salva Diretor no banco de dados |
+| `abrirExcluirDiretorSecretario()` | Modal de confirmação de exclusão |
+| `excluirDiretorSecretario()` | Executa exclusão lógica do Diretor |
+| `carregarDashboardDiretor()` | Carrega a Home do Diretor com gestão de Gerentes |
+| `carregarGerentesHierarquiaDiretor()` | Lista todos os Gerentes |
+| `abrirFormNovoGerente()` | Modal para cadastrar novo Gerente |
+| `salvarNovoGerente()` | Salva Gerente no banco de dados |
+
+### tarefas.js
+| Função | Descrição |
+|--------|-----------|
+| `carregarTarefas()` | Carrega Kanban com filtros por perfil e modo |
+| `carregarEventos()` | Carrega eventos com visibilidade por role |
+| `abrirModalNovaTarefa()` | Modal de criação de tarefas (Diretor/Gerente/Secretário) |
+| `toggleGerenciaPosturasSecretario()` | Gerencia sub-menu do Secretário |
 
 ---
 
@@ -218,3 +433,10 @@ Bucket para armazenamento dos PDFs anexados às tarefas. Políticas: upload/down
 - **Fix (UI/SweetAlert2)**: Corrigidos erros de concorrência e parâmetros inválidos na interface de carregamento do fechamento anual.
 - **Implementação do Perfil Diretor**: Criado o papel de **Diretor de Meio Ambiente** com menu lateral expansível e alternância dinâmica de visualização na Home.
 - **Robustez de Rede**: Migração de bibliotecas externas para a pasta local `lib/`, evitando erros de carregamento em redes com restrição de DNS (`ERR_NAME_NOT_RESOLVED`).
+- **Calendário de Eventos**: Implementação completa do módulo de projetos com calendário vanilla JS e gestão de eventos.
+- **Gestão de Bairros**: Novo sistema de cadastro de áreas, bairros e rotação de fiscais.
+- **Alertas NP/AI**: Adicionada seção na Home para alertas de Notificações Preliminares e Autos de Infração vencidos.
+- **Novo Cargo: Secretário(a)**: Implementação completa do perfil de Secretário com gestão de Diretores, sub-menu "Direção de Meio Ambiente" e sub-submenu "Gerência de Posturas".
+- **Sidebar Rolável**: Implementação de scrollbar customizada na sidebar para quando o conteúdo excede a altura da tela.
+- **Filtros de Tarefas por Perfil**: Sistema de filtros dinâmicos para Diretor e Secretário baseado no modo de visualização ativo.
+- **Gestão Hierárquica**: Sistema completo de gestão em cascata: Secretário → Diretor → Gerente → Fiscal.
