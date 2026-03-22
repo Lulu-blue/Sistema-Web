@@ -2,6 +2,57 @@
 // PRODUTIVIDADE.JS — Sistema de Produtividade
 // =============================================
 
+// --- FUNÇÃO AUXILIAR: VERIFICAR CONEXÃO ---
+async function verificarConexaoAntesDeSalvar() {
+    if (!navigator.onLine) {
+        alert('⚠️ Você está offline. Não é possível salvar os dados sem conexão com a internet.\n\nVerifique sua conexão e tente novamente.');
+        return false;
+    }
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch('https://marmpnusgmbjphffaynr.supabase.co/rest/v1/', {
+            method: 'HEAD',
+            signal: controller.signal,
+            cache: 'no-store'
+        });
+        
+        clearTimeout(timeoutId);
+        return true;
+    } catch (error) {
+        const continuar = confirm('⚠️ Sua conexão parece estar instável ou muito lenta.\n\nDeseja tentar salvar mesmo assim?\n\n• Sim: Tentar salvar (pode falhar)\n• Não: Cancelar e verificar a conexão');
+        return continuar;
+    }
+}
+
+// --- FUNÇÕES AUXILIARES: HIERARQUIA DE PERMISSÕES ---
+// Retorna o nível hierárquico do cargo (maior = mais permissões)
+function getNivelHierarquico(role) {
+    if (!role) return 0;
+    const roleLower = role.toLowerCase();
+    if (roleLower.includes('secretário') || roleLower.includes('secretario')) return 3;
+    if (roleLower.includes('diretor')) return 2;
+    if (roleLower.includes('gerente')) return 1;
+    return 0;
+}
+
+// Verifica se o usuário é Gerente ou acima (Diretor, Secretário)
+function isGerenteOuSuperior(role) {
+    return getNivelHierarquico(role) >= 1;
+}
+
+// Verifica se o usuário é Diretor ou acima (Diretor, Secretário)
+function isDiretorOuSuperior(role) {
+    return getNivelHierarquico(role) >= 2;
+}
+
+// Verifica se o usuário é Secretário (topo da hierarquia)
+function isSecretario(role) {
+    return getNivelHierarquico(role) >= 3;
+}
+
 // --- DEFINIÇÃO DAS CATEGORIAS ---
 // Cada categoria espelha uma aba da planilha original
 // Começando com 1 categoria de teste (2°)
@@ -615,6 +666,13 @@ function fecharModalProdutividade() {
 let salvando = false;
 async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (!categoriaAtual || salvando) return;
+    
+    // Verificar conexão antes de salvar
+    const conexaoOK = await verificarConexaoAntesDeSalvar();
+    if (!conexaoOK) {
+        return;
+    }
+    
     salvando = true;
 
     // 1. Coletar valores dos campos
@@ -1196,6 +1254,12 @@ function editarRegistro() {
 async function excluirRegistro() {
     if (!registroSelecionado) return;
 
+    // Verificar conexão antes de excluir
+    const conexaoOK = await verificarConexaoAntesDeSalvar();
+    if (!conexaoOK) {
+        return;
+    }
+
     const confirma = confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.');
     if (!confirma) return;
 
@@ -1501,11 +1565,14 @@ function atualizarIndicadorFiltro() {
 
 function renderizarTabelaGeral(registros, categoriaId) {
     const container = document.getElementById('historico-geral-lista');
-    const isGerente = window.userRoleGlobal === 'gerente fiscal' || window.userRoleGlobal === 'gerente de posturas' || window.userRoleGlobal === 'gerente' || window.userRoleGlobal === 'admin';
+    // Usar nova hierarquia de permissões: Gerente, Diretor e Secretário podem ver anexos
+    const podeVerAnexos = isGerenteOuSuperior(window.userRoleGlobal) || 
+                          (window.userRoleGlobal || '').toLowerCase().includes('administrativo') ||
+                          (window.userRoleGlobal || '').toLowerCase().includes('administrador');
 
     if (categoriaId === 'todos') {
         let headerHTML = '<tr><th>Tipo de Documento</th><th>Identificador / Nome</th><th>Fiscal</th><th>Data</th><th>Pontos</th>';
-        if (isGerente) headerHTML += '<th>Anexo</th>';
+        if (podeVerAnexos) headerHTML += '<th>Anexo</th>';
         headerHTML += '</tr>';
 
         let bodyHTML = '';
@@ -1541,7 +1608,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
             bodyHTML += `<td>${identificador}</td>`;
             bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
 
-            if (isGerente) {
+            if (podeVerAnexos) {
                 if (temAnexo) {
                     bodyHTML += `<td><button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📄 Ver</button></td>`;
                 } else {
@@ -1579,7 +1646,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
         }
     });
     headerHTML += '<th>Fiscal</th><th>Data</th><th>Pontos</th>';
-    if (isGerente) headerHTML += '<th>Anexo</th>';
+    if (podeVerAnexos) headerHTML += '<th>Anexo</th>';
     headerHTML += '</tr>';
 
     let bodyHTML = '';
@@ -1697,7 +1764,11 @@ async function abrirDetalhesAdminHist(id) {
     const { data: { user } } = await getAuthUser();
     const userIdAtual = user ? user.id : null;
 
-    const isAdmin = window.userRoleGlobal === 'administrador de posturas' || window.userRoleGlobal === 'admin';
+    var roleLowerRaw = (window.userRoleGlobal || '').toLowerCase();
+    // Hierarquia de permissões: Secretário > Diretor > Gerente > Administrativo/Outros
+    const isCargoGerencia = isGerenteOuSuperior(window.userRoleGlobal) || 
+                            roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
+                            roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura');
     const isDono = reg.user_id === userIdAtual;
 
     const vEntrada = campos.data_entrada || '';
@@ -1708,7 +1779,7 @@ async function abrirDetalhesAdminHist(id) {
     let btnSalvar = '';
 
     if (reg.categoria_id !== '11') {
-        if (isAdmin) {
+        if (isCargoGerencia) {
             htmlCampos += `<div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de Entrada (Admin)</label>
                 <input type="date" id="admin-data-entrada" value="${vEntrada}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
@@ -1746,9 +1817,15 @@ async function abrirDetalhesAdminHist(id) {
             htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Resposta do Fiscal:</strong> ${vResposta || '—'}</div>`;
         }
 
-        if (isAdmin || isDono) {
-            btnSalvar = `<button onclick="salvarDetalhesHist('${reg.id}')" style="width:100%; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-top:20px; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
+        if (isCargoGerencia || isDono) {
+            btnSalvar = `<button onclick="salvarDetalhesHist('${reg.id}')" style="flex:1; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
         }
+    }
+
+    // Botão de excluir apenas para o dono do registro
+    let btnExcluir = '';
+    if (isDono) {
+        btnExcluir = `<button onclick="excluirRegistroHistGeral('${reg.id}', '${reg.categoria_id}')" style="flex:1; padding:12px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">Excluir</button>`;
     }
 
     const modal = document.createElement('div');
@@ -1762,7 +1839,10 @@ async function abrirDetalhesAdminHist(id) {
             <div style="max-height:65vh; overflow-y:auto; font-size:15px; color:#334155; padding-right:8px;">
                 ${htmlCampos}
             </div>
-            ${btnSalvar}
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                ${btnSalvar}
+                ${btnExcluir}
+            </div>
         </div>
     `;
 
@@ -1774,6 +1854,12 @@ async function abrirDetalhesAdminHist(id) {
 }
 
 async function salvarDetalhesHist(id) {
+    // Verificar conexão antes de salvar
+    const conexaoOK = await verificarConexaoAntesDeSalvar();
+    if (!conexaoOK) {
+        return;
+    }
+
     const reg = registrosGeralAtual.find(r => r.id === id);
     if (!reg) return;
 
@@ -1839,6 +1925,60 @@ async function salvarDetalhesHist(id) {
     } catch (err) {
         console.error("Erro ao salvar detalhes:", err);
         alert(err.message || 'Erro ao salvar no banco de dados. Tente novamente.');
+    }
+}
+
+// --- EXCLUIR REGISTRO DO HISTÓRICO GERAL ---
+async function excluirRegistroHistGeral(id, categoriaId) {
+    // Verificar conexão antes de excluir
+    const conexaoOK = await verificarConexaoAntesDeSalvar();
+    if (!conexaoOK) {
+        return;
+    }
+
+    const confirma = confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.');
+    if (!confirma) return;
+
+    try {
+        // Verificar se o usuário é o dono do registro
+        const reg = registrosGeralAtual.find(r => r.id === id);
+        if (!reg) {
+            alert('Registro não encontrado.');
+            return;
+        }
+
+        const { data: { user } } = await getAuthUser();
+        if (reg.user_id !== user.id) {
+            alert('Você só pode excluir registros criados por você.');
+            return;
+        }
+
+        const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoriaId);
+        const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
+
+        const { error } = await supabaseClient
+            .from(targetTable)
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Erro ao excluir:', error);
+            alert('Erro ao excluir: ' + error.message);
+            return;
+        }
+
+        // Fechar modal
+        const modal = document.getElementById('modal-detalhes-admin-hist');
+        if (modal) modal.remove();
+
+        // Atualizar tabela
+        registrosGeralAtual = registrosGeralAtual.filter(r => r.id !== id);
+        renderizarTabelaGeral(registrosGeralAtual, categoriaId);
+
+        alert('Registro excluído com sucesso.');
+    } catch (err) {
+        console.error('Erro ao excluir registro:', err);
+        alert('Erro ao excluir. Tente novamente.');
     }
 }
 

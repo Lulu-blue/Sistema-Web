@@ -2,6 +2,162 @@
 // Script exclusivo para a aba Gerência Institucional
 // Reutiliza a instância do supabaseClient do protecao.js
 
+// --- FUNÇÕES DE HIERARQUIA DE PERMISSÕES ---
+function getNivelHierarquico(role) {
+    if (!role) return 0;
+    const roleLower = role.toLowerCase();
+    if (roleLower.includes('secretário') || roleLower.includes('secretario')) return 3;
+    if (roleLower.includes('diretor')) return 2;
+    if (roleLower.includes('gerente')) return 1;
+    return 0;
+}
+
+function isGerenteOuSuperior(role) {
+    return getNivelHierarquico(role) >= 1;
+}
+
+function isDiretorOuSuperior(role) {
+    return getNivelHierarquico(role) >= 2;
+}
+
+function isSecretario(role) {
+    return getNivelHierarquico(role) >= 3;
+}
+
+function podeGerenciarFiscais(role) {
+    // Gerente, Diretor e Secretário podem gerenciar fiscais
+    return isGerenteOuSuperior(role);
+}
+
+// --- FUNÇÕES DE TRANSFERÊNCIA DE TAREFAS ---
+// Função para buscar usuário por nome e matrícula
+async function buscarUsuarioPorNomeMatricula(nome, matricula) {
+    try {
+        var { data, error } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, matricula, role')
+            .ilike('full_name', '%' + nome + '%')
+            .eq('matricula', matricula)
+            .eq('ativo', true)
+            .maybeSingle();
+        
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.error('Erro ao buscar usuário:', err);
+        return null;
+    }
+}
+
+// Função para transferir tarefas de um usuário para outro
+async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeDestino) {
+    try {
+        var resultados = {
+            tarefasCriadas: 0,
+            tarefasResponsavel: 0,
+            erro: null
+        };
+
+        // 1. Transferir tarefas onde o usuário desativado é o criador
+        var { data: tarefasCriadas, error: err1 } = await supabaseClient
+            .from('tarefas')
+            .select('id')
+            .eq('criado_por', usuarioOrigemId);
+        
+        if (err1) throw err1;
+
+        if (tarefasCriadas && tarefasCriadas.length > 0) {
+            var { error: updateErr1 } = await supabaseClient
+                .from('tarefas')
+                .update({ criado_por: usuarioDestinoId })
+                .eq('criado_por', usuarioOrigemId);
+            
+            if (updateErr1) throw updateErr1;
+            resultados.tarefasCriadas = tarefasCriadas.length;
+        }
+
+        // 2. Transferir responsabilidades em tarefa_responsaveis
+        // Primeiro, verificar se já existe responsabilidade do novo usuário
+        var { data: responsaveisOrigem, error: err2 } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('*')
+            .eq('user_id', usuarioOrigemId);
+        
+        if (err2) throw err2;
+
+        if (responsaveisOrigem && responsaveisOrigem.length > 0) {
+            for (var i = 0; i < responsaveisOrigem.length; i++) {
+                var resp = responsaveisOrigem[i];
+                
+                // Verificar se o novo usuário já é responsável por esta tarefa
+                var { data: existeDestino, error: errExiste } = await supabaseClient
+                    .from('tarefa_responsaveis')
+                    .select('id')
+                    .eq('tarefa_id', resp.tarefa_id)
+                    .eq('user_id', usuarioDestinoId)
+                    .maybeSingle();
+                
+                if (errExiste) throw errExiste;
+
+                if (existeDestino) {
+                    // Já existe, apenas remover o antigo
+                    await supabaseClient
+                        .from('tarefa_responsaveis')
+                        .delete()
+                        .eq('id', resp.id);
+                } else {
+                    // Atualizar para o novo usuário
+                    var { error: updateErr2 } = await supabaseClient
+                        .from('tarefa_responsaveis')
+                        .update({ 
+                            user_id: usuarioDestinoId,
+                            user_name: nomeDestino
+                        })
+                        .eq('id', resp.id);
+                    
+                    if (updateErr2) throw updateErr2;
+                }
+            }
+            resultados.tarefasResponsavel = responsaveisOrigem.length;
+        }
+
+        // 3. Transferir subtarefas onde o usuário desativado é o criador
+        var { data: subtarefasCriadas, error: err3 } = await supabaseClient
+            .from('tarefas')
+            .select('id')
+            .eq('criado_por', usuarioOrigemId)
+            .not('tarefa_pai_id', 'is', null);
+        
+        if (err3) throw err3;
+
+        if (subtarefasCriadas && subtarefasCriadas.length > 0) {
+            var { error: updateErr3 } = await supabaseClient
+                .from('tarefas')
+                .update({ criado_por: usuarioDestinoId })
+                .eq('criado_por', usuarioOrigemId)
+                .not('tarefa_pai_id', 'is', null);
+            
+            if (updateErr3) throw updateErr3;
+            resultados.subtarefasCriadas = subtarefasCriadas.length;
+        }
+
+        return resultados;
+    } catch (err) {
+        console.error('Erro ao transferir tarefas:', err);
+        return { erro: err.message };
+    }
+}
+
+function podeGerenciarGerentes(role) {
+    // Apenas Diretor e Secretário podem gerenciar gerentes
+    return isDiretorOuSuperior(role);
+}
+
+function podeGerenciarDiretores(role) {
+    // Apenas Secretário pode gerenciar diretores
+    return isSecretario(role);
+}
+
 let graficoBairrosInstance = null;
 let graficoFiscaisInstance = null;
 
@@ -12,7 +168,7 @@ async function carregarGraficoFiscais() {
         const { data: fiscais, error: errFiscais } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url')
-            .in('role', ['fiscal', 'Fiscal de Posturas', 'fiscal de posturas']);
+            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura']);
 
         if (errFiscais) throw errFiscais;
         if (!fiscais || fiscais.length === 0) {
@@ -99,6 +255,7 @@ async function carregarGraficoFiscais() {
             html += '<div style="width:100%;height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;">';
             html += '<div style="width:' + larguraBarra + '%;height:100%;background:' + cor + ';border-radius:5px;transition:width 0.6s ease;"></div>';
             html += '</div></div>';
+            html += '<button onclick="event.stopPropagation();abrirEstatisticasFuncionario(\'' + f.id + '\', \'' + f.nome.replace(/'/g, "\\'") + '\', \'Fiscal\')" title="Ver estatísticas" style="background:none;border:none;cursor:pointer;padding:6px;transition:opacity 0.2s;opacity:0.4;" onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'0.4\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></button>';
             html += '<button onclick="event.stopPropagation();abrirExcluirFiscal(\'' + f.id + '\', \'' + f.nome.replace(/'/g, "\\'") + '\')" title="Excluir fiscal" style="background:none;border:none;cursor:pointer;padding:6px;transition:opacity 0.2s;opacity:0.4;" onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'0.4\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>';
             html += '</div>';
         });
@@ -113,6 +270,149 @@ async function carregarGraficoFiscais() {
 
     } catch (err) {
         console.error("Erro ao carregar grafico de fiscais:", err);
+    }
+}
+
+// Ranking de Fiscais na Home do Gerente — Gráfico de Barras Verticais
+let graficoRankingFiscaisInstance = null;
+
+async function carregarRankingFiscaisHome() {
+    try {
+        // 1. Buscar todos os fiscais
+        const { data: fiscais, error: errFiscais } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url')
+            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura']);
+
+        if (errFiscais) throw errFiscais;
+        if (!fiscais || fiscais.length === 0) {
+            console.log("Nenhum fiscal encontrado para o ranking.");
+            return;
+        }
+
+        // 2. Buscar pontuação total (sem limite de 30 dias)
+        const { data: registros } = await supabaseClient
+            .from('registros_produtividade')
+            .select('user_id, pontuacao')
+            .in('user_id', fiscais.map(f => f.id));
+
+        const { data: regCP } = await supabaseClient
+            .from('controle_processual')
+            .select('user_id, pontuacao')
+            .in('user_id', fiscais.map(f => f.id));
+
+        // 3. Agrupar pontuação
+        var mapPontuacao = {};
+        if (registros) {
+            registros.forEach(function (r) {
+                if (!mapPontuacao[r.user_id]) mapPontuacao[r.user_id] = 0;
+                mapPontuacao[r.user_id] += (r.pontuacao || 0);
+            });
+        }
+        if (regCP) {
+            regCP.forEach(function (r) {
+                if (!mapPontuacao[r.user_id]) mapPontuacao[r.user_id] = 0;
+                mapPontuacao[r.user_id] += (r.pontuacao || 0);
+            });
+        }
+
+        // 4. Montar dados dos fiscais
+        var dadosFiscais = [];
+
+        fiscais.forEach(function (f) {
+            var pts = mapPontuacao[f.id] || 0;
+            dadosFiscais.push({ 
+                nome: f.full_name || 'Sem Nome', 
+                pontos: pts 
+            });
+        });
+
+        // Ordenar por pontuação (maior primeiro) e pegar top 10
+        dadosFiscais.sort(function (a, b) { return b.pontos - a.pontos; });
+        dadosFiscais = dadosFiscais.slice(0, 10);
+
+        // 5. Criar gráfico de barras verticais
+        const canvas = document.getElementById('grafico-ranking-fiscais-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        // Destruir gráfico anterior se existir
+        if (graficoRankingFiscaisInstance) {
+            graficoRankingFiscaisInstance.destroy();
+        }
+
+        const cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
+
+        graficoRankingFiscaisInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: dadosFiscais.map(f => f.nome.split(' ')[0]), // Primeiro nome apenas
+                datasets: [{
+                    label: 'Pontuação',
+                    data: dadosFiscais.map(f => f.pontos),
+                    backgroundColor: dadosFiscais.map((_, i) => cores[i % cores.length]),
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                return dadosFiscais[context[0].dataIndex].nome;
+                            },
+                            label: function(context) {
+                                return context.parsed.y + ' pontos';
+                            }
+                        },
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { size: 11 },
+                            color: '#64748b'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { size: 11 },
+                            color: '#64748b',
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                },
+                animation: {
+                    duration: 1000,
+                    easing: 'easeOutQuart'
+                }
+            }
+        });
+
+        console.log("Gráfico de ranking de fiscais (barras verticais) renderizado com sucesso.");
+
+    } catch (err) {
+        console.error("Erro ao carregar ranking de fiscais:", err);
     }
 }
 
@@ -621,18 +921,55 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         // Filtrar registros omitindo pontuação 0
         const registrosFiltrados = todosRegs.filter(r => (r.pontuacao || 0) !== 0);
 
-        if (registrosFiltrados.length === 0) {
-            alert('Nenhum registro com pontuação encontrado para ' + nomeFiscal);
-            return;
+        // 2. Buscar tarefas do fiscal
+        const { data: tarefasFiscal } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('tarefa_id')
+            .eq('user_id', fiscalId);
+
+        let tarefasStatus = { concluidas: 0, emProgresso: 0, atrasadas: 0 };
+        
+        if (tarefasFiscal && tarefasFiscal.length > 0) {
+            const tarefaIds = tarefasFiscal.map(t => t.tarefa_id);
+            const { data: tarefas } = await supabaseClient
+                .from('tarefas')
+                .select('status, prazo')
+                .in('id', tarefaIds);
+            
+            if (tarefas) {
+                const hoje = new Date().toISOString().split('T')[0];
+                tarefas.forEach(t => {
+                    const prazoVencido = t.prazo && t.prazo < hoje;
+                    if (t.status === 'concluida') {
+                        tarefasStatus.concluidas++;
+                    } else if (prazoVencido) {
+                        tarefasStatus.atrasadas++;
+                    } else {
+                        tarefasStatus.emProgresso++;
+                    }
+                });
+            }
         }
 
         const anoAtual = new Date().getFullYear();
+        const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
 
-        // 2. Agrupar registros por categoria
+        // 3. Preparar dados para gráfico de pizza (tipos de documentos)
+        const docPorTipo = {};
+        registrosFiltrados.forEach(r => {
+            const catId = r.categoria_id || 'outros';
+            let catNome = 'Outros';
+            if (typeof CATEGORIAS !== 'undefined') {
+                const cDef = CATEGORIAS.find(c => c.id === catId);
+                if (cDef) catNome = cDef.nome;
+            }
+            docPorTipo[catNome] = (docPorTipo[catNome] || 0) + 1;
+        });
+
+        // 4. Gerar tabelas por categoria
         const porCategoria = {};
         registrosFiltrados.forEach(r => {
             const catId = r.categoria_id || 'outros';
-            // Tenta encontrar o nome da categoria usando a global CATEGORIAS se disponível
             let catNome = 'Categoria ' + catId;
             if (typeof CATEGORIAS !== 'undefined') {
                 const cDef = CATEGORIAS.find(c => c.id === catId);
@@ -647,14 +984,9 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             porCategoria[catId].registros.push(r);
         });
 
-        const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
-
-        // 3. Gerar tabelas por categoria
         let secoesHTML = '';
         Object.values(porCategoria).forEach(cat => {
-            // Tenta obter a definição da categoria para saber quais campos exibir
             const catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(c => c.nome === cat.nome) : null;
-            
             const temNumero = cat.registros.some(r => r.numero_sequencial);
             const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco) || [];
 
@@ -668,8 +1000,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                 let tds = '';
                 if (temNumero) tds += `<td contenteditable="true">${r.numero_sequencial || '-'}</td>`;
                 tds += camposDef.map(c => `<td contenteditable="true">${(r.campos && r.campos[c.nome]) || '-'}</td>`).join('');
-                
-                // Formatação de data (usa obterDataReal se disponível, senão fallback)
+
                 let dataFormatada = '-';
                 if (typeof obterDataReal === 'function') {
                     dataFormatada = obterDataReal(r).toLocaleDateString('pt-BR');
@@ -697,34 +1028,56 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             `;
         });
 
-        // 4. Criar modal do relatório (id diferente para não conflitar com o do fiscal caso ambos estejam abertos)
+        // 5. Criar modal com layout de duas colunas
         const modalHTML = `
-            <div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()">
-                <div class="relatorio-preview" id="relatorio-gerente-conteudo">
-                    <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
-                    <div class="relatorio-info">
-                        <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
-                        <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
-                        <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
-                        <div><strong>Total de Registros:</strong> ${todosRegs.length}</div>
-                    </div>
-                    ${secoesHTML}
-
-                    <div class="relatorio-assinaturas" style="display: flex; justify-content: space-around; margin-top: 60px; padding-bottom: 30px; text-align: center; page-break-inside: avoid;">
-                        <div>
-                            <p style="margin: 0;">_________________________________________</p>
-                            <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
-                            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+            <div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()" style="overflow-y:auto;">
+                <div style="display:flex;gap:20px;padding:20px;max-width:1400px;margin:0 auto;align-items:flex-start;">
+                    <!-- COLUNA ESQUERDA: Relatório -->
+                    <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5;max-height:90vh;overflow-y:auto;">
+                        <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
+                        <div class="relatorio-info">
+                            <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
+                            <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
+                            <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
+                            <div><strong>Total de Registros:</strong> ${todosRegs.length}</div>
                         </div>
-                        <div>
-                            <p style="margin: 0;">_________________________________________</p>
-                            <p style="margin: 5px 0 0 0;"><strong>Gerente de Alvarás e Posturas</strong></p>
+                        ${secoesHTML}
+
+                        <div class="relatorio-assinaturas" style="display: flex; justify-content: space-around; margin-top: 60px; padding-bottom: 30px; text-align: center; page-break-inside: avoid;">
+                            <div>
+                                <p style="margin: 0;">_________________________________________</p>
+                                <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
+                                <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+                            </div>
+                            <div>
+                                <p style="margin: 0;">_________________________________________</p>
+                                <p style="margin: 5px 0 0 0;"><strong>Gerente de Alvarás e Posturas</strong></p>
+                            </div>
+                        </div>
+
+                        <div class="relatorio-acoes" id="relatorio-gerente-acoes">
+                            <button class="btn-cancelar-rel" onclick="fecharRelatorioGerente()">Cancelar</button>
+                            <button class="btn-salvar-pdf" onclick="salvarPDFGerente()">💾 Salvar como PDF</button>
                         </div>
                     </div>
 
-                    <div class="relatorio-acoes" id="relatorio-gerente-acoes">
-                        <button class="btn-cancelar-rel" onclick="fecharRelatorioGerente()">Cancelar</button>
-                        <button class="btn-salvar-pdf" onclick="salvarPDFGerente()">💾 Salvar como PDF</button>
+                    <!-- COLUNA DIREITA: Gráficos -->
+                    <div style="flex:0.8;display:flex;flex-direction:column;gap:20px;max-height:90vh;">
+                        <!-- Gráfico de Pizza: Tipos de Documentos -->
+                        <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <h3 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">Documentos por Tipo</h3>
+                            <div style="position:relative;height:250px;">
+                                <canvas id="grafico-pizza-docs"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico de Colunas: Status das Tarefas -->
+                        <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <h3 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">Status das Tarefas</h3>
+                            <div style="position:relative;height:200px;">
+                                <canvas id="grafico-colunas-tarefas"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -732,15 +1085,125 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
 
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
+        // 6. Renderizar gráficos
+        renderizarGraficosFiscal(docPorTipo, tarefasStatus);
+
     } catch (err) {
         console.error("Erro ao gerar relatório do fiscal:", err);
         alert("Erro ao gerar relatório: " + (err.message || err));
     }
 }
 
+// Função para renderizar gráficos do fiscal
+function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
+    // Gráfico de Pizza - Documentos por Tipo
+    const canvasPizza = document.getElementById('grafico-pizza-docs');
+    if (canvasPizza && typeof Chart !== 'undefined' && Object.keys(docPorTipo).length > 0) {
+        // Destruir gráfico anterior se existir
+        if (canvasPizza.chartInstance) {
+            canvasPizza.chartInstance.destroy();
+        }
+        
+        const cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
+        
+        canvasPizza.chartInstance = new Chart(canvasPizza, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(docPorTipo),
+                datasets: [{
+                    data: Object.values(docPorTipo),
+                    backgroundColor: cores.slice(0, Object.keys(docPorTipo).length),
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { size: 11 },
+                            padding: 10,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else if (canvasPizza) {
+        canvasPizza.parentElement.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px;">Nenhum documento encontrado</div>';
+    }
+
+    // Gráfico de Colunas - Status das Tarefas
+    const canvasColunas = document.getElementById('grafico-colunas-tarefas');
+    if (canvasColunas && typeof Chart !== 'undefined') {
+        // Destruir gráfico anterior se existir
+        if (canvasColunas.chartInstance) {
+            canvasColunas.chartInstance.destroy();
+        }
+        
+        canvasColunas.chartInstance = new Chart(canvasColunas, {
+            type: 'bar',
+            data: {
+                labels: ['Concluídas', 'Em Progresso', 'Atrasadas'],
+                datasets: [{
+                    label: 'Quantidade',
+                    data: [tarefasStatus.concluidas, tarefasStatus.emProgresso, tarefasStatus.atrasadas],
+                    backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+}
+
 function fecharRelatorioGerente() {
     var modal = document.getElementById('modal-relatorio-gerente');
-    if (modal) modal.remove();
+    if (modal) {
+        // Destruir gráficos antes de remover o modal para liberar memória
+        var canvasPizza = document.getElementById('grafico-pizza-docs');
+        var canvasColunas = document.getElementById('grafico-colunas-tarefas');
+        
+        if (canvasPizza && canvasPizza.chartInstance) {
+            canvasPizza.chartInstance.destroy();
+        }
+        if (canvasColunas && canvasColunas.chartInstance) {
+            canvasColunas.chartInstance.destroy();
+        }
+        
+        modal.remove();
+    }
 }
 
 function salvarPDFGerente() {
@@ -863,7 +1326,7 @@ async function salvarNovoFiscal() {
 
             if (signUpErr) {
                 if (signUpErr.message && signUpErr.message.includes('already registered')) {
-                     throw new Error('Usuário já registrado no Auth. Contate o suporte.');
+                    throw new Error('Usuário já registrado no Auth. Contate o suporte.');
                 }
                 throw signUpErr;
             }
@@ -893,6 +1356,8 @@ async function salvarNovoFiscal() {
             var modal = document.getElementById('modal-novo-fiscal');
             if (modal) modal.remove();
             if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+        if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
+            if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
         }, 1500);
 
     } catch (err) {
@@ -920,13 +1385,13 @@ function abrirExcluirFiscal(fiscalId, nomeFiscal) {
         + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
         + '<button onclick="document.getElementById(\'modal-excluir-fiscal\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
         + '<div style="text-align:center;margin-bottom:20px;">'
-        + '<div style="width:50px;height:50px;border-radius:50%;background:#fef2f2;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">⚠️</div>'
-        + '<h2 style="margin:0;color:#dc2626;">Excluir Fiscal</h2>'
-        + '<p style="color:#64748b;margin:8px 0 0 0;">Voc\u00ea est\u00e1 prestes a excluir a conta de:</p>'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#fff7ed;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">🚫</div>'
+        + '<h2 style="margin:0;color:#c2410c;">Desativar Fiscal</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a desativar:</p>'
         + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeFiscal + '</p>'
         + '</div>'
-        + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:16px;">'
-        + '<p style="color:#dc2626;font-size:13px;margin:0;"><strong>\u26a0 Esta a\u00e7\u00e3o \u00e9 irrevers\u00edvel!</strong> Todos os dados deste fiscal ser\u00e3o removidos permanentemente.</p>'
+        + '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#c2410c;font-size:13px;margin:0;"><strong>ℹ️ Atenção:</strong> O fiscal será desativado e não poderá mais acessar o sistema. O histórico de documentos será preservado.</p>'
         + '</div>'
         + '<div style="margin-bottom:14px;">'
         + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Seu CPF (gerente)</label>'
@@ -936,12 +1401,31 @@ function abrirExcluirFiscal(fiscalId, nomeFiscal) {
         + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Sua Senha</label>'
         + '<input type="password" id="excluir-senha-gerente" placeholder="Sua senha" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
+        + '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">'
+        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" id="chk-transferir-tarefas" style="width:18px;height:18px;accent-color:#c2410c;" onchange="toggleTransferenciaTarefas()">'
+        + '<span style="font-weight:600;color:#334155;">Transferir tarefas para outro usuário</span>'
+        + '</label>'
+        + '</div>'
+        + '<div id="secao-transferencia" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">'
+        + '<p style="color:#166534;font-size:12px;margin:0 0 10px 0;"><strong>ℹ️ Nova funcionalidade:</strong> As tarefas deste usuário serão transferidas para o novo responsável.</p>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome do novo responsável</label>'
+        + '<input type="text" id="transferir-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula do novo responsável</label>'
+        + '<input type="text" id="transferir-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<button onclick="buscarNovoResponsavel()" style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Buscar Usuário</button>'
+        + '<div id="resultado-busca-usuario" style="margin-top:10px;"></div>'
+        + '</div>'
         + '<div style="margin-bottom:16px;">'
-        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">EXCLUIR</strong> para confirmar</label>'
-        + '<input type="text" id="excluir-confirmacao" placeholder="EXCLUIR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-confirmacao" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
         + '<div id="msg-excluir-fiscal" style="margin-bottom:12px;font-size:13px;"></div>'
-        + '<button onclick="executarExclusaoFiscal(\'' + fiscalId + '\', \'' + nomeFiscal.replace(/'/g, "\\'") + '\')" id="btn-confirmar-exclusao" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Exclus\u00e3o</button>'
+        + '<button onclick="executarExclusaoFiscal(\'' + fiscalId + '\', \'' + nomeFiscal.replace(/'/g, "\\'") + '\')" id="btn-confirmar-exclusao" style="width:100%;padding:12px;background:#c2410c;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Desativação</button>'
         + '</div>';
 
     document.body.appendChild(modal);
@@ -951,10 +1435,46 @@ function abrirExcluirFiscal(fiscalId, nomeFiscal) {
     });
 }
 
+// Toggle para mostrar/ocultar seção de transferência
+function toggleTransferenciaTarefas() {
+    var chk = document.getElementById('chk-transferir-tarefas');
+    var secao = document.getElementById('secao-transferencia');
+    if (chk && secao) {
+        secao.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Buscar novo responsável para transferência
+var novoResponsavelSelecionado = null;
+async function buscarNovoResponsavel() {
+    var nome = document.getElementById('transferir-nome').value.trim();
+    var matricula = document.getElementById('transferir-matricula').value.trim();
+    var resultadoDiv = document.getElementById('resultado-busca-usuario');
+    
+    if (!nome || !matricula) {
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
+        return;
+    }
+    
+    resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
+    
+    var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
+    
+    if (usuario) {
+        novoResponsavelSelecionado = usuario;
+        resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
+    } else {
+        novoResponsavelSelecionado = null;
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Usuário não encontrado. Verifique nome e matrícula.</p>';
+    }
+}
+
+// DESATIVAR FISCAL (Soft Delete - apenas muda o cargo para inativo)
 async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
     var cpfGerente = document.getElementById('excluir-cpf-gerente').value.replace(/\D/g, '');
     var senhaGerente = document.getElementById('excluir-senha-gerente').value;
     var confirmacao = document.getElementById('excluir-confirmacao').value.trim();
+    var chkTransferir = document.getElementById('chk-transferir-tarefas');
     var msgEl = document.getElementById('msg-excluir-fiscal');
     var btnExcluir = document.getElementById('btn-confirmar-exclusao');
 
@@ -969,10 +1489,19 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
         msgEl.style.color = '#ef4444';
         return;
     }
-    if (confirmacao !== 'EXCLUIR') {
-        msgEl.textContent = 'Digite EXCLUIR (em maiusculo) para confirmar.';
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR (em maiusculo) para confirmar.';
         msgEl.style.color = '#ef4444';
         return;
+    }
+    
+    // Validar transferência se checkbox marcado
+    if (chkTransferir && chkTransferir.checked) {
+        if (!novoResponsavelSelecionado) {
+            msgEl.textContent = 'Busque e selecione um novo responsável para transferir as tarefas.';
+            msgEl.style.color = '#ef4444';
+            return;
+        }
     }
 
     btnExcluir.textContent = 'Verificando...';
@@ -1003,7 +1532,7 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
             throw new Error('CPF ou senha incorretos. Verifique suas credenciais.');
         }
 
-        // Restaurar sessao do gerente antes de deletar
+        // Restaurar sessao do gerente antes de desativar
         if (refreshGerente) {
             await supabaseClient.auth.setSession({
                 access_token: tokenGerente,
@@ -1011,28 +1540,55 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
             });
         }
 
-        // Desativar perfil do fiscal (Exclusão Lógica)
+        // TRANSFERIR TAREFAS se solicitado
+        if (chkTransferir && chkTransferir.checked && novoResponsavelSelecionado) {
+            btnExcluir.textContent = 'Transferindo tarefas...';
+            var resultadoTransferencia = await transferirTarefasUsuario(
+                fiscalId, 
+                novoResponsavelSelecionado.id, 
+                novoResponsavelSelecionado.full_name
+            );
+            
+            if (resultadoTransferencia.erro) {
+                throw new Error('Erro na transferência de tarefas: ' + resultadoTransferencia.erro);
+            }
+        }
+
+        // DESATIVAR fiscal (Soft Delete - apenas muda o cargo para inativo)
+        // O histórico de documentos é preservado
         var { error: deleteErr } = await supabaseClient
             .from('profiles')
-            .update({ role: 'inativo' })
+            .update({ 
+                role: 'inativo',
+                ativo: false 
+            })
             .eq('id', fiscalId);
 
         if (deleteErr) throw deleteErr;
 
-        msgEl.innerHTML = '<strong>' + nomeFiscal + '</strong> foi desativado com sucesso.';
+        var msgSucesso = '<strong>' + nomeFiscal + '</strong> foi desativado com sucesso.';
+        if (chkTransferir && chkTransferir.checked && novoResponsavelSelecionado) {
+            msgSucesso += '<br><small>Tarefas transferidas para ' + novoResponsavelSelecionado.full_name + '.</small>';
+        }
+        msgSucesso += '<br><small>O histórico de documentos foi preservado.</small>';
+        msgEl.innerHTML = msgSucesso;
         msgEl.style.color = '#10b981';
 
-        // Fechar e atualizar ranking imediatamente
-        var modal = document.getElementById('modal-excluir-fiscal');
-        if (modal) modal.remove();
-        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+        // Limpar variável global
+        novoResponsavelSelecionado = null;
+
+        // Fechar e atualizar ranking
+        setTimeout(function() {
+            var modal = document.getElementById('modal-excluir-fiscal');
+            if (modal) modal.remove();
+            if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+        }, 2500);
 
     } catch (err) {
-        console.error('Erro ao excluir fiscal:', err);
-        msgEl.textContent = err.message || 'Erro ao excluir fiscal.';
+        console.error('Erro ao desativar fiscal:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar fiscal.';
         msgEl.style.color = '#ef4444';
-    } finally {
-        btnExcluir.textContent = 'Confirmar Exclusao';
+        btnExcluir.textContent = 'Confirmar Desativação';
         btnExcluir.disabled = false;
     }
 }
@@ -1220,7 +1776,7 @@ function abrirConsoleGerente() {
             <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="max-width: 800px;">
                 
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://www.anapolis.go.gov.br/wp-content/uploads/2021/01/brasao.png" alt="Brasão Anápolis" style="width: 80px; margin-bottom: 10px;">
+                    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #0c3e2b, #062117); border-radius: 50%; margin-bottom: 10px; display: flex; align-items: center; center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">S</div>
                     <h3 style="margin: 0; font-size: 1.1rem; text-transform: uppercase;">Prefeitura do Município de Anápolis</h3>
                     <h4 style="margin: 5px 0 0 0; font-weight: normal; color: #475569;">Secretaria Municipal de Economia e Planejamento</h4>
                     <h4 style="margin: 2px 0 0 0; font-weight: normal; color: #475569;">Gerência Fiscalização de Posturas</h4>
@@ -1763,7 +2319,7 @@ async function mostrarSelecaoFiscais() {
         var { data: fiscais, error } = await supabaseClient
             .from('profiles')
             .select('id, full_name, role')
-            .in('role', ['fiscal', 'Fiscal de Posturas', 'fiscal de posturas'])
+            .in('role', ['fiscal', 'Fiscal', 'Fiscal de Posturas', 'fiscal de posturas', 'Fiscal de Postura', 'fiscal de postura'])
             .order('full_name', { ascending: true });
 
         if (error) throw error;
@@ -1909,6 +2465,7 @@ async function reverterRotacaoAreas() {
 async function carregarDashboardDiretor() {
     try {
         await carregarGerentesHierarquiaDiretor();
+        await carregarGerentesAmbientalHierarquiaDiretor();
         // Carregar tarefas do diretor
         if (typeof carregarMinhasTarefasHome === 'function') {
             carregarMinhasTarefasHome('diretor-minhas-tarefas');
@@ -1928,7 +2485,7 @@ async function carregarGerentesHierarquiaDiretor() {
         var { data: gerentes, error: errGerentes } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url, email_real, matricula')
-            .in('role', ['gerente', 'Gerente', 'gerente fiscal', 'Gerente Fiscal', 'gerente de posturas', 'Gerente de Posturas']);
+            .in('role', ['Gerente', 'Gerente de Posturas', 'Gerente de Postura', 'gerente de posturas', 'gerente de postura']);
 
         if (errGerentes) throw errGerentes;
 
@@ -1944,9 +2501,9 @@ async function carregarGerentesHierarquiaDiretor() {
         var html = '';
         var cores = ['#8b5cf6', '#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#06b6d4'];
 
-        gerentes.forEach(function(gerente, index) {
+        gerentes.forEach(function (gerente, index) {
             var cor = cores[index % cores.length];
-            
+
             var fotoHtml = '';
             if (gerente.avatar_url) {
                 fotoHtml = '<img src="' + gerente.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + ';">';
@@ -1954,8 +2511,8 @@ async function carregarGerentesHierarquiaDiretor() {
                 fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + ';">' + (gerente.full_name ? gerente.full_name.charAt(0).toUpperCase() : 'G') + '</div>';
             }
 
-            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';">';
-            
+            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Posturas\')">';
+
             html += '<div style="display:flex;align-items:center;gap:12px;">';
             html += fotoHtml;
             html += '<div style="flex:1;">';
@@ -1965,9 +2522,9 @@ async function carregarGerentesHierarquiaDiretor() {
                 html += '<div style="font-size:11px;color:#94a3b8;">' + gerente.email_real + '</div>';
             }
             html += '</div>';
-            
+
             // Botao de exclusao
-            html += '<div style="display:flex;gap:8px;">';
+            html += '<div style="display:flex;gap:8px;" onclick="event.stopPropagation();">';
             html += '<button onclick="abrirExcluirGerenteDiretor(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
             html += '</div>';
             html += '</div>';
@@ -1984,6 +2541,77 @@ async function carregarGerentesHierarquiaDiretor() {
 
     } catch (err) {
         console.error("Erro ao carregar gerentes:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar gerentes.</div>';
+    }
+}
+
+// Carrega a lista de Gerentes de Regularização Ambiental
+async function carregarGerentesAmbientalHierarquiaDiretor() {
+    var container = document.getElementById('diretor-gerentes-ambiental-hierarquia');
+    if (!container) return;
+
+    try {
+        // Buscar todos os gerentes de regularização ambiental
+        var { data: gerentes, error: errGerentes } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, email_real, matricula')
+            .in('role', ['Gerente de Regularização Ambiental', 'gerente de regularização ambiental', 
+                         'Gerente de Regularizacao Ambiental', 'gerente de regularizacao ambiental']);
+
+        if (errGerentes) throw errGerentes;
+
+        // Atualizar contador
+        var elTotal = document.getElementById('diretor-total-gerentes-ambiental');
+        if (elTotal) elTotal.innerText = gerentes ? gerentes.length : 0;
+
+        if (!gerentes || gerentes.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum gerente de regularização ambiental cadastrado.</div>';
+            return;
+        }
+
+        var html = '';
+        var cores = ['#3b82f6', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#ec4899'];
+
+        gerentes.forEach(function(gerente, index) {
+            var cor = cores[index % cores.length];
+
+            var fotoHtml = '';
+            if (gerente.avatar_url) {
+                fotoHtml = '<img src="' + gerente.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + '">';
+            } else {
+                fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + '">' + (gerente.full_name ? gerente.full_name.charAt(0).toUpperCase() : 'G') + '</div>';
+            }
+
+            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Regularização Ambiental\')">';
+
+            html += '<div style="display:flex;align-items:center;gap:12px;">';
+            html += fotoHtml;
+            html += '<div style="flex:1;">';
+            html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (gerente.full_name || 'Sem Nome') + '</div>';
+            html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (gerente.matricula || '---') + '</div>';
+            if (gerente.email_real) {
+                html += '<div style="font-size:11px;color:#94a3b8;">' + gerente.email_real + '</div>';
+            }
+            html += '</div>';
+
+            // Botao de exclusao
+            html += '<div style="display:flex;gap:8px;" onclick="event.stopPropagation();">';
+            html += '<button onclick="abrirExcluirGerenteAmbientalDiretor(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        // Botao + Novo Gerente no final
+        html += '<div style="margin-top:16px;text-align:center;">';
+        html += '<button onclick="abrirFormNovoGerenteAmbiental()" style="background:transparent;border:2px dashed #3b82f6;color:#3b82f6;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:100%;transition:all 0.2s;" onmouseover="this.style.background=\'#3b82f6\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#3b82f6\'">+ Novo Gerente Ambiental</button>';
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar gerentes de regularização ambiental:", err);
         container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar gerentes.</div>';
     }
 }
@@ -2085,7 +2713,7 @@ async function salvarNovoGerente() {
                 full_name: nome,
                 cpf: cpfLimpo,
                 matricula: matricula,
-                role: 'gerente de posturas',
+                role: 'Gerente de Posturas',
                 email_real: emailReal,
                 email: emailFicticio
             }, { onConflict: 'id' });
@@ -2093,8 +2721,8 @@ async function salvarNovoGerente() {
         if (profileError) throw profileError;
 
         msgEl.innerHTML = '<span style="color:#10b981;">Gerente processado com sucesso!</span>';
-        
-        setTimeout(function() {
+
+        setTimeout(function () {
             var modal = document.getElementById('modal-novo-gerente');
             if (modal) modal.remove();
             if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
@@ -2109,7 +2737,7 @@ async function salvarNovoGerente() {
     }
 }
 
-// Modal de confirmacao para excluir Gerente
+// Modal de confirmacao para desativar Gerente
 function abrirExcluirGerenteDiretor(gerenteId, nomeGerente) {
     var existente = document.getElementById('modal-excluir-gerente');
     if (existente) existente.remove();
@@ -2122,79 +2750,1213 @@ function abrirExcluirGerenteDiretor(gerenteId, nomeGerente) {
         + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
         + '<button onclick="document.getElementById(\'modal-excluir-gerente\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
         + '<div style="text-align:center;margin-bottom:20px;">'
-        + '<div style="width:50px;height:50px;border-radius:50%;background:#fef2f2;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">\u26a0\ufe0f</div>'
-        + '<h2 style="margin:0;color:#dc2626;">Excluir Gerente</h2>'
-        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a excluir:</p>'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#fff7ed;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">🚫</div>'
+        + '<h2 style="margin:0;color:#c2410c;">Desativar Gerente</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a desativar:</p>'
         + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeGerente + '</p>'
         + '</div>'
-        + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:16px;">'
-        + '<p style="color:#dc2626;font-size:13px;margin:0;"><strong>\u26a0 Esta ação é irreversível!</strong></p>'
+        + '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#c2410c;font-size:13px;margin:0;"><strong>ℹ️ Atenção:</strong> O gerente será desativado e não poderá mais acessar o sistema. O histórico será preservado.</p>'
+        + '</div>'
+        + '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">'
+        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" id="chk-transferir-tarefas-gerente" style="width:18px;height:18px;accent-color:#c2410c;" onchange="toggleTransferenciaTarefasGerente()">'
+        + '<span style="font-weight:600;color:#334155;">Transferir tarefas para outro usuário</span>'
+        + '</label>'
+        + '</div>'
+        + '<div id="secao-transferencia-gerente" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">'
+        + '<p style="color:#166534;font-size:12px;margin:0 0 10px 0;"><strong>ℹ️ Transferência:</strong> As tarefas serão transferidas para o novo responsável.</p>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome do novo responsável</label>'
+        + '<input type="text" id="transferir-gerente-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula do novo responsável</label>'
+        + '<input type="text" id="transferir-gerente-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<button onclick="buscarNovoResponsavelGerente()" style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Buscar Usuário</button>'
+        + '<div id="resultado-busca-usuario-gerente" style="margin-top:10px;"></div>'
         + '</div>'
         + '<div style="margin-bottom:16px;">'
-        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">EXCLUIR</strong> para confirmar</label>'
-        + '<input type="text" id="excluir-gerente-confirmacao" placeholder="EXCLUIR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#c2410c;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-gerente-confirmacao" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
         + '<div id="msg-excluir-gerente" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
-        + '<button onclick="excluirGerenteDiretor(\'' + gerenteId + '\', \'' + nomeGerente.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-gerente" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Exclusão</button>'
+        + '<button onclick="excluirGerenteDiretor(\'' + gerenteId + '\', \'' + nomeGerente.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-gerente" style="width:100%;padding:12px;background:#c2410c;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Desativação</button>'
         + '</div>';
 
     document.body.appendChild(modal);
 }
 
-// Exclui o Gerente
+// Toggle para mostrar/ocultar seção de transferência (Gerente)
+function toggleTransferenciaTarefasGerente() {
+    var chk = document.getElementById('chk-transferir-tarefas-gerente');
+    var secao = document.getElementById('secao-transferencia-gerente');
+    if (chk && secao) {
+        secao.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Variável para armazenar novo responsável do gerente
+var novoResponsavelGerenteSelecionado = null;
+
+// Buscar novo responsável para transferência (Gerente)
+async function buscarNovoResponsavelGerente() {
+    var nome = document.getElementById('transferir-gerente-nome').value.trim();
+    var matricula = document.getElementById('transferir-gerente-matricula').value.trim();
+    var resultadoDiv = document.getElementById('resultado-busca-usuario-gerente');
+    
+    if (!nome || !matricula) {
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
+        return;
+    }
+    
+    resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
+    
+    var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
+    
+    if (usuario) {
+        novoResponsavelGerenteSelecionado = usuario;
+        resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
+    } else {
+        novoResponsavelGerenteSelecionado = null;
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Usuário não encontrado. Verifique nome e matrícula.</p>';
+    }
+}
+
+// DESATIVAR GERENTE (Soft Delete)
 async function excluirGerenteDiretor(gerenteId, nomeGerente) {
     var confirmacao = document.getElementById('excluir-gerente-confirmacao').value.trim();
+    var chkTransferir = document.getElementById('chk-transferir-tarefas-gerente');
     var msgEl = document.getElementById('msg-excluir-gerente');
     var btn = document.getElementById('btn-confirmar-excluir-gerente');
 
-    if (confirmacao !== 'EXCLUIR') {
-        msgEl.textContent = 'Digite EXCLUIR para confirmar.';
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR para confirmar.';
         msgEl.style.color = '#ef4444';
         return;
     }
+    
+    // Validar transferência se checkbox marcado
+    if (chkTransferir && chkTransferir.checked) {
+        if (!novoResponsavelGerenteSelecionado) {
+            msgEl.textContent = 'Busque e selecione um novo responsável para transferir as tarefas.';
+            msgEl.style.color = '#ef4444';
+            return;
+        }
+    }
 
-    btn.textContent = 'Excluindo...';
+    btn.textContent = 'Desativando...';
     btn.disabled = true;
 
     try {
+        // TRANSFERIR TAREFAS se solicitado
+        if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteSelecionado) {
+            btn.textContent = 'Transferindo tarefas...';
+            var resultadoTransferencia = await transferirTarefasUsuario(
+                gerenteId, 
+                novoResponsavelGerenteSelecionado.id, 
+                novoResponsavelGerenteSelecionado.full_name
+            );
+            
+            if (resultadoTransferencia.erro) {
+                throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
+            }
+        }
+
+        // Desativar gerente (Soft Delete)
         var { error } = await supabaseClient
             .from('profiles')
-            .update({ role: 'inativo' })
+            .update({ role: 'inativo', ativo: false })
             .eq('id', gerenteId);
 
         if (error) throw error;
 
-        msgEl.innerHTML = '<span style="color:#10b981;">Gerente excluído com sucesso!</span>';
+        var msgSucesso = '<span style="color:#10b981;">Gerente desativado com sucesso!';
+        if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteSelecionado) {
+            msgSucesso += '<br><small>Tarefas transferidas para ' + novoResponsavelGerenteSelecionado.full_name + '.</small>';
+        }
+        msgSucesso += '<br><small>Histórico preservado.</small></span>';
+        msgEl.innerHTML = msgSucesso;
         
-        setTimeout(function() {
+        // Limpar variável
+        novoResponsavelGerenteSelecionado = null;
+
+        setTimeout(function () {
             document.getElementById('modal-excluir-gerente').remove();
+            if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+        }, 2500);
+
+    } catch (err) {
+        console.error('Erro ao desativar gerente:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar gerente.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Confirmar Desativação';
+        btn.disabled = false;
+    }
+}
+
+// ==========================================
+// FUNÇÕES PARA GERENTE DE REGULARIZAÇÃO AMBIENTAL
+// ==========================================
+
+// Abre modal para criar novo Gerente de Regularização Ambiental
+function abrirFormNovoGerenteAmbiental() {
+    var existente = document.getElementById('modal-novo-gerente-ambiental');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-gerente-ambiental';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-novo-gerente-ambiental\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<h2 style="margin:0 0 20px 0;color:#1e293b;">Cadastrar Novo Gerente de Regularização Ambiental</h2>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">CPF</label>'
+        + '<input type="text" id="novo-gerente-amb-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Nome Completo</label>'
+        + '<input type="text" id="novo-gerente-amb-nome" placeholder="Nome do gerente" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">E-mail</label>'
+        + '<input type="email" id="novo-gerente-amb-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matrícula</label>'
+        + '<input type="text" id="novo-gerente-amb-matricula" placeholder="Matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Gerente de Regularização Ambiental</strong> | Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-gerente-amb" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoGerenteAmbiental()" id="btn-salvar-novo-gerente-amb" style="width:100%;padding:12px;background:#3b82f6;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Gerente</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva o novo Gerente de Regularização Ambiental no banco
+async function salvarNovoGerenteAmbiental() {
+    var cpfInput = document.getElementById('novo-gerente-amb-cpf').value.trim();
+    var nome = document.getElementById('novo-gerente-amb-nome').value.trim();
+    var emailReal = document.getElementById('novo-gerente-amb-email').value.trim();
+    var matricula = document.getElementById('novo-gerente-amb-matricula').value.trim();
+    var msgEl = document.getElementById('msg-novo-gerente-amb');
+    var btn = document.getElementById('btn-salvar-novo-gerente-amb');
+
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Processando...';
+    btn.disabled = true;
+
+    try {
+        // PADRONIZAÇÃO: Usar @email.com para bater com o login (script.js)
+        var emailFicticio = cpfLimpo + '@email.com';
+
+        // 1. Verificar se o perfil já existe
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
+
+        if (searchErr) throw searchErr;
+
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        // 2. Atualizar perfil (upsert)
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .upsert({
+                id: userId,
+                full_name: nome,
+                cpf: cpfLimpo,
+                matricula: matricula,
+                role: 'Gerente de Regularização Ambiental',
+                email_real: emailReal,
+                email: emailFicticio
+            }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Gerente de Regularização Ambiental processado com sucesso!</span>';
+
+        setTimeout(function () {
+            var modal = document.getElementById('modal-novo-gerente-ambiental');
+            if (modal) modal.remove();
             if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
         }, 1500);
 
     } catch (err) {
-        console.error('Erro ao excluir gerente:', err);
-        msgEl.textContent = err.message || 'Erro ao excluir gerente.';
+        console.error('Erro ao salvar gerente de regularização ambiental:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar gerente.';
         msgEl.style.color = '#ef4444';
-        btn.textContent = 'Confirmar Exclusão';
+        btn.textContent = 'Cadastrar Gerente';
+        btn.disabled = false;
+    }
+}
+
+// Modal de confirmacao para desativar Gerente de Regularização Ambiental
+function abrirExcluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
+    var existente = document.getElementById('modal-excluir-gerente-amb');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-excluir-gerente-amb';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-excluir-gerente-amb\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<div style="text-align:center;margin-bottom:20px;">'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#eff6ff;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">🚫</div>'
+        + '<h2 style="margin:0;color:#1e40af;">Desativar Gerente de Regularização Ambiental</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a desativar:</p>'
+        + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeGerente + '</p>'
+        + '</div>'
+        + '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#1e40af;font-size:13px;margin:0;"><strong>ℹ️ Atenção:</strong> O gerente será desativado e não poderá mais acessar o sistema. O histórico será preservado.</p>'
+        + '</div>'
+        + '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">'
+        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" id="chk-transferir-tarefas-gerente-amb" style="width:18px;height:18px;accent-color:#3b82f6;" onchange="toggleTransferenciaTarefasGerenteAmb()">'
+        + '<span style="font-weight:600;color:#334155;">Transferir tarefas para outro usuário</span>'
+        + '</label>'
+        + '</div>'
+        + '<div id="secao-transferencia-gerente-amb" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">'
+        + '<p style="color:#166534;font-size:12px;margin:0 0 10px 0;"><strong>ℹ️ Transferência:</strong> As tarefas serão transferidas para o novo responsável.</p>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome do novo responsável</label>'
+        + '<input type="text" id="transferir-gerente-amb-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula do novo responsável</label>'
+        + '<input type="text" id="transferir-gerente-amb-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<button onclick="buscarNovoResponsavelGerenteAmb()" style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Buscar Usuário</button>'
+        + '<div id="resultado-busca-usuario-gerente-amb" style="margin-top:10px;"></div>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-gerente-amb-confirmacao" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div id="msg-excluir-gerente-amb" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
+        + '<button onclick="excluirGerenteAmbientalDiretor(\'' + gerenteId + '\', \'' + nomeGerente.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-gerente-amb" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Desativação</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Toggle para mostrar/ocultar seção de transferência (Gerente Ambiental)
+function toggleTransferenciaTarefasGerenteAmb() {
+    var chk = document.getElementById('chk-transferir-tarefas-gerente-amb');
+    var secao = document.getElementById('secao-transferencia-gerente-amb');
+    if (chk && secao) {
+        secao.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Variável para armazenar novo responsável do gerente ambiental
+var novoResponsavelGerenteAmbSelecionado = null;
+
+// Buscar novo responsável para transferência (Gerente Ambiental)
+async function buscarNovoResponsavelGerenteAmb() {
+    var nome = document.getElementById('transferir-gerente-amb-nome').value.trim();
+    var matricula = document.getElementById('transferir-gerente-amb-matricula').value.trim();
+    var resultadoDiv = document.getElementById('resultado-busca-usuario-gerente-amb');
+    
+    if (!nome || !matricula) {
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
+        return;
+    }
+    
+    resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
+    
+    var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
+    
+    if (usuario) {
+        novoResponsavelGerenteAmbSelecionado = usuario;
+        resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
+    } else {
+        novoResponsavelGerenteAmbSelecionado = null;
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Usuário não encontrado. Verifique nome e matrícula.</p>';
+    }
+}
+
+// DESATIVAR GERENTE DE REGULARIZAÇÃO AMBIENTAL (Soft Delete)
+async function excluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
+    var confirmacao = document.getElementById('excluir-gerente-amb-confirmacao').value.trim();
+    var chkTransferir = document.getElementById('chk-transferir-tarefas-gerente-amb');
+    var msgEl = document.getElementById('msg-excluir-gerente-amb');
+    var btn = document.getElementById('btn-confirmar-excluir-gerente-amb');
+
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR para confirmar.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    
+    // Validar transferência se checkbox marcado
+    if (chkTransferir && chkTransferir.checked) {
+        if (!novoResponsavelGerenteAmbSelecionado) {
+            msgEl.textContent = 'Busque e selecione um novo responsável para transferir as tarefas.';
+            msgEl.style.color = '#ef4444';
+            return;
+        }
+    }
+
+    btn.textContent = 'Desativando...';
+    btn.disabled = true;
+
+    try {
+        // TRANSFERIR TAREFAS se solicitado
+        if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteAmbSelecionado) {
+            btn.textContent = 'Transferindo tarefas...';
+            var resultadoTransferencia = await transferirTarefasUsuario(
+                gerenteId, 
+                novoResponsavelGerenteAmbSelecionado.id, 
+                novoResponsavelGerenteAmbSelecionado.full_name
+            );
+            
+            if (resultadoTransferencia.erro) {
+                throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
+            }
+        }
+
+        // Desativar gerente (Soft Delete)
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo', ativo: false })
+            .eq('id', gerenteId);
+
+        if (error) throw error;
+
+        var msgSucesso = '<span style="color:#10b981;">Gerente de Regularização Ambiental desativado com sucesso!';
+        if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteAmbSelecionado) {
+            msgSucesso += '<br><small>Tarefas transferidas para ' + novoResponsavelGerenteAmbSelecionado.full_name + '.</small>';
+        }
+        msgSucesso += '<br><small>Histórico preservado.</small></span>';
+        msgEl.innerHTML = msgSucesso;
+        
+        // Limpar variável
+        novoResponsavelGerenteAmbSelecionado = null;
+
+        setTimeout(function () {
+            document.getElementById('modal-excluir-gerente-amb').remove();
+            if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+        }, 2500);
+
+    } catch (err) {
+        console.error('Erro ao desativar gerente de regularização ambiental:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar gerente.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Confirmar Desativação';
         btn.disabled = false;
     }
 }
 
 
 // ==========================================
-// DASHBOARD DO SECRETÁRIO - GESTÃO DE DIRETORES
+// DASHBOARD DO SECRETÁRIO - HIERARQUIA COMPLETA
 // ==========================================
 
 // Funcao principal que carrega o dashboard do Secretario
 async function carregarDashboardSecretario() {
     try {
-        await carregarDiretoresSecretario();
-        // Carregar tarefas do secretario
-        if (typeof carregarMinhasTarefasHome === 'function') {
-            carregarMinhasTarefasHome('secretario-minhas-tarefas');
-        }
+        await carregarHierarquiaCompletaSecretario();
+        await carregarResumoTarefasSecretario();
+        await carregarGraficoDocumentosSecretario();
+        await carregarCalendarioProjetosSecretario();
     } catch (err) {
         console.error("Erro ao carregar dashboard do secretario:", err);
+    }
+}
+
+// Carrega a hierarquia completa de funcionários em formato de árvore
+async function carregarHierarquiaCompletaSecretario() {
+    var container = document.getElementById('secretario-arvore-hierarquia');
+    if (!container) return;
+
+    try {
+        container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Carregando estrutura...</div>';
+
+        // Buscar todos os funcionários ativos
+        var { data: funcionarios, error } = await supabaseClient
+            .from('profiles')
+            .select('*')
+            .neq('role', 'inativo')
+            .order('full_name', { ascending: true });
+
+        if (error) throw error;
+
+        if (!funcionarios || funcionarios.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum funcionário cadastrado.</div>';
+            return;
+        }
+
+        // Separar por hierarquia
+        var diretores = [];
+        var gerentesPosturas = [];
+        var gerentesAmbiental = [];
+        var fiscais = [];
+        var equipeAmbiental = [];
+
+        funcionarios.forEach(function(f) {
+            var role = (f.role || '').toLowerCase();
+            if (role.includes('secretário') || role.includes('secretario')) {
+                return; // Não mostrar o próprio secretário
+            } else if (role.includes('diretor')) {
+                diretores.push(f);
+            } else if (role.includes('gerente') && role.includes('postura')) {
+                gerentesPosturas.push(f);
+            } else if (role.includes('gerente') && (role.includes('ambiental') || role.includes('regulariza'))) {
+                gerentesAmbiental.push(f);
+            } else if (role.includes('fiscal') || role.includes('administrativo')) {
+                fiscais.push(f);
+            } else if (role.includes('engenheiro') || role.includes('analista') || role.includes('auxiliar')) {
+                equipeAmbiental.push(f);
+            }
+        });
+
+        // Criar árvore visual transparente
+        var html = '<div style="display: flex; flex-direction: column; align-items: center; min-width: 800px; padding: 20px;">';
+        
+        // NÍVEL 1: DIRETORES (Topo)
+        html += '<div style="margin-bottom: 40px;">';
+        html += '<div style="text-align: center; margin-bottom: 12px;">';
+        html += '<span style="background: #7c3aed; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(124, 58, 237, 0.4);">DIREÇÃO</span>';
+        html += '</div>';
+        html += '<div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 12px;">';
+        diretores.forEach(function(d) {
+            html += renderizarCardArvore(d, '#7c3aed', 'diretor');
+        });
+        if (diretores.length === 0) {
+            html += '<div style="padding: 20px 40px; border-radius: 12px; color: #64748b; font-style: italic; border: 1px dashed #94a3b8;">Nenhum diretor cadastrado</div>';
+        }
+        html += '</div>';
+        // Contador discreto
+        html += '<div style="text-align: center; margin-bottom: 12px;">';
+        html += '<span style="color: #94a3b8; font-size: 12px; font-weight: 500;">' + diretores.length + ' ' + (diretores.length === 1 ? 'diretor' : 'diretores') + '</span>';
+        html += '</div>';
+        // Botão Novo Diretor
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) de Meio Ambiente\')" style="background: transparent; border: 2px dashed #7c3aed; color: #7c3aed; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#7c3aed\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#7c3aed\'">+ Novo Diretor</button>';
+        html += '</div>';
+        
+        // LINHA CONECTORA (se houver diretores e gerentes)
+        if ((gerentesPosturas.length > 0 || gerentesAmbiental.length > 0) && diretores.length > 0) {
+            html += '<div style="position: relative; height: 50px; width: 100%; max-width: 600px; margin-bottom: 10px;">';
+            html += '<div style="position: absolute; left: 50%; top: 0; width: 2px; height: 50px; background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%); transform: translateX(-50%);"></div>';
+            html += '<div style="position: absolute; left: 25%; top: 50px; width: 50%; height: 2px; background: linear-gradient(90deg, #94a3b8 0%, #cbd5e1 50%, #94a3b8 100%);"></div>';
+            html += '<div style="position: absolute; left: 25%; top: 50px; width: 2px; height: 20px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%);"></div>';
+            html += '<div style="position: absolute; right: 25%; top: 50px; width: 2px; height: 20px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%);"></div>';
+            html += '</div>';
+        }
+        
+        // NÍVEL 2: GERENTES (Lado a lado)
+        html += '<div style="display: flex; justify-content: space-between; width: 100%; max-width: 950px; gap: 60px; margin-top: 20px;">';
+        
+        // Coluna da Esquerda: Gerência de Posturas
+        html += '<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">';
+        html += '<div style="text-align: center; margin-bottom: 16px;">';
+        html += '<span style="background: #0c3e2b; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(12, 62, 43, 0.4);">GERÊNCIA DE POSTURAS</span>';
+        html += '</div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 14px; align-items: center; margin-bottom: 12px;">';
+        gerentesPosturas.forEach(function(g) {
+            html += renderizarCardArvore(g, '#0c3e2b', 'gerente_posturas');
+        });
+        if (gerentesPosturas.length === 0) {
+            html += '<div style="padding: 16px 32px; border-radius: 12px; color: #64748b; font-style: italic; font-size: 13px; border: 1px dashed #94a3b8;">Nenhum gerente</div>';
+        }
+        html += '</div>';
+        // Contador discreto
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + gerentesPosturas.length + ' ' + (gerentesPosturas.length === 1 ? 'gerente' : 'gerentes') + '</span>';
+        html += '</div>';
+        // Botão Novo Gerente de Posturas
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Posturas\')" style="background: transparent; border: 2px dashed #0c3e2b; color: #0c3e2b; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#0c3e2b\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#0c3e2b\'">+ Novo Gerente</button>';
+        
+        // LINHA CONECTORA para Fiscais
+        if (fiscais.length > 0 && gerentesPosturas.length > 0) {
+            html += '<div style="height: 40px; width: 2px; background: linear-gradient(180deg, #cbd5e1 0%, #b45309 100%); margin: 14px 0;"></div>';
+        } else if (gerentesPosturas.length > 0) {
+            html += '<div style="height: 30px; width: 2px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%); margin: 14px 0;"></div>';
+        }
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="background: #b45309; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 10px rgba(180, 83, 9, 0.4);">FISCAIS</span>';
+        html += '</div>';
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 420px; margin-bottom: 10px;">';
+        fiscais.forEach(function(f) {
+            html += renderizarCardArvoreCompacto(f, '#b45309', 'fiscal');
+        });
+        if (fiscais.length === 0) {
+            html += '<div style="padding: 12px 24px; border-radius: 10px; color: #64748b; font-style: italic; font-size: 12px; border: 1px dashed #94a3b8;">Nenhum fiscal</div>';
+        }
+        html += '</div>';
+        // Contador discreto
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + fiscais.length + ' ' + (fiscais.length === 1 ? 'fiscal' : 'fiscais') + '</span>';
+        html += '</div>';
+        // Botão Novo Fiscal
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Posturas\')" style="background: transparent; border: 2px dashed #b45309; color: #b45309; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#b45309\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#b45309\'">+ Novo Fiscal</button>';
+        html += '</div>';
+        
+        // Coluna da Direita: Gerência de Regularização Ambiental
+        html += '<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">';
+        html += '<div style="text-align: center; margin-bottom: 16px;">';
+        html += '<span style="background: #1e3a5f; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(30, 58, 95, 0.4);">GERÊNCIA DE REG. AMBIENTAL</span>';
+        html += '</div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 14px; align-items: center; margin-bottom: 12px;">';
+        gerentesAmbiental.forEach(function(g) {
+            html += renderizarCardArvore(g, '#1e3a5f', 'gerente_ambiental');
+        });
+        if (gerentesAmbiental.length === 0) {
+            html += '<div style="padding: 16px 32px; border-radius: 12px; color: #64748b; font-style: italic; font-size: 13px; border: 1px dashed #94a3b8;">Nenhum gerente</div>';
+        }
+        html += '</div>';
+        // Contador discreto
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + gerentesAmbiental.length + ' ' + (gerentesAmbiental.length === 1 ? 'gerente' : 'gerentes') + '</span>';
+        html += '</div>';
+        // Botão Novo Gerente de RA
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Regularizacao Ambiental\')" style="background: transparent; border: 2px dashed #1e3a5f; color: #1e3a5f; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#1e3a5f\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#1e3a5f\'">+ Novo Gerente</button>';
+        
+        // LINHA CONECTORA para Equipe Ambiental
+        if (equipeAmbiental.length > 0 && gerentesAmbiental.length > 0) {
+            html += '<div style="height: 40px; width: 2px; background: linear-gradient(180deg, #cbd5e1 0%, #065f46 100%); margin: 14px 0;"></div>';
+        } else if (gerentesAmbiental.length > 0) {
+            html += '<div style="height: 30px; width: 2px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%); margin: 14px 0;"></div>';
+        }
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="background: #065f46; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 10px rgba(6, 95, 70, 0.4);">EQUIPE AMBIENTAL</span>';
+        html += '</div>';
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 420px; margin-bottom: 10px;">';
+        equipeAmbiental.forEach(function(e) {
+            html += renderizarCardArvoreCompacto(e, '#065f46', 'equipe_ambiental');
+        });
+        if (equipeAmbiental.length === 0) {
+            html += '<div style="padding: 12px 24px; border-radius: 10px; color: #64748b; font-style: italic; font-size: 12px; border: 1px dashed #94a3b8;">Nenhum membro</div>';
+        }
+        html += '</div>';
+        // Contador discreto
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + equipeAmbiental.length + ' ' + (equipeAmbiental.length === 1 ? 'membro' : 'membros') + '</span>';
+        html += '</div>';
+        // Botão Novo Membro da Equipe (com seleção de cargo)
+        html += '<button onclick="abrirFormNovoFuncionarioEquipeAmbiental()" style="background: transparent; border: 2px dashed #065f46; color: #065f46; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#065f46\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#065f46\'">+ Novo Membro</button>';
+        html += '</div>';
+        
+        html += '</div>'; // Fim nível 2
+        html += '</div>'; // Fim container
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar hierarquia:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar estrutura.</div>';
+    }
+}
+
+// Renderiza card padrão da árvore - Estilo Transparente com botão desativar
+function renderizarCardArvore(funcionario, cor, tipo) {
+    // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
+    var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
+    
+    // Define a ação ao clicar
+    var onclickAction = '';
+    if (isFiscalPosturas) {
+        onclickAction = 'onclick="abrirEstatisticasComRelatorioFiscal(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
+    } else {
+        onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
+    }
+    
+    // Estilo transparente com borda colorida
+    var html = '<div style="background: transparent; border-radius: 16px; padding: 16px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px; min-width: 260px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.15)\';this.style.boxShadow=\'0 4px 20px ' + cor + '40, 0 0 30px ' + cor + '20\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'0 2px 12px rgba(0,0,0,0.05)\';this.style.transform=\'none\'">';
+    
+    // Avatar com borda colorida
+    if (funcionario.avatar_url) {
+        html += '<div style="position: relative;"><img src="' + funcionario.avatar_url + '" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 3px solid ' + cor + ';"></div>';
+    } else {
+        html += '<div style="width: 48px; height: 48px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+    }
+    
+    // Info
+    html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
+    html += '<div style="font-weight: 700; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
+    html += '<div style="font-size: 11px; color: ' + cor + '; font-weight: 700;">' + (funcionario.role || '---') + '</div>';
+    if (funcionario.matricula) {
+        html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">Matrícula: ' + funcionario.matricula + '</div>';
+    }
+    html += '</div>';
+    
+    // Botão desativar (lixeira SVG)
+    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 6px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar funcionário">';
+    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;" onmouseover="this.style.transform=\'scale(1.1)\'" onmouseout="this.style.transform=\'scale(1)\'"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    html += '</button>';
+    
+    html += '</div>';
+    return html;
+}
+
+// Renderiza card compacto para equipes (fiscais e equipe ambiental) - Estilo Transparente
+function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
+    // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
+    var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
+    
+    // Define a ação ao clicar
+    var onclickAction = '';
+    if (isFiscalPosturas) {
+        onclickAction = 'onclick="abrirEstatisticasComRelatorioFiscal(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
+    } else {
+        onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
+    }
+    
+    // Estilo transparente compacto
+    var html = '<div style="background: transparent; border-radius: 12px; padding: 10px 8px 10px 12px; border: 1px solid ' + cor + '; border-left: 3px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 6px; position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\';this.style.boxShadow=\'0 2px 12px ' + cor + '30\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'none\'">';
+    
+    // Avatar pequeno
+    if (funcionario.avatar_url) {
+        html += '<img src="' + funcionario.avatar_url + '" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
+    } else {
+        html += '<div style="width: 32px; height: 32px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+    }
+    
+    // Info compacta
+    html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
+    html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">' + (funcionario.matricula || '---') + '</div>';
+    html += '</div>';
+    
+    // Botão desativar (lixeira SVG pequeno)
+    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    html += '</button>';
+    
+    html += '</div>';
+    return html;
+}
+
+// Renderiza uma seção da hierarquia
+function renderizarSecaoHierarquia(titulo, funcionarios, cor, tipo) {
+    var html = '<div style="margin-bottom: 24px;">';
+    html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid ' + cor + ';">';
+    html += '<div style="width: 12px; height: 12px; background: ' + cor + '; border-radius: 50%;"></div>';
+    html += '<h4 style="margin: 0; color: ' + cor + '; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">' + titulo + '</h4>';
+    html += '<span style="background: ' + cor + '20; color: ' + cor + '; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">' + funcionarios.length + '</span>';
+    html += '</div>';
+    
+    html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">';
+    
+    funcionarios.forEach(function(f) {
+        var isFiscalPosturas = (f.role || '').toLowerCase().includes('fiscal') && (f.role || '').toLowerCase().includes('postura');
+        var isFiscal = (f.role || '').toLowerCase().includes('fiscal');
+        
+        // Determinar ação ao clicar
+        var onclickAction = '';
+        if (isFiscalPosturas) {
+            // Fiscais de posturas mostram relatório de produtividade
+            onclickAction = 'onclick="abrirRelatorioFiscal(\'' + f.id + '\', \'' + (f.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
+        } else {
+            // Outros cargos mostram tarefas
+            onclickAction = 'onclick="mostrarTarefasFuncionario(\'' + f.id + '\', \'' + (f.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
+        }
+        
+        html += '<div ' + onclickAction + ' style="background: white; border-radius: 10px; padding: 14px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 12px;" onmouseover="this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">';
+        
+        // Avatar
+        if (f.avatar_url) {
+            html += '<img src="' + f.avatar_url + '" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 3px solid ' + cor + ';">';
+        } else {
+            html += '<div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, ' + cor + ', #666); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; font-weight: 600;">' + (f.full_name ? f.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+        }
+        
+        // Info
+        html += '<div style="flex: 1; min-width: 0;">';
+        html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (f.full_name || 'Sem Nome') + '</div>';
+        html += '<div style="font-size: 12px; color: #64748b;">' + (f.role || '---') + '</div>';
+        if (f.matricula) {
+            html += '<div style="font-size: 11px; color: #94a3b8;">Matrícula: ' + f.matricula + '</div>';
+        }
+        html += '</div>';
+        
+        // Ícone de ação
+        if (isFiscalPosturas) {
+            html += '<div style="color: ' + cor + ';" title="Ver relatório de produtividade">';
+            html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+            html += '</div>';
+        } else {
+            html += '<div style="color: ' + cor + ';" title="Ver tarefas">';
+            html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+            html += '</div>';
+        }
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    html += '</div>';
+    
+    return html;
+}
+
+// Carrega resumo de tarefas para o Secretário
+async function carregarResumoTarefasSecretario() {
+    var container = document.getElementById('secretario-resumo-tarefas');
+    if (!container) return;
+
+    try {
+        // Buscar todas as tarefas não concluídas
+        var { data: tarefas, error } = await supabaseClient
+            .from('tarefas')
+            .select('*, tarefa_responsaveis(user_id, user_name)')
+            .neq('status', 'concluida')
+            .order('prazo', { ascending: true });
+
+        if (error) throw error;
+
+        if (!tarefas || tarefas.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Nenhuma tarefa pendente.</div>';
+            return;
+        }
+
+        // Contadores por status
+        var pendentes = tarefas.filter(t => t.status === 'pendente').length;
+        var emProgresso = tarefas.filter(t => t.status === 'em_progresso').length;
+        var atrasadas = tarefas.filter(t => t.prazo && new Date(t.prazo) < new Date()).length;
+
+        var html = '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">';
+        html += '<div style="text-align: center; padding: 16px; background: #fef3c7; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #d97706;">' + pendentes + '</div><div style="font-size: 12px; color: #92400e;">Pendentes</div></div>';
+        html += '<div style="text-align: center; padding: 16px; background: #dbeafe; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #2563eb;">' + emProgresso + '</div><div style="font-size: 12px; color: #1e40af;">Em Progresso</div></div>';
+        html += '<div style="text-align: center; padding: 16px; background: #fee2e2; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #dc2626;">' + atrasadas + '</div><div style="font-size: 12px; color: #991b1b;">Atrasadas</div></div>';
+        html += '</div>';
+
+        // Últimas 5 tarefas
+        html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 12px; font-size: 14px;">Próximas Tarefas:</div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+        
+        tarefas.slice(0, 5).forEach(function(t) {
+            var statusColor = t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b';
+            var statusLabel = t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente';
+            var atrasada = t.prazo && new Date(t.prazo) < new Date();
+            
+            html += '<div style="padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid ' + statusColor + '; display: flex; justify-content: space-between; align-items: center;">';
+            html += '<div>';
+            html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px;">' + (t.titulo || 'Sem título') + '</div>';
+            if (t.prazo) {
+                html += '<div style="font-size: 12px; color: ' + (atrasada ? '#dc2626' : '#64748b') + ';">' + new Date(t.prazo).toLocaleDateString('pt-BR') + (atrasada ? ' (ATRASADA)' : '') + '</div>';
+            }
+            html += '</div>';
+            html += '<span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: ' + statusColor + '20; color: ' + statusColor + ';">' + statusLabel + '</span>';
+            html += '</div>';
+        });
+        
+        if (tarefas.length > 5) {
+            html += '<div style="text-align: center; padding: 10px; color: #94a3b8; font-size: 13px;">+' + (tarefas.length - 5) + ' tarefas pendentes</div>';
+        }
+        
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar resumo de tarefas:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px;">Erro ao carregar tarefas.</div>';
+    }
+}
+
+// Carrega grafico de documentos do Controle Processual para o Secretario
+async function carregarGraficoDocumentosSecretario() {
+    var container = document.getElementById('secretario-grafico-documentos');
+    var canvas = document.getElementById('secretario-canvas-docs');
+    var elTotal = document.getElementById('secretario-total-docs');
+    if (!canvas) return;
+
+    try {
+        var hoje = new Date();
+        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: docs, error } = await supabaseClient
+            .from('controle_processual')
+            .select('categoria_id')
+            .gte('created_at', trintaDiasAtras);
+
+        if (error) throw error;
+
+        var nomesTipo = {
+            '1.1': 'Notificação',
+            '1.2': 'Auto de Infração',
+            '1.3': 'AR',
+            '1.4': 'Ofício',
+            '1.5': 'Relatório',
+            '1.6': 'Protocolo',
+            '1.7': 'Réplica'
+        };
+
+        var contagem = {};
+        var totalDocs = 0;
+        if (docs) {
+            docs.forEach(function(d) {
+                var tipo = d.categoria_id || 'Outros';
+                var nome = nomesTipo[tipo] || ('Cat. ' + tipo);
+                if (!contagem[nome]) contagem[nome] = 0;
+                contagem[nome]++;
+                totalDocs++;
+            });
+        }
+
+        if (elTotal) {
+            elTotal.innerHTML = '<span style="color: #64748b; font-size: 13px;">Total: <strong style="color: #1e293b;">' + totalDocs + '</strong> registros</span>';
+        }
+
+        var labels = Object.keys(contagem);
+        var valores = Object.values(contagem);
+
+        if (labels.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:13px;">Nenhum documento nos últimos 30 dias</div>';
+            return;
+        }
+
+        var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+
+        if (window.secretarioGraficoDocs) {
+            window.secretarioGraficoDocs.destroy();
+        }
+
+        window.secretarioGraficoDocs = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: valores,
+                    backgroundColor: cores.slice(0, labels.length),
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#1e293b',
+                            font: { size: 11 },
+                            padding: 10,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                var label = context.label || '';
+                                var value = context.raw || 0;
+                                var pct = totalDocs > 0 ? Math.round((value / totalDocs) * 100) : 0;
+                                return label + ': ' + value + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+
+    } catch (err) {
+        console.error("Erro ao carregar grafico de documentos:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px; font-size:13px;">Erro ao carregar gráfico</div>';
+    }
+}
+
+// Carrega calendario de projetos para o Secretario (versao compacta)
+async function carregarCalendarioProjetosSecretario() {
+    var container = document.getElementById('secretario-calendario-projetos');
+    if (!container) return;
+
+    try {
+        // Buscar projetos/eventos do mes atual
+        var hoje = new Date();
+        var ano = hoje.getFullYear();
+        var mes = hoje.getMonth();
+        var primeiroDia = new Date(ano, mes, 1).toISOString();
+        var ultimoDia = new Date(ano, mes + 1, 0).toISOString();
+
+        var { data: eventos, error } = await supabaseClient
+            .from('eventos')
+            .select('*')
+            .or('data_inicio.gte.' + primeiroDia + ',data_fim.gte.' + primeiroDia)
+            .or('data_inicio.lte.' + ultimoDia + ',data_fim.lte.' + ultimoDia)
+            .order('data_inicio', { ascending: true });
+
+        if (error) throw error;
+
+        var nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        var nomeMes = nomesMeses[mes];
+
+        var html = '<div style="margin-bottom: 10px; text-align: center;">';
+        html += '<span style="font-weight: 600; color: #1e293b; font-size: 14px;">' + nomeMes + ' ' + ano + '</span>';
+        html += '</div>';
+
+        // Grid do calendario (7 colunas)
+        html += '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 12px;">';
+        
+        // Cabecalho dos dias da semana
+        var diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+        diasSemana.forEach(function(dia) {
+            html += '<div style="text-align: center; font-size: 10px; color: #94a3b8; font-weight: 600; padding: 4px;">' + dia + '</div>';
+        });
+
+        // Calcular dias
+        var primeiroDiaSemana = new Date(ano, mes, 1).getDay();
+        var diasNoMes = new Date(ano, mes + 1, 0).getDate();
+        var isMesAtual = true;
+
+        // Espacos vazios antes do dia 1
+        for (var i = 0; i < primeiroDiaSemana; i++) {
+            html += '<div style="aspect-ratio: 1;"></div>';
+        }
+
+        // Dias do mes
+        for (var dia = 1; dia <= diasNoMes; dia++) {
+            var dataStr = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+            var isHoje = isMesAtual && dia === hoje.getDate();
+            
+            // Verificar se tem evento neste dia
+            var eventosNoDia = [];
+            if (eventos) {
+                eventos.forEach(function(ev) {
+                    var inicio = ev.data_inicio ? ev.data_inicio.substring(0, 10) : null;
+                    var fim = ev.data_fim ? ev.data_fim.substring(0, 10) : inicio;
+                    if (dataStr >= inicio && dataStr <= fim) {
+                        eventosNoDia.push(ev);
+                    }
+                });
+            }
+
+            var temEvento = eventosNoDia.length > 0;
+            var bgColor = isHoje ? '#3b82f6' : (temEvento ? (eventosNoDia[0].cor || '#3b82f6') + '20' : '#f1f5f9');
+            var textColor = isHoje ? '#ffffff' : (temEvento ? '#1e293b' : '#64748b');
+            var border = isHoje ? '2px solid #2563eb' : (temEvento ? '1px solid ' + (eventosNoDia[0].cor || '#3b82f6') : '1px solid #e2e8f0');
+            var cursor = temEvento ? 'pointer' : 'default';
+
+            html += '<div style="aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: ' + bgColor + '; color: ' + textColor + '; border: ' + border + '; cursor: ' + cursor + ';"';
+            
+            if (temEvento) {
+                html += ' onclick="irParaProjetos()" title="' + eventosNoDia[0].titulo + '"';
+            }
+            
+            html += '>' + dia + '</div>';
+        }
+
+        html += '</div>';
+
+        // Lista dos proximos 3 eventos
+        if (eventos && eventos.length > 0) {
+            html += '<div style="border-top: 1px solid #e2e8f0; padding-top: 12px;">';
+            html += '<div style="font-size: 11px; color: #94a3b8; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Próximos eventos</div>';
+            
+            eventos.slice(0, 3).forEach(function(ev) {
+                var dataInicio = new Date(ev.data_inicio);
+                var dataStr = dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                var cor = ev.cor || '#3b82f6';
+                
+                html += '<div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer;" onclick="irParaProjetos()">';
+                html += '<div style="width: 8px; height: 8px; border-radius: 50%; background: ' + cor + ';"></div>';
+                html += '<div style="flex: 1; min-width: 0;">';
+                html += '<div style="font-size: 12px; color: #1e293b; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (ev.titulo || 'Sem título') + '</div>';
+                html += '<div style="font-size: 10px; color: #94a3b8;">' + dataStr + '</div>';
+                html += '</div>';
+                html += '</div>';
+            });
+
+            if (eventos.length > 3) {
+                html += '<div style="text-align: center; margin-top: 8px;">';
+                html += '<span style="font-size: 11px; color: #94a3b8;">+' + (eventos.length - 3) + ' eventos</span>';
+                html += '</div>';
+            }
+
+            html += '</div>';
+        } else {
+            html += '<div style="text-align: center; padding: 15px; color: #94a3b8; font-size: 12px;">Nenhum evento este mês</div>';
+        }
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar calendario de projetos:", err);
+        container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:13px;">Erro ao carregar calendário</div>';
+    }
+}
+
+// Navega para a aba de projetos (expandindo o menu de direcao se necessario)
+function irParaProjetos() {
+    // Abrir o submenu de direcao se estiver fechado
+    var submenu = document.getElementById('diretor-submenu-gerencia');
+    if (submenu && submenu.style.display === 'none') {
+        submenu.style.display = 'block';
+    }
+    // Mudar para a aba projetos
+    mudarAba('projetos');
+}
+
+// Carrega tarefas dos Diretores para o Secretário (modo direcao)
+async function carregarTarefasDiretoresSecretario() {
+    var container = document.getElementById('secretario-minhas-tarefas');
+    if (!container) return;
+
+    try {
+        // Buscar IDs dos diretores
+        var { data: diretores, error: errD } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .in('role', ['Diretor(a)', 'Diretor(a) de Meio Ambiente', 'diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente']);
+        
+        if (errD) throw errD;
+        
+        if (!diretores || diretores.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:15px;">Nenhum diretor encontrado.</div>';
+            return;
+        }
+        
+        var diretorIds = diretores.map(function(d) { return d.id; });
+        
+        // Buscar tarefas criadas pelos diretores ou onde diretor é responsável
+        // Primeiro buscar responsabilidades
+        var { data: respDiretores, error: errR } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('tarefa_id')
+            .in('user_id', diretorIds);
+        
+        // Buscar tarefas criadas pelos diretores
+        var { data: tarefasCriadas, error: errC } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .in('criado_por', diretorIds)
+            .neq('status', 'concluida')
+            .order('prazo', { ascending: true });
+        
+        if (errC) throw errC;
+        
+        var tarefas = tarefasCriadas || [];
+        
+        // Adicionar tarefas onde diretor é responsável (evitando duplicatas)
+        if (respDiretores && respDiretores.length > 0) {
+            var tarefaIdsResp = respDiretores.map(function(r) { return r.tarefa_id; });
+            var idsExistentes = {};
+            tarefas.forEach(function(t) { idsExistentes[t.id] = true; });
+            
+            // Filtrar apenas IDs que não estão na lista
+            var idsNovos = tarefaIdsResp.filter(function(id) { return !idsExistentes[id]; });
+            
+            if (idsNovos.length > 0) {
+                var { data: tarefasResp, error: errT } = await supabaseClient
+                    .from('tarefas')
+                    .select('*')
+                    .in('id', idsNovos)
+                    .neq('status', 'concluida')
+                    .order('prazo', { ascending: true });
+                
+                if (errT) throw errT;
+                (tarefasResp || []).forEach(function(t) { tarefas.push(t); });
+            }
+        }
+        
+        if (tarefas.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:15px;">Nenhuma tarefa dos diretores.</div>';
+            return;
+        }
+        
+        // Ordenar por prazo
+        tarefas.sort(function(a, b) {
+            if (!a.prazo && !b.prazo) return 0;
+            if (!a.prazo) return 1;
+            if (!b.prazo) return -1;
+            return new Date(a.prazo) - new Date(b.prazo);
+        });
+        
+        // Renderizar (simplificado)
+        renderizarTarefasSecretario(container, tarefas);
+        
+    } catch (err) {
+        console.error("Erro ao carregar tarefas dos diretores:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px; font-size:15px;">Erro ao carregar tarefas.</div>';
+    }
+}
+
+// Renderiza tarefas na home do Secretário
+async function renderizarTarefasSecretario(container, tarefas) {
+    try {
+        // Buscar nomes dos criadores
+        var criadorIds = [];
+        tarefas.forEach(function(t) {
+            if (t.criado_por && criadorIds.indexOf(t.criado_por) === -1) {
+                criadorIds.push(t.criado_por);
+            }
+        });
+        
+        var criadorMap = {};
+        if (criadorIds.length > 0) {
+            var { data: criadores } = await supabaseClient
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', criadorIds);
+            (criadores || []).forEach(function(c) { criadorMap[c.id] = c.full_name; });
+        }
+        
+        var html = '<div style="max-height: 400px; overflow-y: auto;">';
+        
+        tarefas.slice(0, 10).forEach(function(t) {
+            var prazo = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
+            var criador = criadorMap[t.criado_por] || 'Desconhecido';
+            var statusColor = t.status === 'em_progresso' ? '#3b82f6' : (t.status === 'pendente' ? '#f59e0b' : '#10b981');
+            var statusText = t.status === 'em_progresso' ? 'Em progresso' : (t.status === 'pendente' ? 'Pendente' : 'Concluída');
+            
+            html += '<div style="padding: 12px; border-bottom: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'" onclick="if(typeof abrirDetalheTarefa===\'function\')abrirDetalheTarefa(' + t.id + ')">';
+            html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">' + (t.titulo || 'Sem título') + '</div>';
+            html += '<div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b;">';
+            html += '<span>Criado por: ' + criador + '</span>';
+            html += '<span style="display: flex; align-items: center; gap: 8px;">';
+            html += '<span style="color: ' + (t.prazo && new Date(t.prazo) < new Date() ? '#ef4444' : '#64748b') + ';">📅 ' + prazo + '</span>';
+            html += '<span style="background: ' + statusColor + '; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">' + statusText + '</span>';
+            html += '</span>';
+            html += '</div>';
+            html += '</div>';
+        });
+        
+        if (tarefas.length > 10) {
+            html += '<div style="text-align: center; padding: 12px; color: #94a3b8; font-size: 13px;">+' + (tarefas.length - 10) + ' tarefas - veja mais na aba Tarefas</div>';
+        }
+        
+        html += '</div>';
+        container.innerHTML = html;
+        
+    } catch (err) {
+        console.error("Erro ao renderizar tarefas:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px;">Erro ao exibir tarefas.</div>';
     }
 }
 
@@ -2208,7 +3970,7 @@ async function carregarDiretoresSecretario() {
         var { data: diretores, error: errDiretores } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url, email_real, matricula')
-            .in('role', ['diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente']);
+            .in('role', ['Diretor(a)', 'Diretor(a) de Meio Ambiente']);
 
         if (errDiretores) throw errDiretores;
 
@@ -2224,9 +3986,9 @@ async function carregarDiretoresSecretario() {
         var html = '';
         var cores = ['#7c3aed', '#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#06b6d4'];
 
-        diretores.forEach(function(diretor, index) {
+        diretores.forEach(function (diretor, index) {
             var cor = cores[index % cores.length];
-            
+
             var fotoHtml = '';
             if (diretor.avatar_url) {
                 fotoHtml = '<img src="' + diretor.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + ';">';
@@ -2235,7 +3997,7 @@ async function carregarDiretoresSecretario() {
             }
 
             html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';">';
-            
+
             html += '<div style="display:flex;align-items:center;gap:12px;">';
             html += fotoHtml;
             html += '<div style="flex:1;">';
@@ -2245,10 +4007,10 @@ async function carregarDiretoresSecretario() {
                 html += '<div style="font-size:11px;color:#94a3b8;">' + diretor.email_real + '</div>';
             }
             html += '</div>';
-            
+
             // Botao de exclusao
             html += '<div style="display:flex;gap:8px;">';
-            html += '<button onclick="abrirExcluirDiretorSecretario(\'' + diretor.id + '\', \'' + (diretor.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '<button onclick="abrirExcluirDiretorSecretario(\'' + diretor.id + '\', \'' + (diretor.full_name || '').replace(/'/g, "\\'") + '\')" title="Desativar" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#c2410c;font-weight:600;">Desativar</button>';
             html += '</div>';
             html += '</div>';
 
@@ -2297,7 +4059,7 @@ function abrirFormNovoDiretor() {
         + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matrícula</label>'
         + '<input type="text" id="novo-diretor-matricula" placeholder="Matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
-        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Diretor de Meio Ambiente</strong> | Senha padrão: <strong>123456</strong></p>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Diretor(a) de Meio Ambiente</strong> | Senha padrão: <strong>123456</strong></p>'
         + '<div id="msg-novo-diretor" style="margin-bottom:12px;font-size:13px;"></div>'
         + '<button onclick="salvarNovoDiretor()" id="btn-salvar-novo-diretor" style="width:100%;padding:12px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Diretor</button>'
         + '</div>';
@@ -2365,7 +4127,7 @@ async function salvarNovoDiretor() {
                 full_name: nome,
                 cpf: cpfLimpo,
                 matricula: matricula,
-                role: 'diretor de meio ambiente',
+                role: 'Diretor(a) de Meio Ambiente',
                 email_real: emailReal,
                 email: emailFicticio
             }, { onConflict: 'id' });
@@ -2373,8 +4135,8 @@ async function salvarNovoDiretor() {
         if (profileError) throw profileError;
 
         msgEl.innerHTML = '<span style="color:#10b981;">Diretor processado com sucesso!</span>';
-        
-        setTimeout(function() {
+
+        setTimeout(function () {
             var modal = document.getElementById('modal-novo-diretor');
             if (modal) modal.remove();
             if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
@@ -2402,60 +4164,1739 @@ function abrirExcluirDiretorSecretario(diretorId, nomeDiretor) {
         + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
         + '<button onclick="document.getElementById(\'modal-excluir-diretor\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
         + '<div style="text-align:center;margin-bottom:20px;">'
-        + '<div style="width:50px;height:50px;border-radius:50%;background:#fef2f2;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">\u26a0\ufe0f</div>'
-        + '<h2 style="margin:0;color:#dc2626;">Excluir Diretor</h2>'
-        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a excluir:</p>'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#fff7ed;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">🚫</div>'
+        + '<h2 style="margin:0;color:#c2410c;">Desativar Diretor</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a desativar:</p>'
         + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeDiretor + '</p>'
         + '</div>'
-        + '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:16px;">'
-        + '<p style="color:#dc2626;font-size:13px;margin:0;"><strong>\u26a0 Esta ação é irreversível!</strong></p>'
+        + '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#c2410c;font-size:13px;margin:0;"><strong>ℹ️ Atenção:</strong> O diretor será desativado e não poderá mais acessar o sistema. O histórico será preservado.</p>'
+        + '</div>'
+        + '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">'
+        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" id="chk-transferir-tarefas-diretor" style="width:18px;height:18px;accent-color:#c2410c;" onchange="toggleTransferenciaTarefasDiretor()">'
+        + '<span style="font-weight:600;color:#334155;">Transferir tarefas para outro usuário</span>'
+        + '</label>'
+        + '</div>'
+        + '<div id="secao-transferencia-diretor" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">'
+        + '<p style="color:#166534;font-size:12px;margin:0 0 10px 0;"><strong>ℹ️ Transferência:</strong> As tarefas serão transferidas para o novo responsável.</p>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome do novo responsável</label>'
+        + '<input type="text" id="transferir-diretor-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula do novo responsável</label>'
+        + '<input type="text" id="transferir-diretor-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<button onclick="buscarNovoResponsavelDiretor()" style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Buscar Usuário</button>'
+        + '<div id="resultado-busca-usuario-diretor" style="margin-top:10px;"></div>'
         + '</div>'
         + '<div style="margin-bottom:16px;">'
-        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">EXCLUIR</strong> para confirmar</label>'
-        + '<input type="text" id="excluir-diretor-confirmacao" placeholder="EXCLUIR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#c2410c;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-diretor-confirmacao" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
         + '<div id="msg-excluir-diretor" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
-        + '<button onclick="excluirDiretorSecretario(\'' + diretorId + '\', \'' + nomeDiretor.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-diretor" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Exclusão</button>'
+        + '<button onclick="excluirDiretorSecretario(\'' + diretorId + '\', \'' + nomeDiretor.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-diretor" style="width:100%;padding:12px;background:#c2410c;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Desativação</button>'
         + '</div>';
 
     document.body.appendChild(modal);
 }
 
+// Toggle para mostrar/ocultar seção de transferência (Diretor)
+function toggleTransferenciaTarefasDiretor() {
+    var chk = document.getElementById('chk-transferir-tarefas-diretor');
+    var secao = document.getElementById('secao-transferencia-diretor');
+    if (chk && secao) {
+        secao.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Variável para armazenar novo responsável do diretor
+var novoResponsavelDiretorSelecionado = null;
+
+// Buscar novo responsável para transferência (Diretor)
+async function buscarNovoResponsavelDiretor() {
+    var nome = document.getElementById('transferir-diretor-nome').value.trim();
+    var matricula = document.getElementById('transferir-diretor-matricula').value.trim();
+    var resultadoDiv = document.getElementById('resultado-busca-usuario-diretor');
+    
+    if (!nome || !matricula) {
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
+        return;
+    }
+    
+    resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
+    
+    var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
+    
+    if (usuario) {
+        novoResponsavelDiretorSelecionado = usuario;
+        resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
+    } else {
+        novoResponsavelDiretorSelecionado = null;
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Usuário não encontrado. Verifique nome e matrícula.</p>';
+    }
+}
+
 // Exclui o Diretor
+// DESATIVAR DIRETOR (Soft Delete)
 async function excluirDiretorSecretario(diretorId, nomeDiretor) {
     var confirmacao = document.getElementById('excluir-diretor-confirmacao').value.trim();
+    var chkTransferir = document.getElementById('chk-transferir-tarefas-diretor');
     var msgEl = document.getElementById('msg-excluir-diretor');
     var btn = document.getElementById('btn-confirmar-excluir-diretor');
 
-    if (confirmacao !== 'EXCLUIR') {
-        msgEl.textContent = 'Digite EXCLUIR para confirmar.';
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR para confirmar.';
         msgEl.style.color = '#ef4444';
         return;
     }
+    
+    // Validar transferência se checkbox marcado
+    if (chkTransferir && chkTransferir.checked) {
+        if (!novoResponsavelDiretorSelecionado) {
+            msgEl.textContent = 'Busque e selecione um novo responsável para transferir as tarefas.';
+            msgEl.style.color = '#ef4444';
+            return;
+        }
+    }
 
-    btn.textContent = 'Excluindo...';
+    btn.textContent = 'Desativando...';
     btn.disabled = true;
 
     try {
+        // TRANSFERIR TAREFAS se solicitado
+        if (chkTransferir && chkTransferir.checked && novoResponsavelDiretorSelecionado) {
+            btn.textContent = 'Transferindo tarefas...';
+            var resultadoTransferencia = await transferirTarefasUsuario(
+                diretorId, 
+                novoResponsavelDiretorSelecionado.id, 
+                novoResponsavelDiretorSelecionado.full_name
+            );
+            
+            if (resultadoTransferencia.erro) {
+                throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
+            }
+        }
+
+        // Desativar diretor (Soft Delete)
         var { error } = await supabaseClient
             .from('profiles')
-            .update({ role: 'inativo' })
+            .update({ role: 'inativo', ativo: false })
             .eq('id', diretorId);
 
         if (error) throw error;
 
-        msgEl.innerHTML = '<span style="color:#10b981;">Diretor excluído com sucesso!</span>';
+        var msgSucesso = '<span style="color:#10b981;">Diretor desativado com sucesso!';
+        if (chkTransferir && chkTransferir.checked && novoResponsavelDiretorSelecionado) {
+            msgSucesso += '<br><small>Tarefas transferidas para ' + novoResponsavelDiretorSelecionado.full_name + '.</small>';
+        }
+        msgSucesso += '<br><small>Histórico preservado.</small></span>';
+        msgEl.innerHTML = msgSucesso;
         
-        setTimeout(function() {
+        // Limpar variável
+        novoResponsavelDiretorSelecionado = null;
+
+        setTimeout(function () {
             document.getElementById('modal-excluir-diretor').remove();
             if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
-        }, 1500);
+        }, 2500);
 
     } catch (err) {
-        console.error('Erro ao excluir diretor:', err);
-        msgEl.textContent = err.message || 'Erro ao excluir diretor.';
+        console.error('Erro ao desativar diretor:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar diretor.';
         msgEl.style.color = '#ef4444';
-        btn.textContent = 'Confirmar Exclusão';
+        btn.textContent = 'Confirmar Desativação';
         btn.disabled = false;
     }
 }
+
+
+// ==========================================
+// GERENTE DE REGULARIZAÇÃO AMBIENTAL - GESTÃO DE EQUIPE
+// ==========================================
+
+// Cargos permitidos para o Gerente de Regularização Ambiental
+var CARGOS_EQUIPE_AMBIENTAL = [
+    'Engenheiro(a) Agrônomo(a)',
+    'Engenheiro(a) Civil',
+    'Analista Ambiental',
+    'Auxiliar de Serviços II'
+];
+
+var CARGOS_EQUIPE_AMBIENTAL_LOWER = [
+    'engenheiro(a) agrônomo(a)',
+    'engenheiro agronomo',
+    'engenheiro(a) civil',
+    'engenheiro civil',
+    'analista ambiental',
+    'auxiliar de serviços ii',
+    'auxiliar de servicos ii'
+];
+
+// Carrega a lista da equipe do Gerente de Regularização Ambiental
+async function carregarEquipeAmbiental() {
+    var container = document.getElementById('gerente-ambiental-equipe-lista');
+    if (!container) return;
+
+    try {
+        // Buscar todos os funcionários dos cargos permitidos
+        var { data: funcionarios, error: errFunc } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, email_real, matricula, role')
+            .in('role', CARGOS_EQUIPE_AMBIENTAL)
+            .eq('ativo', true);
+
+        if (errFunc) throw errFunc;
+
+        // Atualizar contadores por cargo
+        var contadores = {
+            'Engenheiro(a) Agrônomo(a)': 0,
+            'Engenheiro(a) Civil': 0,
+            'Analista Ambiental': 0,
+            'Auxiliar de Serviços II': 0
+        };
+
+        (funcionarios || []).forEach(function(f) {
+            if (contadores.hasOwnProperty(f.role)) {
+                contadores[f.role]++;
+            }
+        });
+
+        // Atualizar elementos HTML
+        var elAgronomos = document.getElementById('gerente-amb-total-agronomos');
+        var elCivis = document.getElementById('gerente-amb-total-civis');
+        var elAnalistas = document.getElementById('gerente-amb-total-analistas');
+        var elAuxiliares = document.getElementById('gerente-amb-total-auxiliares');
+
+        if (elAgronomos) elAgronomos.innerText = contadores['Engenheiro(a) Agrônomo(a)'] || 0;
+        if (elCivis) elCivis.innerText = contadores['Engenheiro(a) Civil'] || 0;
+        if (elAnalistas) elAnalistas.innerText = contadores['Analista Ambiental'] || 0;
+        if (elAuxiliares) elAuxiliares.innerText = contadores['Auxiliar de Serviços II'] || 0;
+
+        if (!funcionarios || funcionarios.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum funcionário cadastrado na equipe.</div>';
+            return;
+        }
+
+        var html = '';
+        var coresPorCargo = {
+            'Engenheiro(a) Agrônomo(a)': '#10b981',   // Verde esmeralda
+            'Engenheiro(a) Civil': '#0ea5e9',          // Azul ciano
+            'Analista Ambiental': '#84cc16',           // Verde lima
+            'Auxiliar de Serviços II': '#8b5cf6'       // Roxo
+        };
+
+        funcionarios.forEach(function(func) {
+            var cor = coresPorCargo[func.role] || '#64748b';
+
+            var fotoHtml = '';
+            if (func.avatar_url) {
+                fotoHtml = '<img src="' + func.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + '">';
+            } else {
+                var inicial = func.full_name ? func.full_name.charAt(0).toUpperCase() : 'F';
+                fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + '">' + inicial + '</div>';
+            }
+
+            html += '<div onclick="abrirDashboardFuncionarioAmbiental(\'' + func.id + '\', \'' + (func.full_name || '').replace(/'/g, "\\'") + '\', \'' + (func.role || '').replace(/'/g, "\\'") + '\', \'' + cor + '\')" style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'">';
+            html += '<div style="display:flex;align-items:center;gap:12px;">';
+            html += fotoHtml;
+            html += '<div style="flex:1;">';
+            html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (func.full_name || 'Sem Nome') + '</div>';
+            html += '<div style="font-size:12px;color:#64748b;">' + (func.role || '---') + '</div>';
+            html += '<div style="font-size:12px;color:#94a3b8;">Matrícula: ' + (func.matricula || '---') + '</div>';
+            if (func.email_real) {
+                html += '<div style="font-size:11px;color:#94a3b8;">' + func.email_real + '</div>';
+            }
+            html += '</div>';
+
+            // Botao de exclusao (para de propagar o click)
+            html += '<div style="display:flex;gap:8px;" onclick="event.stopPropagation();">';
+            html += '<button onclick="abrirExcluirFuncionarioAmbiental(\'' + func.id + '\', \'' + (func.full_name || '').replace(/'/g, "\\'") + '\', \'' + (func.role || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '</div>';
+            html += '</div>';
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar equipe:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar equipe.</div>';
+    }
+}
+
+// Abre modal para criar novo funcionário da equipe ambiental
+function abrirFormNovoFuncionarioAmbiental() {
+    var existente = document.getElementById('modal-novo-func-ambiental');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-func-ambiental';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    var optionsCargos = CARGOS_EQUIPE_AMBIENTAL.map(function(c) {
+        return '<option value="' + c + '">' + c + '</option>';
+    }).join('');
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-novo-func-ambiental\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<h2 style="margin:0 0 20px 0;color:#1e293b;">Cadastrar Novo Funcionário</h2>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">CPF</label>'
+        + '<input type="text" id="novo-func-amb-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Nome Completo</label>'
+        + '<input type="text" id="novo-func-amb-nome" placeholder="Nome do funcionário" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">E-mail</label>'
+        + '<input type="email" id="novo-func-amb-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matrícula</label>'
+        + '<input type="text" id="novo-func-amb-matricula" placeholder="Matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Cargo</label>'
+        + '<select id="novo-func-amb-cargo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;">'
+        + optionsCargos
+        + '</select>'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-func-amb" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoFuncionarioAmbiental()" id="btn-salvar-novo-func-amb" style="width:100%;padding:12px;background:#1e3a5f;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Funcionário</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva o novo funcionário da equipe ambiental
+async function salvarNovoFuncionarioAmbiental() {
+    var cpfInput = document.getElementById('novo-func-amb-cpf').value.trim();
+    var nome = document.getElementById('novo-func-amb-nome').value.trim();
+    var emailReal = document.getElementById('novo-func-amb-email').value.trim();
+    var matricula = document.getElementById('novo-func-amb-matricula').value.trim();
+    var cargo = document.getElementById('novo-func-amb-cargo').value;
+    var msgEl = document.getElementById('msg-novo-func-amb');
+    var btn = document.getElementById('btn-salvar-novo-func-amb');
+
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!cargo) {
+        msgEl.textContent = 'Cargo é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Processando...';
+    btn.disabled = true;
+
+    try {
+        var emailFicticio = cpfLimpo + '@email.com';
+
+        // 1. Verificar se o perfil já existe
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
+
+        if (searchErr) throw searchErr;
+
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        // 2. Atualizar perfil (upsert)
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .upsert({
+                id: userId,
+                full_name: nome,
+                cpf: cpfLimpo,
+                matricula: matricula,
+                role: cargo,
+                email_real: emailReal,
+                email: emailFicticio,
+                ativo: true
+            }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Funcionário cadastrado com sucesso!</span>';
+
+        setTimeout(function () {
+            var modal = document.getElementById('modal-novo-func-ambiental');
+            if (modal) modal.remove();
+            if (typeof carregarEquipeAmbiental === 'function') carregarEquipeAmbiental();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao salvar funcionário:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar funcionário.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Cadastrar Funcionário';
+        btn.disabled = false;
+    }
+}
+
+// Modal de confirmação para desativar funcionário
+function abrirExcluirFuncionarioAmbiental(funcId, nomeFunc, cargoFunc) {
+    var existente = document.getElementById('modal-excluir-func-amb');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-excluir-func-amb';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:420px;padding:30px;position:relative;">'
+        + '<button onclick="document.getElementById(\'modal-excluir-func-amb\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<div style="text-align:center;margin-bottom:20px;">'
+        + '<div style="width:50px;height:50px;border-radius:50%;background:#eff6ff;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:10px;">🚫</div>'
+        + '<h2 style="margin:0;color:#1e40af;">Desativar Funcionário</h2>'
+        + '<p style="color:#64748b;margin:8px 0 0 0;">Você está prestes a desativar:</p>'
+        + '<p style="font-weight:700;font-size:18px;color:#1e293b;margin:4px 0 0 0;">' + nomeFunc + '</p>'
+        + '<p style="font-size:14px;color:#64748b;margin:4px 0 0 0;">' + cargoFunc + '</p>'
+        + '</div>'
+        + '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#1e40af;font-size:13px;margin:0;"><strong>ℹ️ Atenção:</strong> O funcionário será desativado e não poderá mais acessar o sistema.</p>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="excluir-func-amb-confirmacao" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div id="msg-excluir-func-amb" style="margin-bottom:12px;font-size:13px;text-align:center;"></div>'
+        + '<button onclick="excluirFuncionarioAmbiental(\'' + funcId + '\', \'' + nomeFunc.replace(/'/g, "\\'") + '\')" id="btn-confirmar-excluir-func-amb" style="width:100%;padding:12px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Confirmar Desativação</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Desativa funcionário da equipe ambiental
+async function excluirFuncionarioAmbiental(funcId, nomeFunc) {
+    var confirmacao = document.getElementById('excluir-func-amb-confirmacao').value.trim();
+    var msgEl = document.getElementById('msg-excluir-func-amb');
+    var btn = document.getElementById('btn-confirmar-excluir-func-amb');
+
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR para confirmar.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Desativando...';
+    btn.disabled = true;
+
+    try {
+        // Desativar funcionário (Soft Delete)
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo', ativo: false })
+            .eq('id', funcId);
+
+        if (error) throw error;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Funcionário desativado com sucesso!<br><small>Histórico preservado.</small></span>';
+
+        setTimeout(function () {
+            document.getElementById('modal-excluir-func-amb').remove();
+            if (typeof carregarEquipeAmbiental === 'function') carregarEquipeAmbiental();
+        }, 2500);
+
+    } catch (err) {
+        console.error('Erro ao desativar funcionário:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar funcionário.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Confirmar Desativação';
+        btn.disabled = false;
+    }
+}
+
+
+// ==========================================
+// DASHBOARD DO FUNCIONÁRIO - DESENVENHO
+// ==========================================
+
+// Abre dashboard de desempenho do funcionário
+async function abrirDashboardFuncionarioAmbiental(funcId, nomeFunc, cargoFunc, cor) {
+    // Remover modal existente
+    var existente = document.getElementById('modal-dashboard-func-amb');
+    if (existente) existente.remove();
+
+    // Criar modal
+    var modal = document.createElement('div');
+    modal.id = 'modal-dashboard-func-amb';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    // Conteúdo inicial com loading
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:12px;width:90%;max-width:600px;padding:30px;position:relative;max-height:90vh;overflow-y:auto;">'
+        + '<button onclick="document.getElementById(\'modal-dashboard-func-amb\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">\u2715</button>'
+        + '<div style="text-align:center;margin-bottom:20px;">'
+        + '<div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:inline-flex;align-items:center;justify-content:center;font-size:24px;color:white;margin-bottom:10px;">' + (nomeFunc ? nomeFunc.charAt(0).toUpperCase() : 'F') + '</div>'
+        + '<h2 style="margin:0;color:#1e293b;">' + nomeFunc + '</h2>'
+        + '<p style="color:#64748b;margin:4px 0 0 0;">' + cargoFunc + '</p>'
+        + '</div>'
+        + '<div id="dashboard-conteudo" style="text-align:center;padding:40px;">'
+        + '<div style="color:#94a3b8;">Carregando estatísticas...</div>'
+        + '</div>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+
+    // Buscar estatísticas
+    try {
+        var stats = await buscarEstatisticasFuncionario(funcId);
+        renderizarDashboardFuncionario(stats, nomeFunc, cor);
+    } catch (err) {
+        console.error('Erro ao carregar estatísticas:', err);
+        document.getElementById('dashboard-conteudo').innerHTML = '<div style="color:#ef4444;">Erro ao carregar estatísticas.</div>';
+    }
+}
+
+// Busca estatísticas de tarefas do funcionário
+async function buscarEstatisticasFuncionario(funcId) {
+    var stats = {
+        tarefas: { concluidas: 0, emProgresso: 0, atrasadas: 0, pendentes: 0 },
+        subtarefas: { concluidas: 0, emProgresso: 0, atrasadas: 0, pendentes: 0 }
+    };
+
+    var hoje = new Date().toISOString().split('T')[0];
+
+    // Buscar tarefas onde o funcionário é responsável
+    var { data: tarefasResp } = await supabaseClient
+        .from('tarefa_responsaveis')
+        .select('tarefa_id')
+        .eq('user_id', funcId);
+
+    var tarefaIds = (tarefasResp || []).map(function(r) { return r.tarefa_id; });
+
+    if (tarefaIds.length > 0) {
+        // Buscar detalhes das tarefas
+        var { data: tarefas } = await supabaseClient
+            .from('tarefas')
+            .select('id, status, prazo, tarefa_pai_id')
+            .in('id', tarefaIds);
+
+        (tarefas || []).forEach(function(t) {
+            // Separar tarefas principais de subtarefas
+            if (t.tarefa_pai_id) {
+                // É subtarefa
+                if (t.status === 'concluida') {
+                    stats.subtarefas.concluidas++;
+                } else if (t.status === 'em_progresso') {
+                    stats.subtarefas.emProgresso++;
+                } else if (t.prazo && t.prazo < hoje) {
+                    stats.subtarefas.atrasadas++;
+                } else {
+                    stats.subtarefas.pendentes++;
+                }
+            } else {
+                // É tarefa principal
+                if (t.status === 'concluida') {
+                    stats.tarefas.concluidas++;
+                } else if (t.status === 'em_progresso') {
+                    stats.tarefas.emProgresso++;
+                } else if (t.prazo && t.prazo < hoje) {
+                    stats.tarefas.atrasadas++;
+                } else {
+                    stats.tarefas.pendentes++;
+                }
+            }
+        });
+    }
+
+    return stats;
+}
+
+// Renderiza o dashboard com gráfico
+function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
+    var container = document.getElementById('dashboard-conteudo');
+    if (!container) return;
+
+    // Cores para o gráfico
+    var cores = {
+        concluidas: '#10b981',
+        emProgresso: '#3b82f6',
+        atrasadas: '#ef4444',
+        pendentes: '#f59e0b'
+    };
+
+    // Calcular totais
+    var totalTarefas = stats.tarefas.concluidas + stats.tarefas.emProgresso + stats.tarefas.atrasadas + stats.tarefas.pendentes;
+    var totalSubtarefas = stats.subtarefas.concluidas + stats.subtarefas.emProgresso + stats.subtarefas.atrasadas + stats.subtarefas.pendentes;
+
+    // HTML do dashboard
+    var html = '';
+
+    // Seção de Tarefas
+    html += '<div style="margin-bottom:30px;">';
+    html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:18px;">Tarefas</h3>';
+    
+    if (totalTarefas === 0) {
+        html += '<div style="color:#94a3b8;text-align:center;padding:20px;">Nenhuma tarefa atribuída</div>';
+    } else {
+        html += '<div style="display:flex;align-items:flex-end;justify-content:center;gap:20px;height:200px;margin-bottom:16px;">';
+        
+        // Barra Concluídas
+        var alturaConc = totalTarefas > 0 ? (stats.tarefas.concluidas / totalTarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.concluidas + ';margin-bottom:8px;">' + stats.tarefas.concluidas + '</div>';
+        html += '<div style="width:60px;background:' + cores.concluidas + ';border-radius:8px 8px 0 0;height:' + alturaConc + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Concluídas</div>';
+        html += '</div>';
+        
+        // Barra Em Progresso
+        var alturaProg = totalTarefas > 0 ? (stats.tarefas.emProgresso / totalTarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.emProgresso + ';margin-bottom:8px;">' + stats.tarefas.emProgresso + '</div>';
+        html += '<div style="width:60px;background:' + cores.emProgresso + ';border-radius:8px 8px 0 0;height:' + alturaProg + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Em Progresso</div>';
+        html += '</div>';
+        
+        // Barra Atrasadas
+        var alturaAtras = totalTarefas > 0 ? (stats.tarefas.atrasadas / totalTarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.atrasadas + ';margin-bottom:8px;">' + stats.tarefas.atrasadas + '</div>';
+        html += '<div style="width:60px;background:' + cores.atrasadas + ';border-radius:8px 8px 0 0;height:' + alturaAtras + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
+        html += '</div>';
+        
+        // Barra Pendentes
+        var alturaPend = totalTarefas > 0 ? (stats.tarefas.pendentes / totalTarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.pendentes + ';margin-bottom:8px;">' + stats.tarefas.pendentes + '</div>';
+        html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPend + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
+        html += '</div>';
+        
+        html += '</div>';
+    }
+    html += '</div>';
+
+    // Seção de Subtarefas
+    html += '<div style="margin-bottom:30px;">';
+    html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:18px;">Subtarefas</h3>';
+    
+    if (totalSubtarefas === 0) {
+        html += '<div style="color:#94a3b8;text-align:center;padding:20px;">Nenhuma subtarefa atribuída</div>';
+    } else {
+        html += '<div style="display:flex;align-items:flex-end;justify-content:center;gap:20px;height:200px;margin-bottom:16px;">';
+        
+        // Barra Concluídas
+        var alturaConcSub = totalSubtarefas > 0 ? (stats.subtarefas.concluidas / totalSubtarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.concluidas + ';margin-bottom:8px;">' + stats.subtarefas.concluidas + '</div>';
+        html += '<div style="width:60px;background:' + cores.concluidas + ';border-radius:8px 8px 0 0;height:' + alturaConcSub + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Concluídas</div>';
+        html += '</div>';
+        
+        // Barra Em Progresso
+        var alturaProgSub = totalSubtarefas > 0 ? (stats.subtarefas.emProgresso / totalSubtarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.emProgresso + ';margin-bottom:8px;">' + stats.subtarefas.emProgresso + '</div>';
+        html += '<div style="width:60px;background:' + cores.emProgresso + ';border-radius:8px 8px 0 0;height:' + alturaProgSub + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Em Progresso</div>';
+        html += '</div>';
+        
+        // Barra Atrasadas
+        var alturaAtrasSub = totalSubtarefas > 0 ? (stats.subtarefas.atrasadas / totalSubtarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.atrasadas + ';margin-bottom:8px;">' + stats.subtarefas.atrasadas + '</div>';
+        html += '<div style="width:60px;background:' + cores.atrasadas + ';border-radius:8px 8px 0 0;height:' + alturaAtrasSub + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
+        html += '</div>';
+        
+        // Barra Pendentes
+        var alturaPendSub = totalSubtarefas > 0 ? (stats.subtarefas.pendentes / totalSubtarefas) * 180 : 0;
+        html += '<div style="display:flex;flex-direction:column;align-items:center;">';
+        html += '<div style="font-size:14px;font-weight:700;color:' + cores.pendentes + ';margin-bottom:8px;">' + stats.subtarefas.pendentes + '</div>';
+        html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPendSub + 'px;"></div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
+        html += '</div>';
+        
+        html += '</div>';
+    }
+    html += '</div>';
+
+    // Resumo
+    html += '<div style="background:#f8fafc;border-radius:12px;padding:20px;margin-top:20px;">';
+    html += '<h4 style="margin:0 0 12px 0;color:#1e293b;font-size:16px;">Resumo</h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:16px;">';
+    html += '<div style="text-align:center;">';
+    html += '<div style="font-size:24px;font-weight:700;color:' + cor + ';">' + (stats.tarefas.concluidas + stats.subtarefas.concluidas) + '</div>';
+    html += '<div style="font-size:13px;color:#64748b;">Total Concluídas</div>';
+    html += '</div>';
+    html += '<div style="text-align:center;">';
+    html += '<div style="font-size:24px;font-weight:700;color:#64748b;">' + (totalTarefas + totalSubtarefas) + '</div>';
+    html += '<div style="font-size:13px;color:#64748b;">Total Atribuídas</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+
+// ============================================
+// ESTATÍSTICAS DO FUNCIONÁRIO (DIRETOR)
+// ============================================
+
+async function abrirEstatisticasFuncionario(userId, nome, cargo) {
+    // Criar modal
+    var modalId = 'modal-estatisticas-funcionario';
+    var existente = document.getElementById(modalId);
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:16px;width:95%;max-width:800px;max-height:90vh;overflow-y:auto;position:relative;">'
+        + '<button onclick="document.getElementById(\'' + modalId + '\').remove()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;z-index:10;">✕</button>'
+        + '<div style="padding:30px;">'
+        + '<div style="text-align:center;margin-bottom:24px;">'
+        + '<h2 style="margin:0 0 8px 0;color:#1e293b;font-size:22px;">' + nome + '</h2>'
+        + '<span style="background:#e0e7ff;color:#4f46e5;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;">' + cargo + '</span>'
+        + '</div>'
+        + '<div id="estatisticas-conteudo">'
+        + '<div style="text-align:center;padding:40px;color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Carregando estatísticas...</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+
+    try {
+        await carregarEstatisticasFuncionario(userId, nome, cargo);
+    } catch (err) {
+        console.error("Erro ao carregar estatísticas:", err);
+        document.getElementById('estatisticas-conteudo').innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;">Erro ao carregar estatísticas. Tente novamente.</div>';
+    }
+}
+
+async function carregarEstatisticasFuncionario(userId, nome, cargo) {
+    var container = document.getElementById('estatisticas-conteudo');
+    if (!container) return;
+
+    // Buscar IDs das tarefas onde o usuário é responsável
+    var { data: responsaveis, error: errResp } = await supabaseClient
+        .from('tarefa_responsaveis')
+        .select('tarefa_id')
+        .eq('user_id', userId);
+
+    if (errResp) throw errResp;
+
+    var tarefaIds = responsaveis ? responsaveis.map(function(r) { return r.tarefa_id; }) : [];
+
+    // Buscar tarefas principais (não subtarefas)
+    var tarefasPrincipais = [];
+    if (tarefaIds.length > 0) {
+        var { data: tarefas, error: errTarefas } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .in('id', tarefaIds)
+            .is('tarefa_pai_id', null);
+
+        if (errTarefas) throw errTarefas;
+        tarefasPrincipais = tarefas || [];
+    }
+
+    // Buscar tarefas criadas pelo usuário (que ele criou para outros)
+    var { data: tarefasCriadas, error: errCriadas } = await supabaseClient
+        .from('tarefas')
+        .select('*')
+        .eq('criado_por', userId)
+        .is('tarefa_pai_id', null);
+
+    if (errCriadas) throw errCriadas;
+
+    // Combinar tarefas (evitando duplicatas)
+    var tarefasMap = {};
+    (tarefasPrincipais || []).forEach(function(t) { tarefasMap[t.id] = t; });
+    (tarefasCriadas || []).forEach(function(t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
+    var todasTarefas = Object.values(tarefasMap);
+
+    // Buscar subtarefas das tarefas principais
+    var paiIds = todasTarefas.map(function(t) { return t.id; });
+    var subtarefas = [];
+    if (paiIds.length > 0) {
+        var { data: subs, error: errSubs } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .in('tarefa_pai_id', paiIds);
+
+        if (errSubs) throw errSubs;
+        subtarefas = subs || [];
+    }
+
+    // Buscar subtarefas onde o usuário é responsável diretamente
+    var subtarefaIds = tarefaIds.filter(function(id) {
+        return !todasTarefas.some(function(t) { return t.id === id; });
+    });
+    if (subtarefaIds.length > 0) {
+        var { data: subsResp, error: errSubsResp } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .in('id', subtarefaIds);
+
+        if (errSubsResp) throw errSubsResp;
+        (subsResp || []).forEach(function(s) {
+            if (!subtarefas.some(function(sub) { return sub.id === s.id; })) {
+                subtarefas.push(s);
+            }
+        });
+    }
+
+    // Buscar projetos/eventos onde o usuário é responsável
+    var { data: eventos, error: errEventos } = await supabaseClient
+        .from('eventos')
+        .select('*')
+        .eq('responsavel_id', userId);
+
+    if (errEventos) throw errEventos;
+
+    // Calcular estatísticas
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var stats = {
+        tarefas: { atrasadas: 0, concluidas: 0, emProgresso: 0, pendentes: 0 },
+        subtarefas: { atrasadas: 0, concluidas: 0, emProgresso: 0, pendentes: 0 },
+        projetos: eventos ? eventos.length : 0
+    };
+
+    todasTarefas.forEach(function(t) {
+        var prazo = t.prazo ? new Date(t.prazo) : null;
+        var atrasada = prazo && prazo < hoje && t.status !== 'concluida';
+
+        if (t.status === 'concluida') {
+            stats.tarefas.concluidas++;
+        } else if (t.status === 'em_progresso') {
+            if (atrasada) {
+                stats.tarefas.atrasadas++;
+            } else {
+                stats.tarefas.emProgresso++;
+            }
+        } else {
+            if (atrasada) {
+                stats.tarefas.atrasadas++;
+            } else {
+                stats.tarefas.pendentes++;
+            }
+        }
+    });
+
+    subtarefas.forEach(function(s) {
+        var prazo = s.prazo ? new Date(s.prazo) : null;
+        var atrasada = prazo && prazo < hoje && s.status !== 'concluida';
+
+        if (s.status === 'concluida') {
+            stats.subtarefas.concluidas++;
+        } else if (s.status === 'em_progresso') {
+            if (atrasada) {
+                stats.subtarefas.atrasadas++;
+            } else {
+                stats.subtarefas.emProgresso++;
+            }
+        } else {
+            if (atrasada) {
+                stats.subtarefas.atrasadas++;
+            } else {
+                stats.subtarefas.pendentes++;
+            }
+        }
+    });
+
+    // Gerar HTML
+    var html = '';
+
+    // Cards de resumo
+    html += '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:16px;margin-bottom:30px;">';
+    
+    html += '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:12px;padding:20px;text-align:center;color:white;">';
+    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.atrasadas + stats.subtarefas.atrasadas) + '</div>';
+    html += '<div style="font-size:13px;opacity:0.9;">Atrasadas</div>';
+    html += '</div>';
+    
+    html += '<div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:12px;padding:20px;text-align:center;color:white;">';
+    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.concluidas + stats.subtarefas.concluidas) + '</div>';
+    html += '<div style="font-size:13px;opacity:0.9;">Concluídas</div>';
+    html += '</div>';
+    
+    html += '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:12px;padding:20px;text-align:center;color:white;">';
+    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.emProgresso + stats.subtarefas.emProgresso) + '</div>';
+    html += '<div style="font-size:13px;opacity:0.9;">Em Progresso</div>';
+    html += '</div>';
+    
+    html += '<div style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:12px;padding:20px;text-align:center;color:white;">';
+    html += '<div style="font-size:32px;font-weight:700;">' + stats.projetos + '</div>';
+    html += '<div style="font-size:13px;opacity:0.9;">Projetos</div>';
+    html += '</div>';
+    
+    html += '</div>';
+
+    // Gráfico de barras
+    html += '<div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:24px;">';
+    html += '<h3 style="margin:0 0 20px 0;color:#1e293b;font-size:16px;text-align:center;">Distribuição por Status</h3>';
+    html += '<div style="height:300px;position:relative;">';
+    html += '<canvas id="grafico-estatisticas-funcionario"></canvas>';
+    html += '</div>';
+    html += '</div>';
+
+    // Tabela detalhada
+    html += '<div style="background:#f8fafc;border-radius:12px;padding:20px;">';
+    html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;">Detalhamento</h3>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:14px;">';
+    html += '<thead><tr style="border-bottom:2px solid #e2e8f0;">';
+    html += '<th style="text-align:left;padding:10px;color:#64748b;font-weight:600;">Tipo</th>';
+    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Atrasadas</th>';
+    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Concluídas</th>';
+    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Em Progresso</th>';
+    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Pendentes</th>';
+    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Total</th>';
+    html += '</tr></thead>';
+    html += '<tbody>';
+    
+    html += '<tr style="border-bottom:1px solid #e2e8f0;">';
+    html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Tarefas</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.tarefas.atrasadas + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#10b981;font-weight:600;">' + stats.tarefas.concluidas + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#3b82f6;font-weight:600;">' + stats.tarefas.emProgresso + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.tarefas.pendentes + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.tarefas.atrasadas + stats.tarefas.concluidas + stats.tarefas.emProgresso + stats.tarefas.pendentes) + '</td>';
+    html += '</tr>';
+    
+    html += '<tr>';
+    html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Subtarefas</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.subtarefas.atrasadas + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#10b981;font-weight:600;">' + stats.subtarefas.concluidas + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#3b82f6;font-weight:600;">' + stats.subtarefas.emProgresso + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.subtarefas.pendentes + '</td>';
+    html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.subtarefas.atrasadas + stats.subtarefas.concluidas + stats.subtarefas.emProgresso + stats.subtarefas.pendentes) + '</td>';
+    html += '</tr>';
+    
+    html += '</tbody></table>';
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Criar gráfico
+    setTimeout(function() {
+        var ctx = document.getElementById('grafico-estatisticas-funcionario');
+        if (!ctx) return;
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'],
+                datasets: [
+                    {
+                        label: 'Tarefas',
+                        data: [stats.tarefas.atrasadas, stats.tarefas.concluidas, stats.tarefas.emProgresso, stats.tarefas.pendentes],
+                        backgroundColor: ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'],
+                        borderRadius: 6,
+                        barPercentage: 0.7
+                    },
+                    {
+                        label: 'Subtarefas',
+                        data: [stats.subtarefas.atrasadas, stats.subtarefas.concluidas, stats.subtarefas.emProgresso, stats.subtarefas.pendentes],
+                        backgroundColor: ['#f87171', '#34d399', '#60a5fa', '#fbbf24'],
+                        borderRadius: 6,
+                        barPercentage: 0.7
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: { size: 12 }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 14 },
+                        bodyFont: { size: 13 }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1,
+                            font: { size: 11 }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { size: 12 }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+    }, 100);
+}
+
+// ==========================================
+// FORMULÁRIOS DE NOVO FUNCIONÁRIO POR CARGO
+// ==========================================
+
+// Abre formulário para novo funcionário com cargo específico
+function abrirFormNovoFuncionarioPorCargo(cargo) {
+    var existente = document.getElementById('modal-novo-funcionario-cargo');
+    if (existente) existente.remove();
+
+    var cor = '#7c3aed';
+    if (cargo.includes('Posturas')) cor = '#0c3e2b';
+    else if (cargo.includes('Ambiental')) cor = '#1e3a5f';
+    else if (cargo.includes('Fiscal')) cor = '#b45309';
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-funcionario-cargo';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:30px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+        + '<button onclick="document.getElementById(\'modal-novo-funcionario-cargo\').remove()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">&times;</button>'
+        + '<h2 style="margin:0 0 8px 0;color:' + cor + ';font-size:20px;">Novo ' + cargo + '</h2>'
+        + '<p style="color:#64748b;font-size:13px;margin:0 0 20px 0;">Preencha os dados do novo funcionário</p>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">CPF</label>'
+        + '<input type="text" id="novo-func-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome Completo</label>'
+        + '<input type="text" id="novo-func-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">E-mail</label>'
+        + '<input type="email" id="novo-func-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula</label>'
+        + '<input type="text" id="novo-func-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong style="color:' + cor + ';">' + cargo + '</strong> | Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-func-cargo" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoFuncionarioPorCargo(\'' + cargo.replace(/'/g, "\\'") + '\')" id="btn-salvar-novo-func-cargo" style="width:100%;padding:12px;background:' + cor + ';color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.9\'" onmouseout="this.style.opacity=\'1\'">Cadastrar Funcionário</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva novo funcionário com cargo específico
+async function salvarNovoFuncionarioPorCargo(cargo) {
+    var cpfInput = document.getElementById('novo-func-cpf').value.trim();
+    var nome = document.getElementById('novo-func-nome').value.trim();
+    var emailReal = document.getElementById('novo-func-email').value.trim();
+    var matricula = document.getElementById('novo-func-matricula').value.trim();
+    var msgEl = document.getElementById('msg-novo-func-cargo');
+    var btn = document.getElementById('btn-salvar-novo-func-cargo');
+
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Processando...';
+    btn.disabled = true;
+
+    try {
+        var emailFicticio = cpfLimpo + '@email.com';
+
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
+
+        if (searchErr) throw searchErr;
+
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .upsert({
+                id: userId,
+                full_name: nome,
+                cpf: cpfLimpo,
+                matricula: matricula,
+                role: cargo,
+                email_real: emailReal,
+                email: emailFicticio
+            }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Funcionário cadastrado com sucesso!</span>';
+
+        setTimeout(function () {
+            var modal = document.getElementById('modal-novo-funcionario-cargo');
+            if (modal) modal.remove();
+            if (typeof carregarHierarquiaCompletaSecretario === 'function') carregarHierarquiaCompletaSecretario();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao salvar funcionário:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar funcionário.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Cadastrar Funcionário';
+        btn.disabled = false;
+    }
+}
+
+// Abre formulário para novo membro da equipe ambiental (com seleção de cargo)
+function abrirFormNovoFuncionarioEquipeAmbiental() {
+    var existente = document.getElementById('modal-novo-funcionario-equipe');
+    if (existente) existente.remove();
+
+    var cor = '#065f46';
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-novo-funcionario-equipe';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:30px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+        + '<button onclick="document.getElementById(\'modal-novo-funcionario-equipe\').remove()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">&times;</button>'
+        + '<h2 style="margin:0 0 8px 0;color:' + cor + ';font-size:20px;">Novo Membro da Equipe</h2>'
+        + '<p style="color:#64748b;font-size:13px;margin:0 0 20px 0;">Selecione o cargo e preencha os dados</p>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Cargo</label>'
+        + '<select id="novo-equipe-cargo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;">'
+        + '<option value="Engenheiro(a) Agrônomo(a)">Engenheiro(a) Agrônomo(a)</option>'
+        + '<option value="Engenheiro(a) Civil">Engenheiro(a) Civil</option>'
+        + '<option value="Analista Ambiental">Analista Ambiental</option>'
+        + '<option value="Auxiliar de Serviços II">Auxiliar de Serviços II</option>'
+        + '</select>'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">CPF</label>'
+        + '<input type="text" id="novo-equipe-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="mascaraCpfNovoFiscal(this)">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome Completo</label>'
+        + '<input type="text" id="novo-equipe-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:14px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">E-mail</label>'
+        + '<input type="email" id="novo-equipe-email" placeholder="email@exemplo.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula</label>'
+        + '<input type="text" id="novo-equipe-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Senha padrão: <strong>123456</strong></p>'
+        + '<div id="msg-novo-equipe" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<button onclick="salvarNovoFuncionarioEquipe()" id="btn-salvar-novo-equipe" style="width:100%;padding:12px;background:' + cor + ';color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.9\'" onmouseout="this.style.opacity=\'1\'">Cadastrar Membro</button>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Salva novo membro da equipe ambiental
+async function salvarNovoFuncionarioEquipe() {
+    var cargo = document.getElementById('novo-equipe-cargo').value;
+    var cpfInput = document.getElementById('novo-equipe-cpf').value.trim();
+    var nome = document.getElementById('novo-equipe-nome').value.trim();
+    var emailReal = document.getElementById('novo-equipe-email').value.trim();
+    var matricula = document.getElementById('novo-equipe-matricula').value.trim();
+    var msgEl = document.getElementById('msg-novo-equipe');
+    var btn = document.getElementById('btn-salvar-novo-equipe');
+
+    var cpfLimpo = cpfInput.replace(/\D/g, '');
+
+    if (!cpfLimpo || cpfLimpo.length < 11) {
+        msgEl.textContent = 'CPF inválido.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    if (!nome) {
+        msgEl.textContent = 'Nome é obrigatório.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+
+    btn.textContent = 'Processando...';
+    btn.disabled = true;
+
+    try {
+        var emailFicticio = cpfLimpo + '@email.com';
+
+        var { data: existingProfile, error: searchErr } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('cpf', cpfLimpo)
+            .maybeSingle();
+
+        if (searchErr) throw searchErr;
+
+        var userId;
+
+        if (existingProfile) {
+            userId = existingProfile.id;
+        } else {
+            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+                email: emailFicticio,
+                password: '123456'
+            });
+
+            if (authError) throw authError;
+            userId = authData.user.id;
+        }
+
+        var { error: profileError } = await supabaseClient
+            .from('profiles')
+            .upsert({
+                id: userId,
+                full_name: nome,
+                cpf: cpfLimpo,
+                matricula: matricula,
+                role: cargo,
+                email_real: emailReal,
+                email: emailFicticio
+            }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+
+        msgEl.innerHTML = '<span style="color:#10b981;">Membro cadastrado com sucesso!</span>';
+
+        setTimeout(function () {
+            var modal = document.getElementById('modal-novo-funcionario-equipe');
+            if (modal) modal.remove();
+            if (typeof carregarHierarquiaCompletaSecretario === 'function') carregarHierarquiaCompletaSecretario();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Erro ao salvar membro:', err);
+        msgEl.textContent = err.message || 'Erro ao cadastrar membro.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Cadastrar Membro';
+        btn.disabled = false;
+    }
+}
+
+// Confirma desativação de funcionário na árvore (com opção de transferir tarefas)
+function confirmarDesativarFuncionarioArvore(funcionarioId, nomeFuncionario, cargoFuncionario) {
+    var existente = document.getElementById('modal-desativar-funcionario-arvore');
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'modal-desativar-funcionario-arvore';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:30px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">'
+        + '<button onclick="document.getElementById(\'modal-desativar-funcionario-arvore\').remove()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">&times;</button>'
+        + '<div style="width:60px;height:60px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px auto;">'
+        + '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
+        + '</div>'
+        + '<h2 style="margin:0 0 8px 0;color:#1e293b;font-size:20px;">Desativar Funcionário</h2>'
+        + '<p style="color:#64748b;font-size:14px;margin:0 0 20px 0;">Você está prestes a desativar:</p>'
+        + '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:20px;">'
+        + '<div style="font-weight:700;color:#1e293b;font-size:16px;margin-bottom:4px;">' + nomeFuncionario + '</div>'
+        + '<div style="color:#64748b;font-size:13px;">' + cargoFuncionario + '</div>'
+        + '</div>'
+        + '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;">'
+        + '<p style="color:#c2410c;font-size:13px;margin:0;"><strong>Atenção:</strong> O funcionário será desativado e não poderá mais acessar o sistema. O histórico será preservado.</p>'
+        + '</div>'
+        + '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;text-align:left;">'
+        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" id="chk-transferir-tarefas-arvore" style="width:18px;height:18px;accent-color:#16a34a;" onchange="toggleTransferenciaTarefasArvore()">'
+        + '<span style="font-weight:600;color:#334155;">Transferir tarefas para outro usuário</span>'
+        + '</label>'
+        + '</div>'
+        + '<div id="secao-transferencia-arvore" style="display:none;margin-bottom:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;text-align:left;">'
+        + '<p style="color:#166534;font-size:12px;margin:0 0 10px 0;"><strong>Info:</strong> As tarefas e responsabilidades serão transferidas para o novo usuário.</p>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Nome do novo responsável</label>'
+        + '<input type="text" id="transferir-arvore-nome" placeholder="Nome completo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;font-size:13px;">Matrícula do novo responsável</label>'
+        + '<input type="text" id="transferir-arvore-matricula" placeholder="Número da matrícula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        + '</div>'
+        + '<button onclick="buscarNovoResponsavelArvore()" style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;">Buscar Usuário</button>'
+        + '<div id="resultado-busca-arvore" style="margin-top:10px;"></div>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;text-align:left;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Digite <strong style="color:#dc2626;">DESATIVAR</strong> para confirmar</label>'
+        + '<input type="text" id="confirmar-desativar-arvore" placeholder="DESATIVAR" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;text-align:center;">'
+        + '</div>'
+        + '<div id="msg-desativar-arvore" style="margin-bottom:12px;font-size:13px;"></div>'
+        + '<div style="display:flex;gap:12px;">'
+        + '<button onclick="document.getElementById(\'modal-desativar-funcionario-arvore\').remove()" style="flex:1;padding:12px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background=\'#e2e8f0\'" onmouseout="this.style.background=\'#f1f5f9\'">Cancelar</button>'
+        + '<button onclick="executarDesativarFuncionarioArvoreComTransferencia(\'' + funcionarioId + '\')" id="btn-desativar-arvore" style="flex:1;padding:12px;background:#ef4444;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.9\'" onmouseout="this.style.opacity=\'1\'">Desativar</button>'
+        + '</div>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+}
+
+// Toggle para mostrar/ocultar seção de transferência na árvore
+function toggleTransferenciaTarefasArvore() {
+    var chk = document.getElementById('chk-transferir-tarefas-arvore');
+    var secao = document.getElementById('secao-transferencia-arvore');
+    if (chk && secao) {
+        secao.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Buscar novo responsável para transferência na árvore
+var novoResponsavelArvoreSelecionado = null;
+async function buscarNovoResponsavelArvore() {
+    var nome = document.getElementById('transferir-arvore-nome').value.trim();
+    var matricula = document.getElementById('transferir-arvore-matricula').value.trim();
+    var resultadoDiv = document.getElementById('resultado-busca-arvore');
+    
+    if (!nome || !matricula) {
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
+        return;
+    }
+    
+    resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
+    
+    var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
+    
+    if (usuario) {
+        novoResponsavelArvoreSelecionado = usuario;
+        resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
+    } else {
+        novoResponsavelArvoreSelecionado = null;
+        resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Usuário não encontrado. Verifique nome e matrícula.</p>';
+    }
+}
+
+// Executa desativação do funcionário (com ou sem transferência de tarefas)
+async function executarDesativarFuncionarioArvoreComTransferencia(funcionarioId) {
+    var confirmacao = document.getElementById('confirmar-desativar-arvore').value.trim();
+    var chkTransferir = document.getElementById('chk-transferir-tarefas-arvore');
+    var msgEl = document.getElementById('msg-desativar-arvore');
+    var btn = document.getElementById('btn-desativar-arvore');
+
+    if (confirmacao !== 'DESATIVAR') {
+        msgEl.textContent = 'Digite DESATIVAR para confirmar.';
+        msgEl.style.color = '#ef4444';
+        return;
+    }
+    
+    // Validar transferência se checkbox marcado
+    if (chkTransferir && chkTransferir.checked) {
+        if (!novoResponsavelArvoreSelecionado) {
+            msgEl.textContent = 'Busque e selecione um novo responsável para transferir as tarefas.';
+            msgEl.style.color = '#ef4444';
+            return;
+        }
+    }
+
+    btn.textContent = 'Processando...';
+    btn.disabled = true;
+
+    try {
+        // TRANSFERIR TAREFAS se solicitado
+        if (chkTransferir && chkTransferir.checked && novoResponsavelArvoreSelecionado) {
+            btn.textContent = 'Transferindo tarefas...';
+            var resultadoTransferencia = await transferirTarefasUsuario(
+                funcionarioId, 
+                novoResponsavelArvoreSelecionado.id, 
+                novoResponsavelArvoreSelecionado.full_name
+            );
+            
+            if (resultadoTransferencia.erro) {
+                throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
+            }
+        }
+
+        // Desativar funcionário (Soft Delete)
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo', ativo: false })
+            .eq('id', funcionarioId);
+
+        if (error) throw error;
+
+        var mensagemSucesso = 'Funcionário desativado com sucesso!';
+        if (chkTransferir && chkTransferir.checked && novoResponsavelArvoreSelecionado) {
+            mensagemSucesso += ' Tarefas transferidas para ' + novoResponsavelArvoreSelecionado.full_name + '.';
+        }
+
+        // Limpar variável
+        novoResponsavelArvoreSelecionado = null;
+
+        var modal = document.getElementById('modal-desativar-funcionario-arvore');
+        if (modal) modal.remove();
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Desativado!',
+                text: mensagemSucesso,
+                icon: 'success',
+                timer: 2500,
+                showConfirmButton: false
+            });
+        } else {
+            alert(mensagemSucesso);
+        }
+
+        // Recarregar a árvore
+        if (typeof carregarHierarquiaCompletaSecretario === 'function') {
+            carregarHierarquiaCompletaSecretario();
+        }
+
+    } catch (err) {
+        console.error('Erro ao desativar funcionário:', err);
+        msgEl.textContent = err.message || 'Erro ao desativar funcionário.';
+        msgEl.style.color = '#ef4444';
+        btn.textContent = 'Desativar';
+        btn.disabled = false;
+    }
+}
+
+// Abre modal combinado com Estatísticas (esquerda) e Relatório de Produtividade (direita) para Fiscais de Posturas
+async function abrirEstatisticasComRelatorioFiscal(fiscalId, nomeFiscal) {
+    var modalId = 'modal-estatisticas-relatorio-fiscal';
+    var existente = document.getElementById(modalId);
+    if (existente) existente.remove();
+
+    var modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+
+    modal.innerHTML = ''
+        + '<div style="background:white;border-radius:16px;width:100%;max-width:1200px;max-height:95vh;overflow-y:auto;position:relative;">'
+        + '<button onclick="document.getElementById(\'' + modalId + '\').remove()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;z-index:10;">&times;</button>'
+        + '<div style="padding:30px;">'
+        + '<div style="text-align:center;margin-bottom:24px;">'
+        + '<h2 style="margin:0 0 8px 0;color:#1e293b;font-size:22px;">' + nomeFiscal + '</h2>'
+        + '<span style="background:#b45309;color:white;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;">Fiscal de Posturas</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:20px;flex-wrap:wrap;">'
+        // Coluna da Esquerda - Estatísticas de Tarefas
+        + '<div style="flex:1;min-width:350px;">'
+        + '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;font-weight:700;text-align:center;">Estatísticas de Tarefas</h3>'
+        + '<div id="estatisticas-tarefas-fiscal" style="min-height:300px;">'
+        + '<div style="text-align:center;padding:40px;color:#64748b;">Carregando estatísticas...</div>'
+        + '</div>'
+        + '</div>'
+        // Coluna da Direita - Relatório de Produtividade
+        + '<div style="flex:1;min-width:350px;">'
+        + '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;font-weight:700;text-align:center;">Relatório de Produtividade</h3>'
+        + '<div id="relatorio-produtividade-fiscal" style="min-height:300px;">'
+        + '<div style="text-align:center;padding:40px;color:#64748b;">Carregando relatório...</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>';
+
+    document.body.appendChild(modal);
+
+    // Carregar ambos os dados em paralelo
+    await Promise.all([
+        carregarEstatisticasTarefasParaFiscal(fiscalId),
+        carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal)
+    ]);
+}
+
+// Carrega estatísticas de tarefas para o modal combinado
+async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
+    var container = document.getElementById('estatisticas-tarefas-fiscal');
+    if (!container) return;
+
+    try {
+        // Buscar tarefas do fiscal (mesma lógica de abrirEstatisticasFuncionario)
+        var { data: responsaveis, error: errResp } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('tarefa_id')
+            .eq('user_id', fiscalId);
+
+        if (errResp) throw errResp;
+
+        var tarefaIds = responsaveis ? responsaveis.map(function(r) { return r.tarefa_id; }) : [];
+
+        var tarefasPrincipais = [];
+        if (tarefaIds.length > 0) {
+            var { data: tarefas, error: errTarefas } = await supabaseClient
+                .from('tarefas')
+                .select('*')
+                .in('id', tarefaIds)
+                .is('tarefa_pai_id', null);
+
+            if (errTarefas) throw errTarefas;
+            tarefasPrincipais = tarefas || [];
+        }
+
+        var { data: tarefasCriadas, error: errCriadas } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .eq('criado_por', fiscalId)
+            .is('tarefa_pai_id', null);
+
+        if (errCriadas) throw errCriadas;
+
+        var tarefasMap = {};
+        (tarefasPrincipais || []).forEach(function(t) { tarefasMap[t.id] = t; });
+        (tarefasCriadas || []).forEach(function(t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
+        var todasTarefas = Object.values(tarefasMap);
+
+        // Calcular estatísticas
+        var stats = {
+            total: todasTarefas.length,
+            concluidas: 0,
+            emProgresso: 0,
+            pendentes: 0,
+            atrasadas: 0
+        };
+
+        var hoje = new Date().toISOString().split('T')[0];
+        todasTarefas.forEach(function(t) {
+            if (t.status === 'concluida') {
+                stats.concluidas++;
+            } else if (t.prazo && t.prazo < hoje) {
+                stats.atrasadas++;
+            } else if (t.status === 'em_progresso') {
+                stats.emProgresso++;
+            } else {
+                stats.pendentes++;
+            }
+        });
+
+        // Renderizar resumo
+        var html = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">';
+        html += '<div style="background:#f0fdf4;border-radius:12px;padding:16px;text-align:center;border:1px solid #bbf7d0;"><div style="font-size:24px;font-weight:700;color:#16a34a;">' + stats.total + '</div><div style="font-size:12px;color:#166534;">Total Tarefas</div></div>';
+        html += '<div style="background:#dbeafe;border-radius:12px;padding:16px;text-align:center;border:1px solid #93c5fd;"><div style="font-size:24px;font-weight:700;color:#2563eb;">' + stats.concluidas + '</div><div style="font-size:12px;color:#1e40af;">Concluídas</div></div>';
+        html += '<div style="background:#fef3c7;border-radius:12px;padding:16px;text-align:center;border:1px solid #fcd34d;"><div style="font-size:24px;font-weight:700;color:#d97706;">' + stats.emProgresso + '</div><div style="font-size:12px;color:#92400e;">Em Progresso</div></div>';
+        html += '<div style="background:#fee2e2;border-radius:12px;padding:16px;text-align:center;border:1px solid #fca5a5;"><div style="font-size:24px;font-weight:700;color:#dc2626;">' + stats.atrasadas + '</div><div style="font-size:12px;color:#991b1b;">Atrasadas</div></div>';
+        html += '</div>';
+
+        // Gráfico de status
+        html += '<div style="background:#f8fafc;border-radius:12px;padding:16px;">';
+        html += '<canvas id="grafico-status-tarefas-fiscal" style="max-height:200px;"></canvas>';
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Criar gráfico
+        setTimeout(function() {
+            var ctx = document.getElementById('grafico-status-tarefas-fiscal');
+            if (ctx && typeof Chart !== 'undefined') {
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'],
+                        datasets: [{
+                            data: [stats.concluidas, stats.emProgresso, stats.pendentes, stats.atrasadas],
+                            backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 11 } } }
+                        }
+                    }
+                });
+            }
+        }, 100);
+
+    } catch (err) {
+        console.error("Erro ao carregar estatísticas:", err);
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;">Erro ao carregar estatísticas.</div>';
+    }
+}
+
+// Carrega relatório de produtividade para o modal combinado
+async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
+    var container = document.getElementById('relatorio-produtividade-fiscal');
+    if (!container) return;
+
+    try {
+        // Buscar registros do fiscal (mesma lógica de abrirRelatorioFiscal)
+        var { data: regProd } = await supabaseClient
+            .from('registros_produtividade')
+            .select('*')
+            .eq('user_id', fiscalId)
+            .order('created_at', { ascending: false });
+
+        var { data: regCP } = await supabaseClient
+            .from('controle_processual')
+            .select('*')
+            .eq('user_id', fiscalId)
+            .order('created_at', { ascending: false });
+
+        var todosRegs = (regProd || []).concat(regCP || []);
+        var registrosFiltrados = todosRegs.filter(function(r) { return (r.pontuacao || 0) !== 0; });
+
+        // Calcular totais
+        var pontuacaoTotal = registrosFiltrados.reduce(function(sum, r) { return sum + (r.pontuacao || 0); }, 0);
+        var totalDocumentos = registrosFiltrados.length;
+
+        // Agrupar por tipo
+        var docPorTipo = {};
+        registrosFiltrados.forEach(function(r) {
+            var tipo = r.categoria || 'Outros';
+            if (!docPorTipo[tipo]) docPorTipo[tipo] = 0;
+            docPorTipo[tipo]++;
+        });
+
+        // Renderizar resumo
+        var html = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">';
+        html += '<div style="background:#f0fdf4;border-radius:12px;padding:16px;text-align:center;border:1px solid #bbf7d0;"><div style="font-size:24px;font-weight:700;color:#16a34a;">' + pontuacaoTotal + '</div><div style="font-size:12px;color:#166534;">Pontuação Total</div></div>';
+        html += '<div style="background:#e0e7ff;border-radius:12px;padding:16px;text-align:center;border:1px solid #a5b4fc;"><div style="font-size:24px;font-weight:700;color:#4f46e5;">' + totalDocumentos + '</div><div style="font-size:12px;color:#3730a3;">Documentos</div></div>';
+        html += '</div>';
+
+        // Gráfico de documentos por tipo
+        if (Object.keys(docPorTipo).length > 0) {
+            html += '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px;">';
+            html += '<canvas id="grafico-docs-tipo-fiscal" style="max-height:180px;"></canvas>';
+            html += '</div>';
+        }
+
+        // Lista dos últimos registros
+        html += '<div style="max-height:200px;overflow-y:auto;">';
+        html += '<h4 style="margin:0 0 12px 0;color:#1e293b;font-size:14px;">Últimos Registros</h4>';
+        if (registrosFiltrados.length === 0) {
+            html += '<p style="color:#64748b;font-size:13px;text-align:center;">Nenhum registro encontrado.</p>';
+        } else {
+            html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+            registrosFiltrados.slice(0, 5).forEach(function(r) {
+                var data = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
+                html += '<div style="background:#f8fafc;border-radius:8px;padding:10px;border:1px solid #e2e8f0;">';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                html += '<span style="font-weight:600;color:#1e293b;font-size:13px;">' + (r.categoria || 'Sem categoria') + '</span>';
+                html += '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">+' + (r.pontuacao || 0) + ' pts</span>';
+                html += '</div>';
+                html += '<div style="font-size:11px;color:#64748b;margin-top:4px;">' + data + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Criar gráfico de documentos
+        if (Object.keys(docPorTipo).length > 0) {
+            setTimeout(function() {
+                var ctx = document.getElementById('grafico-docs-tipo-fiscal');
+                if (ctx && typeof Chart !== 'undefined') {
+                    var labels = Object.keys(docPorTipo).slice(0, 5);
+                    var data = Object.values(docPorTipo).slice(0, 5);
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Quantidade',
+                                data: data,
+                                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'],
+                                borderRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                                x: { ticks: { font: { size: 10 } } }
+                            }
+                        }
+                    });
+                }
+            }, 100);
+        }
+
+    } catch (err) {
+        console.error("Erro ao carregar relatório:", err);
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;">Erro ao carregar relatório.</div>';
+    }
+}
+
+
+// Expor funções globalmente
+window.abrirEstatisticasFuncionario = abrirEstatisticasFuncionario;
+window.abrirRelatorioFiscal = abrirRelatorioFiscal;
+window.carregarDashboardSecretario = carregarDashboardSecretario;
+window.carregarHierarquiaCompletaSecretario = carregarHierarquiaCompletaSecretario;
+window.carregarResumoTarefasSecretario = carregarResumoTarefasSecretario;
+window.carregarGraficoDocumentosSecretario = carregarGraficoDocumentosSecretario;
+window.carregarCalendarioProjetosSecretario = carregarCalendarioProjetosSecretario;
+window.irParaProjetos = irParaProjetos;
+window.renderizarCardArvore = renderizarCardArvore;
+window.renderizarCardArvoreCompacto = renderizarCardArvoreCompacto;
+window.carregarDiretoresSecretario = carregarDiretoresSecretario;
+window.abrirFormNovoDiretor = abrirFormNovoDiretor;
+window.abrirFormNovoFuncionarioPorCargo = abrirFormNovoFuncionarioPorCargo;
+window.salvarNovoFuncionarioPorCargo = salvarNovoFuncionarioPorCargo;
+window.abrirFormNovoFuncionarioEquipeAmbiental = abrirFormNovoFuncionarioEquipeAmbiental;
+window.salvarNovoFuncionarioEquipe = salvarNovoFuncionarioEquipe;
+window.confirmarDesativarFuncionarioArvore = confirmarDesativarFuncionarioArvore;
+window.executarDesativarFuncionarioArvoreComTransferencia = executarDesativarFuncionarioArvoreComTransferencia;
+window.toggleTransferenciaTarefasArvore = toggleTransferenciaTarefasArvore;
+window.buscarNovoResponsavelArvore = buscarNovoResponsavelArvore;
+window.abrirEstatisticasComRelatorioFiscal = abrirEstatisticasComRelatorioFiscal;
+window.carregarEstatisticasTarefasParaFiscal = carregarEstatisticasTarefasParaFiscal;
+window.carregarRelatorioProdutividadeParaFiscal = carregarRelatorioProdutividadeParaFiscal;

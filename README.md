@@ -20,14 +20,8 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `gerente.js` | **Gestão de Fiscais**: Ranking de desempenho, gráficos de pontuação, cadastro e exclusão de fiscais, visualização de documentos por tipo |
 | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
 | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
-| `visibility_plan.md` | Documentação do plano de refinamento de visibilidade e permissões |
-| `cabecalho.js` | Script para modularização offline do cabeçalho HTML e menu do dashboard principal |
-| `cabecalho_export.js` | Base64 e renderização da injeção de timbre (identidade visual) do WYSIWYG PDF/Word |
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
-| `fix.js`, `debug_script.js`, `test_history.js` | Scripts auxiliares de desenvolvimento, debug e testes |
-| `visibility_plan.md` | Plano de refinamento de visibilidade e permissões de projetos |
-| `supabase_setup.sql` | Scripts SQL de criação de tabelas, Políticas RLS e configuração de Storage (Anexos) |
-| `setup_tarefas.sql` | Script SQL para as tabelas do módulo de Tarefas: `eventos`, `tarefas`, `tarefa_responsaveis`, `tarefa_anexos`, bucket de storage e índices |
+| `PERMISSOES_SETUP.md` | Guia de configuração de permissões hierárquicas |
 | `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
 
 ---
@@ -51,8 +45,9 @@ O sistema possui **6 cargos distintos** com permissões específicas:
 | **Fiscal de Posturas** | Mesmas permissões do Fiscal (variação de cargo) |
 | **Gerente Fiscal** | Histórico Geral, Bairros, visão de gestão de fiscais |
 | **Gerente de Posturas** | Projetos, Bairros, Tarefas, Calendário de Eventos |
-| **Administrador de Posturas** | Acesso ao Histórico Geral (visor apenas) |
-| **Diretor de Meio Ambiente** | Acesso total com menu expansível "Gerência de Posturas", alternância entre modo Direção e Gerência |
+| **Gerente de Regularização Ambiental** | Gestão de equipe ambiental (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares), Tarefas, Calendário |
+| **Administrativo de Posturas** | Acesso ao Histórico Geral (visor apenas) |
+| **Diretor de Meio Ambiente** | Acesso total com menus expansíveis "Gerência de Posturas" e "Gerência de Regularização Ambiental", alternância entre modos Direção e Gerência |
 | **Secretário(a)** | Acesso total com menu expansível "Direção de Meio Ambiente", gestão de Diretores, criação de tarefas para qualquer usuário |
 
 ### Aba de Configurações (Meu Perfil)
@@ -195,22 +190,11 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 
 ---
 
-## ✅ Módulo de Tarefas e Calendário (`tarefas.js`)
+## ✅ Módulo de Tarefas(`tarefas.js`)
 
 Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos os usuários). Layout em duas colunas:
 - **Coluna Esquerda**: Calendário mensal + lista de eventos.
 - **Coluna Direita**: Kanban de tarefas em 3 colunas.
-
-### Calendário Mensal
-- Calendário HTML/CSS puro (sem bibliotecas externas) com navegação mês a mês.
-- Dias com eventos destacados com bolinha colorida.
-- Dia atual destacado visualmente.
-
-### Eventos
-- **Criar evento** (gerente/admin): modal com título, descrição, data e cor (Azul, Verde, Amarelo, Vermelho, Roxo).
-- **Listar eventos**: eventos do mês corrente exibidos abaixo do calendário com data, título e cor.
-- **Excluir evento**: botão ✕ visível apenas para gerente/admin.
-- Todos os usuários podem **visualizar** eventos; apenas gerente/admin podem criar e excluir.
 
 ### Kanban de Tarefas
 - **3 colunas**: Atrasadas (vermelho), Em Progresso (azul), Concluídas (verde).
@@ -224,7 +208,7 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
   - Prazo com cor dinâmica (vermelho=atrasada, amarelo=próxima, cinza=normal).
   - Barra de progresso de subtarefas com porcentagem.
   - **Lista de subtarefas** com checkboxes interativos (só para tarefas do próprio usuário ou gerente).
-- **Criar tarefa** (gerente/admin): modal com título, descrição, prazo, responsáveis (checkboxes com lista de fiscais/gerentes).
+- **Criar tarefa** (gerente): modal com título, descrição, prazo, responsáveis (checkboxes com lista de fiscais/gerentes).
 
 ### Modal de Detalhe da Tarefa
 - **Botões de status**: Pendente / Em Progresso / Concluída — visíveis apenas para responsáveis ou gerentes.
@@ -233,10 +217,10 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 - **Prazo**: data formatada em pt-BR.
 - **Subtarefas**: lista com checkboxes, nome do responsável designado, botão de anexar PDF e link para anexos já enviados.
 - **Anexos**: seção para upload de PDF + listagem com link clicável e botão de excluir.
-- **Excluir tarefa**: botão exclusivo para gerente/admin.
+- **Excluir tarefa**: botão exclusivo para gerente.
 
 ### Subtarefas
-- **Criar subtarefa** (gerente/admin): mini-modal com título e seletor de responsável (dropdown com lista de fiscais/gerentes).
+- **Criar subtarefa** (gerente): mini-modal com título e seletor de responsável (dropdown com lista de fiscais/gerentes).
 - Cada subtarefa pode ter:
   - **Responsável designado** (exibido com ícone SVG).
   - **Anexo PDF** (botão de upload direto na subtarefa).
@@ -245,18 +229,21 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 
 ### Permissões por Role
 
-| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) |
-|------|--------|---------------|--------------------------|---------------|
-| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas |
-| Alterar status | Apenas das suas | Todas | Todas | Todas |
-| Criar tarefa/evento | ✗ | ✓ | ✓ | ✓ |
-| Criar subtarefa | ✗ | ✓ | ✓ | ✓ |
-| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ |
-| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas |
-| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas |
-| Ver eventos | ✓ | ✓ | ✓ | ✓ |
-| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ |
-| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ |
+| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) | Gerente RA |
+|------|--------|---------------|--------------------------|---------------|------------|
+| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas | Só da equipe RA |
+| Alterar status | Apenas das suas | Todas | Todas | Todas | Todas |
+| Criar tarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas |
+| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas |
+| Ver eventos | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ |
+| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ |
+| Gerenciar Equipe Ambiental | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ |
+| Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ |
 
 ### Ícones SVG
 - Todos os ícones do módulo utilizam **SVGs inline stroke-only** (estilo minimalista da sidebar), sem emojis.
@@ -304,29 +291,97 @@ Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `f
 ### Variáveis de Controle de Modo (Frontend)
 | Variável | Valores | Descrição |
 |----------|---------|-----------|
-| `diretorModoVisualizacao` | `'direcao'`, `'gerencia'` | Modo atual do Diretor |
-| `secretarioModoVisualizacao` | `'normal'`, `'direcao'` | Modo atual do Secretário |
-| `secretarioModoGerencia` | `true`, `false` | Sub-modo Gerência do Secretário |
+| `diretorModoVisualizacao` | `'direcao'`, `'gerencia_posturas'`, `'gerencia_ambiental'` | Modo atual do Diretor |
+| `secretarioModoVisualizacao` | `'normal'`, `'direcao'`, `'gerencia_ambiental'` | Modo atual do Secretário |
+| `secretarioModoGerencia` | `true`, `false` | Sub-modo Gerência de Posturas do Secretário |
+| `idsGerentesGlobal` | Array de UUIDs | IDs dos Gerentes de Posturas |
+| `idsGerentesAmbientalGlobal` | Array de UUIDs | IDs dos Gerentes de Regularização Ambiental |
 
 ---
 
 ## 🏛️ Módulo do Secretário(a)
 
-O Secretário(a) possui visão hierárquica completa do sistema, gerenciando Diretores.
+O Secretário(a) possui visão hierárquica completa do sistema, com dashboard reorganizado em layout de duas colunas.
 
-### Funcionalidades:
-- **Gestão de Diretores**: Visualização, criação e exclusão de Diretores
-- **Minhas Tarefas**: Tarefas atribuídas ao Secretário
-- **Direção de Meio Ambiente**: Menu expansível com sub-submenu "Gerência de Posturas"
-- **Criação de Tarefas**: Pode criar tarefas para qualquer usuário do sistema
-- **Filtros de Tarefas**: 
-  - Modo Direção: vê tarefas de Diretores
-  - Modo Gerência (sub-modo): vê tarefas de Gerentes
+### Dashboard do Secretário (Home):
+
+O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveitamento do espaço:
+
+```
+┌─────────────────────────────────┬─────────────────────────────┐
+│  🌳 ÁRVORE HIERÁRQUICA          │  📋 VISÃO GERAL DE TAREFAS  │
+│  (60% da largura)               │                             │
+│                                 │  • Pendentes                │
+│  • Diretores                    │  • Em Progresso             │
+│  • Gerentes de Posturas         │  • Atrasadas                │
+│  • Fiscais                      │  • Próximas 5 tarefas       │
+│  • Gerentes de Regularização RA │                             │
+│  • Equipe Ambiental             │  📊 CONTROLE PROCESSUAL     │
+│                                 │  (30 dias)                  │
+│  [+ Novo] em cada nível         │  • Gráfico doughnut         │
+│  Contadores discretos           │  • Por tipo de documento    │
+│  (X diretores, X gerentes...)   │  • Total de registros       │
+│                                 │                             │
+│                                 │  📅 PROJETOS                │
+│                                 │  • Calendário mensal        │
+│                                 │  • Dias com eventos         │
+│                                 │  • Próximos 3 eventos       │
+│                                 │  • [Ver todos →]            │
+└─────────────────────────────────┴─────────────────────────────┘
+```
+
+#### Coluna Esquerda - Árvore Hierárquica:
+- **Visualização organizacional** completa da SEMAC em formato de árvore
+- **Cards transparentes** com bordas coloridas por cargo:
+  - Roxo (`#7c3aed`) para Diretores
+  - Verde escuro (`#0c3e2b`) para Gerentes de Posturas
+  - Azul (`#1e3a5f`) para Gerentes de Regularização Ambiental
+  - Laranja (`#b45309`) para Fiscais
+  - Verde (`#065f46`) para Equipe Ambiental
+- **Botões "+ Novo"** em cada nível para cadastro rápido
+- **Ícone de lixeira** em cada card para desativação de funcionários
+- **Contadores discretos** embaixo de cada cargo (ex: "3 diretores", "5 fiscais")
+- **Clique nos cards** abre estatísticas (tarefas + produtividade para Fiscais)
+
+#### Coluna Direita - Dashboards:
+1. **Visão Geral de Tarefas**:
+   - Cards com contadores de Pendentes, Em Progresso e Atrasadas
+   - Lista das 5 tarefas mais próximas do prazo
+   - Layout compacto e informativo
+
+2. **Controle Processual (30 dias)**:
+   - Gráfico doughnut com distribuição de documentos por tipo
+   - Tipos: Notificação, Auto de Infração, AR, Ofício, Relatório, Protocolo, Réplica
+   - Total de registros no período
+
+3. **Projetos (Calendário)**:
+   - Calendário mensal compacto com dias destacados
+   - Dias com eventos coloridos conforme a cor do projeto
+   - Dia atual em destaque azul
+   - Lista dos 3 próximos eventos com título e data
+   - Clique em qualquer evento ou "Ver todos →" navega para a aba Projetos
 
 ### Hierarquia de Cargos:
 ```
-Secretário(a) → Diretor → Gerente → Fiscal
+Secretário(a) → Diretor → Gerente de Posturas → Fiscal
+                    ↓
+              Gerente de Regularização Ambiental → Equipe Ambiental
+                    (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares)
 ```
+
+### Funcionalidades de Gestão:
+- **Gestão Completa de Funcionários**: Cadastro e desativação de todos os cargos
+  - Hierarquia de permissões: Secretário pode gerenciar Diretores, Gerentes, Fiscais e Equipe RA
+  - Diretor pode gerenciar Gerentes, Fiscais e Equipe RA
+  - Gerente pode gerenciar Fiscais/Equipe sob sua responsabilidade
+- **Criação de Tarefas**: Pode criar tarefas para qualquer usuário do sistema
+- **Direção de Meio Ambiente**: Menu expansível com:
+  - Sub-menu "Gerência de Posturas" (completo)
+  - Sub-menu "Gerência de Regularização Ambiental" (completo)
+- **Filtros de Tarefas**: 
+  - Modo Direção: vê tarefas de Diretores
+  - Modo Gerência Posturas: vê tarefas de Gerentes de Posturas
+  - Modo Gerência Ambiental: vê tarefas da equipe de Regularização Ambiental
 
 ### Menu Sidebar do Secretário:
 ```
@@ -338,13 +393,42 @@ Secretário(a) → Diretor → Gerente → Fiscal
       📁 Bairros
       📁 Histórico Geral
       📁 Tarefas (Gerência)
+   📁 Gerência de Regularização Ambiental (toggle)
+      📁 Dashboard da Equipe
+      📁 Tarefas (RA)
 ```
 
 ### Comportamento do Sub-menu:
-- **Clicar em "Direção de Meio Ambiente"**: Abre submenu, muda para modo Direção
-- **Clicar em "Gerência de Posturas"**: Abre sub-submenu, muda para modo Gerente
-- **Clicar em outros botões do submenu**: Fecha sub-submenu, volta para modo Direção
+- **Clicar em "Direção de Meio Ambiente" (menu fechado)**: Abre o menu, muda para modo Direção
+- **Clicar em "Direção de Meio Ambiente" (menu aberto + sub-submenu aberto)**: Fecha apenas o sub-submenu, mantém o menu aberto, volta para modo Direção
+- **Clicar em "Direção de Meio Ambiente" (menu aberto + sem sub-submenu)**: Fecha o menu completamente, volta para modo normal
+- **Clicar em "Gerência de Posturas"**: Abre/fecha sub-submenu, alterna modo Gerente (Posturas)
+- **Clicar em "Gerência de Regularização Ambiental"**: Abre/fecha sub-submenu, alterna modo Gerência RA
 - **Clicar fora do menu**: Fecha todo o menu, volta para modo normal
+
+> **Nota:** O botão "Direção de Meio Ambiente" requer **dois cliques** para fechar completamente quando um sub-submenu está aberto. O primeiro clique fecha o sub-submenu e volta para a visão do Diretor, o segundo clique fecha o menu principal.
+
+### Filtros de Visibilidade de Tarefas por Modo:
+
+#### Diretor de Meio Ambiente
+| Modo | Tarefas Visíveis |
+|------|------------------|
+| `direcao` | Apenas tarefas criadas pelo próprio Diretor |
+| `gerencia_posturas` | Tarefas criadas por Gerentes de Posturas |
+| `gerencia_ambiental` | Tarefas criadas por Gerentes RA **OU** onde equipe RA é responsável |
+
+#### Secretário(a)
+| Modo | Tarefas Visíveis |
+|------|------------------|
+| `normal` | Todas as tarefas (sem filtro) |
+| `direcao` | Tarefas de Diretores |
+| `gerencia_posturas` | Tarefas criadas por Gerentes de Posturas (sub-modo) |
+| `gerencia_ambiental` | Tarefas criadas por Gerentes RA **OU** onde equipe RA é responsável |
+
+#### Gerente de Regularização Ambiental
+- Vê tarefas que **criou** OU onde é **responsável**
+- Pode criar tarefas para qualquer membro da equipe ambiental
+- **Não pode** criar projetos/eventos (apenas Diretor/Secretário)
 
 ### Storage Buckets
 - **`anexos`**: PDFs de documentos do controle processual
@@ -352,6 +436,57 @@ Secretário(a) → Diretor → Gerente → Fiscal
 - **`tarefa_anexos`**: Anexos de tarefas e subtarefas
 
 Políticas: Upload/download para usuários autenticados, arquivos organizados em pastas por `user_id`.
+
+---
+
+## 🌿 Módulo do Gerente de Regularização Ambiental (GRA)
+
+O Gerente de Regularização Ambiental possui visão específica para gestão da equipe técnica ambiental.
+
+### Equipe Gerenciada:
+| Cargo | Descrição |
+|-------|-----------|
+| **Engenheiro(a) Agrônomo(a)** | Especialista em regularização ambiental rural |
+| **Engenheiro(a) Civil** | Especialista em regularização urbanística |
+| **Analista Ambiental** | Análise de processos ambientais |
+| **Auxiliar de Serviços II** | Suporte operacional à equipe |
+
+### Funcionalidades:
+- **Dashboard de Equipe**: Contadores por cargo (4 cards coloridos)
+- **Lista de Membros**: Visualização com foto, nome, cargo e estatísticas de tarefas
+- **Clique no Membro**: Abre modal com detalhamento de tarefas (total, concluídas, pendentes, atrasadas)
+- **Novo Funcionário**: Botão para cadastrar novos membros à equipe
+- **Desativar Funcionário**: Opção para marcar funcionário como inativo (role = 'inativo')
+
+### Visibilidade de Tarefas:
+- **Modo Gerência RA**: Diretor visualiza tarefas onde a equipe RA é responsável (não apenas criadas por eles)
+- **Tarefas da Equipe**: Cards clicáveis mostram estatísticas detalhadas de produtividade
+
+---
+
+## 🔐 Permissões Hierárquicas (SQL)
+
+### Script: `setup_permissoes_diretor_gerenciar.sql`
+Configura políticas RLS para permitir que **Diretor** e **Secretário** gerenciem funcionários.
+
+### Funções Criadas:
+| Função | Descrição |
+|--------|-----------|
+| `is_diretor_ou_secretario(user_id)` | Verifica se usuário tem permissão de gestão |
+| `criar_novo_usuario(email, senha, nome, role, cpf)` | Cria usuário completo (auth.users + profiles) |
+| `desativar_usuario(user_id)` | Marca usuário como inativo |
+
+### Políticas RLS:
+- **INSERT**: Diretor/Secretário podem cadastrar novos funcionários
+- **UPDATE**: Diretor/Secretário podem atualizar qualquer perfil
+- **SELECT**: Todos autenticados podem visualizar perfis
+
+### Hierarquia de Exclusão:
+```
+Secretário(a) pode desativar: Todos (incluindo Diretores)
+Diretor pode desativar: Gerentes, Fiscais, Equipe RA (exceto Secretários)
+Gerente pode desativar: Após as políticas SQL, somente via código da aplicação
+```
 
 ---
 
@@ -369,6 +504,7 @@ Políticas: Upload/download para usuários autenticados, arquivos organizados em
 | Home do Diretor | `#0c3e2b → #062117` | Total de Gerentes (verde escuro) |
 | Home do Secretário | `#0c3e2b → #062117` | Total de Diretores (verde escuro) |
 | Home do Gerente | `#1e293b → #0f172a` | Total de Fiscais (cinza escuro) |
+| Home Gerência Ambiental | `#065f46 → #047857` | Contadores da Equipe RA (verde ambiental) |
 
 ---
 
@@ -395,20 +531,35 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 | Função | Descrição |
 |--------|-----------|
 | `toggleDirecaoMeioAmbiente()` | Toggle do menu "Direção de Meio Ambiente" do Secretário |
-| `toggleGerenciaPosturasSecretario()` | Toggle do sub-menu "Gerência de Posturas" |
-| `fecharDirecaoSecretario()` | Fecha o menu e sub-menu do Secretário |
+| `toggleGerenciaPosturasSecretario()` | Toggle do sub-menu "Gerência de Posturas" do Secretário |
+| `toggleGerenciaAmbientalSecretario()` | Toggle do sub-menu "Gerência de Regularização Ambiental" do Secretário |
+| `fecharDirecaoSecretario()` | Fecha o menu e sub-menus do Secretário |
+| `fecharGerenciaAmbientalSecretario()` | Fecha o sub-menu de Gerência Ambiental do Secretário |
 | `toggleGerenciaPosturas()` | Toggle do menu "Gerência de Posturas" do Diretor |
+| `toggleGerenciaAmbiental()` | Toggle do menu "Gerência de Regularização Ambiental" do Diretor |
+| `fecharGerenciaAmbientalDiretor()` | Fecha o menu de Gerência Ambiental do Diretor |
 | `fecharGerenciaDiretor()` | Fecha o menu do Diretor |
+| `carregarDashboardGerenteAmbiental()` | Carrega dashboard da equipe de Regularização Ambiental |
+| `mostrarTarefasFuncionario(userId, userName)` | Exibe modal com estatísticas de tarefas do funcionário |
+| `desativarFuncionarioAmbiental(userId)` | Desativa funcionário da equipe ambiental |
+| `abrirFormNovoFuncionarioAmbiental()` | Abre modal para cadastrar novo funcionário ambiental |
 
 ### gerente.js
 | Função | Descrição |
 |--------|-----------|
-| `carregarDashboardSecretario()` | Carrega a Home do Secretário com gestão de Diretores |
-| `carregarDiretoresSecretario()` | Lista todos os Diretores com foto e ações |
-| `abrirFormNovoDiretor()` | Modal para cadastrar novo Diretor |
-| `salvarNovoDiretor()` | Salva Diretor no banco de dados |
-| `abrirExcluirDiretorSecretario()` | Modal de confirmação de exclusão |
-| `excluirDiretorSecretario()` | Executa exclusão lógica do Diretor |
+| `carregarDashboardSecretario()` | Carrega a Home do Secretário com árvore hierárquica e dashboards |
+| `carregarHierarquiaCompletaSecretario()` | Renderiza a árvore hierárquica completa da SEMAC |
+| `carregarResumoTarefasSecretario()` | Carrega visão geral de tarefas na sidebar |
+| `carregarGraficoDocumentosSecretario()` | Renderiza gráfico doughnut de Controle Processual |
+| `carregarCalendarioProjetosSecretario()` | Renderiza calendário compacto de Projetos |
+| `irParaProjetos()` | Navega para aba Projetos expandindo menu se necessário |
+| `renderizarCardArvore(func, cor, tipo)` | Renderiza card de funcionário na árvore (grande) |
+| `renderizarCardArvoreCompacto(func, cor, tipo)` | Renderiza card compacto (Fiscais/Equipe) |
+| `abrirFormNovoFuncionarioPorCargo(cargo)` | Modal para cadastrar funcionário em qualquer cargo |
+| `salvarNovoFuncionarioPorCargo()` | Salva novo funcionário validando hierarquia |
+| `confirmarDesativarFuncionarioArvore()` | Modal de confirmação para desativação |
+| `executarDesativarFuncionarioArvoreComTransferencia()` | Desativa funcionário com opção de transferir tarefas |
+| `abrirEstatisticasEProdutividadeFiscal()` | Modal combinado com estatísticas e produtividade |
 | `carregarDashboardDiretor()` | Carrega a Home do Diretor com gestão de Gerentes |
 | `carregarGerentesHierarquiaDiretor()` | Lista todos os Gerentes |
 | `abrirFormNovoGerente()` | Modal para cadastrar novo Gerente |
@@ -440,3 +591,31 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Sidebar Rolável**: Implementação de scrollbar customizada na sidebar para quando o conteúdo excede a altura da tela.
 - **Filtros de Tarefas por Perfil**: Sistema de filtros dinâmicos para Diretor e Secretário baseado no modo de visualização ativo.
 - **Gestão Hierárquica**: Sistema completo de gestão em cascata: Secretário → Diretor → Gerente → Fiscal.
+- **Cadastro Inteligente (Idempotência)**: Implementada verificação de existência por CPF nas funções de salvamento (`gerente.js`), permitindo a reativação de usuários inativos e evitando o erro 422 (*User already registered*).
+- **Padronização de Domínio de E-mail**: Unificação de todos os e-mails de sistema para o domínio `@email.com` (ex: `cpf@email.com`), garantindo compatibilidade total com o mecanismo de login da `index.html`.
+- **Robustez na Busca de Perfis (Fix PGRST116)**: Substituição global de `.single()` por `.maybeSingle()` em chamadas ao Supabase para evitar erros críticos de "0 rows" quando perfis de usuários recém-criados ainda não foram propagados ou estão ausentes.
+- **Novo Cargo: Gerente de Regularização Ambiental**: Implementação completa do perfil GRA com dashboard de equipe, contadores por cargo (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares) e gestão de membros.
+- **Gerência de Regularização Ambiental para Diretor**: Adicionado menu "Gerência de Regularização Ambiental" no sidebar do Diretor com toggle e dashboard da equipe ambiental.
+- **Filtro de Tarefas GRA Corrigido**: Diretor no modo `gerencia_ambiental` agora vê tarefas onde a equipe RA é responsável (não apenas criadas por eles).
+- **Estatísticas de Funcionários**: Cards da equipe GRA são clicáveis e abrem modal com estatísticas de tarefas (total, concluídas, pendentes, atrasadas).
+- **Permissões SQL de Gestão**: Script `setup_permissoes_diretor_gerenciar.sql` permite que Diretor e Secretário cadastrem e desativem funcionários via funções RPC.
+- **Remoção de Botão Duplicado**: Botão "Nova Tarefa" removido do container de home do GRA (já existe na aba Tarefas).
+
+## 🆕 Atualizações Recentes (Março/2026)
+
+### Dashboard do Secretário Reorganizado
+- **Layout em Duas Colunas**: Árvore hierárquica (60%) + Dashboards (40%) para melhor aproveitamento de espaço
+- **Árvore Hierárquica Visual**: Organograma completo da SEMAC com cards transparentes, bordas coloridas por cargo e conectores entre níveis
+- **Contadores Discretos**: Removidos os cards grandes de totais do topo; agora exibidos como textos sutis embaixo de cada cargo ("3 diretores", "5 fiscais")
+- **Botões "+ Novo" por Nível**: Cadastro rápido de funcionários em cada nível hierárquico (Diretores, Gerentes, Fiscais, Equipe Ambiental)
+- **Desativação com Transferência**: Ícone de lixeira em cada card permite desativar funcionário com opção de transferir tarefas para outro
+
+### Novos Dashboards na Sidebar
+- **Visão Geral de Tarefas**: Cards com contadores de Pendentes, Em Progresso e Atrasadas + lista das 5 tarefas mais próximas
+- **Controle Processual**: Gráfico doughnut mostrando distribuição de documentos por tipo nos últimos 30 dias (Notificações, Autos, Ofícios, etc)
+- **Calendário de Projetos**: Mini-calendário mensal com dias destacados conforme eventos, lista dos 3 próximos eventos e navegação rápida para aba Projetos
+
+### Gestão Hierárquica Completa
+- Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal e Gerente RA/Equipe Ambiental
+- Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal), Verde (Equipe)
+- Modal combinado para Fiscais: Estatísticas de tarefas + relatório de produtividade lado a lado

@@ -5,7 +5,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestão | Painel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Fonte Inter local - fallback para system fonts */
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 300;
+            font-display: swap;
+            src: local('Inter Light'), local('Inter-Light');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: local('Inter Regular'), local('Inter-Regular');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 600;
+            font-display: swap;
+            src: local('Inter SemiBold'), local('Inter-SemiBold');
+        }
+    </style>
     <link rel="stylesheet" href="style_painel.css">
     <link rel="stylesheet" href="style_produtividade.css">
     <script src="lib/supabase.js"></script>
@@ -18,7 +41,7 @@
         <aside class="sidebar">
             <div class="profile-section">
                 <div class="avatar-wrapper">
-                    <img id="user-photo" src="https://via.placeholder.com/150" alt="Foto de Perfil">
+                    <img id="user-photo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Crect width='150' height='150' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' font-size='14' fill='%2394a3b8' text-anchor='middle' dy='.3em'%3ESem Foto%3C/text%3E%3C/svg%3E" alt="Foto de Perfil">
                 </div>
                 <div class="profile-info">
                     <h3 id="user-name">Carregando...</h3>
@@ -29,7 +52,7 @@
             </div>
 
             <nav class="nav-menu">
-                <button class="nav-btn active" onclick="mudarAba('home'); if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');">
+                <button class="nav-btn active" onclick="irParaHome()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
@@ -161,8 +184,22 @@
                         <button class="nav-btn" onclick="mudarAba('historico-geral')" style="font-size: 0.85rem;">
                             Histórico Geral
                         </button>
-                        <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia'); mudarAba('tarefas');" style="font-size: 0.85rem;">
-                            Tarefas (Gerência)
+                        <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_posturas'); mudarAba('tarefas');" style="font-size: 0.85rem;">
+                            Tarefas
+                        </button>
+                    </div>
+
+                    <!-- Botão Toggle Gerência de Regularização Ambiental -->
+                    <button class="nav-btn" onclick="toggleGerenciaAmbiental()" id="btn-toggle-gerencia-ambiental">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Gerência de Regularização Ambiental
+                    </button>
+                    <!-- Submenu expansível Gerência RA -->
+                    <div id="diretor-submenu-gerencia-ambiental" style="display: none; padding-left: 20px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 4px;">
+                        <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental'); mudarAba('tarefas');" style="font-size: 0.85rem;">
+                            Tarefas
                         </button>
                     </div>
                 </div>
@@ -208,6 +245,20 @@
                             </button>
                             <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia'); mudarAba('tarefas');" style="font-size: 0.8rem;">
                                 Tarefas (Gerência)
+                            </button>
+                        </div>
+                        
+                        <!-- Botão Toggle Gerência de Regularização Ambiental (sub-submenu) -->
+                        <button class="nav-btn" onclick="toggleGerenciaAmbientalSecretario()" id="btn-toggle-gerencia-ambiental-secretario" style="font-size: 0.85rem; background: rgba(0,0,0,0.03); margin-top: 4px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                                <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                            Gerência de Regularização Ambiental
+                        </button>
+                        <!-- Submenu Gerência de Regularização Ambiental -->
+                        <div id="secretario-submenu-gerencia-ambiental" style="display: none; padding-left: 15px; background: rgba(0,0,0,0.03); border-radius: 8px; margin-top: 2px;">
+                            <button class="nav-btn" onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental'); mudarAba('tarefas');" style="font-size: 0.8rem;">
+                                Tarefas (RA)
                             </button>
                         </div>
                     </div>
@@ -308,7 +359,7 @@
                     </div>
                 </div>
 
-                <!-- Container exclusivo do GERENTE: Grafico Fiscais x Pontuacao -->
+                <!-- Container exclusivo do GERENTE DE POSTURAS: Grafico Fiscais x Pontuacao -->
                 <div id="home-gerente-container" style="display:none;">
                     <div class="pontuacao-resumo" style="margin-top: 2rem;">
                         <div class="pontuacao-card"
@@ -336,6 +387,49 @@
                             <div
                                 style="position: relative; min-height: 250px; width: 100%; display: flex; align-items: center; justify-content: center;">
                                 <canvas id="grafico-docs-tipo"></canvas>
+                            </div>
+                        </div>
+                        <div class="grafico-container" style="flex: 1; min-width: 280px;">
+                            <h3>Ranking de Fiscais — Pontuação</h3>
+                            <div style="position: relative; height: 300px; width: 100%;">
+                                <canvas id="grafico-ranking-fiscais-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Container exclusivo do GERENTE DE REGULARIZAÇÃO AMBIENTAL: Gestão de Equipe -->
+                <div id="home-gerente-ambiental-container" style="display:none; margin-top: 24px;">
+                    <div class="pontuacao-resumo" style="margin-top: 2rem; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #065f46, #047857); color: white;">
+                            <h3>Eng. Agrônomos</h3>
+                            <div class="valor" id="gerente-amb-total-agronomos">0</div>
+                        </div>
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #065f46, #047857); color: white;">
+                            <h3>Eng. Civis</h3>
+                            <div class="valor" id="gerente-amb-total-civis">0</div>
+                        </div>
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #065f46, #047857); color: white;">
+                            <h3>Analistas Ambientais</h3>
+                            <div class="valor" id="gerente-amb-total-analistas">0</div>
+                        </div>
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #065f46, #047857); color: white;">
+                            <h3>Aux. Serviços II</h3>
+                            <div class="valor" id="gerente-amb-total-auxiliares">0</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="grafico-container" style="width: 100%;">
+                            <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin: 0; color: #1e3a5f;">Equipe de Regularização Ambiental</h3>
+                                <button onclick="abrirFormNovoFuncionarioAmbiental()" style="background: linear-gradient(135deg, #10b981, #22c55e); color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                                    Novo Funcionário
+                                </button>
+                            </div>
+                            <div id="gerente-ambiental-equipe-lista" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
                             </div>
                         </div>
                     </div>
@@ -424,19 +518,33 @@
 
                 <!-- Container exclusivo do DIRETOR: Gestão de Gerentes -->
                 <div id="home-diretor-container" style="display:none; margin-top: 24px;">
-                    <div class="pontuacao-resumo" style="margin-top: 2rem;">
+                    <div class="pontuacao-resumo" style="margin-top: 2rem; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
                         <div class="pontuacao-card" style="background: linear-gradient(135deg, #0c3e2b, #062117); color: white;">
-                            <h3>Total de Gerentes</h3>
+                            <h3>Gerentes de Posturas</h3>
                             <div class="valor" id="diretor-total-gerentes">0</div>
+                        </div>
+                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #1e3a5f, #0d2137); color: white;">
+                            <h3>Gerentes de Regularização Ambiental</h3>
+                            <div class="valor" id="diretor-total-gerentes-ambiental">0</div>
                         </div>
                     </div>
 
-                    <div style="margin-top: 20px;">
+                    <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                        <!-- Coluna Gerentes de Posturas -->
                         <div class="grafico-container" style="width: 100%;">
                             <div style="margin-bottom: 16px;">
-                                <h3 style="margin: 0;">Gestão de Gerentes</h3>
+                                <h3 style="margin: 0; color: #0c3e2b;">Gerentes de Posturas</h3>
                             </div>
                             <div id="diretor-gerentes-hierarquia" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                            </div>
+                        </div>
+                        <!-- Coluna Gerentes de Regularização Ambiental -->
+                        <div class="grafico-container" style="width: 100%;">
+                            <div style="margin-bottom: 16px;">
+                                <h3 style="margin: 0; color: #1e3a5f;">Gerentes de Regularização Ambiental</h3>
+                            </div>
+                            <div id="diretor-gerentes-ambiental-hierarquia" style="padding: 10px 0;">
                                 <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
                             </div>
                         </div>
@@ -463,42 +571,77 @@
                     </div>
                 </div>
 
-                <!-- Container exclusivo do SECRETÁRIO: Gestão de Diretores -->
+                <!-- Container exclusivo do SECRETÁRIO: Hierarquia Completa -->
                 <div id="home-secretario-container" style="display:none; margin-top: 24px;">
-                    <div class="pontuacao-resumo" style="margin-top: 2rem;">
-                        <div class="pontuacao-card" style="background: linear-gradient(135deg, #0c3e2b, #062117); color: white;">
-                            <h3>Total de Diretores</h3>
-                            <div class="valor" id="secretario-total-diretores">0</div>
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 20px;">
-                        <div class="grafico-container" style="width: 100%;">
-                            <div style="margin-bottom: 16px;">
-                                <h3 style="margin: 0;">Gestão de Diretores</h3>
-                            </div>
-                            <div id="secretario-diretores-lista" style="padding: 10px 0;">
-                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                    <div style="display: flex; gap: 24px; align-items: flex-start;">
+                        <!-- COLUNA ESQUERDA: Árvore Hierárquica -->
+                        <div style="flex: 1.4; min-width: 0;">
+                            <div id="secretario-arvore-hierarquia" style="padding: 20px; overflow-x: auto; background: rgba(255,255,255,0.05); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                                <div style="text-align: center; color: #64748b; padding: 40px; font-weight: 500;">Carregando estrutura...</div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Minhas Tarefas -->
-                    <div style="margin-top: 24px;">
-                        <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                                <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px;">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                        <line x1="16" y1="2" x2="16" y2="6" />
-                                        <line x1="8" y1="2" x2="8" y2="6" />
-                                        <line x1="3" y1="10" x2="21" y2="10" />
-                                    </svg>
-                                    Minhas Tarefas
-                                </h3>
+                        <!-- COLUNA DIREITA: Dashboards -->
+                        <div style="flex: 0.6; min-width: 320px; display: flex; flex-direction: column; gap: 20px;">
+                            <!-- Visão Geral de Tarefas -->
+                            <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                    <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 15px;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                            <line x1="16" y1="2" x2="16" y2="6" />
+                                            <line x1="8" y1="2" x2="8" y2="6" />
+                                            <line x1="3" y1="10" x2="21" y2="10" />
+                                        </svg>
+                                        Visão Geral de Tarefas
+                                    </h3>
+                                </div>
+                                <div id="secretario-resumo-tarefas">
+                                    <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 14px;">Carregando...</div>
+                                </div>
                             </div>
-                            <div id="secretario-minhas-tarefas">
-                                <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 15px;">Carregando tarefas...</div>
+
+                            <!-- Gráfico de Documentos do Controle Processual -->
+                            <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                    <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 15px;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                            <polyline points="14 2 14 8 20 8" />
+                                            <line x1="16" y1="13" x2="8" y2="13" />
+                                            <line x1="16" y1="17" x2="8" y2="17" />
+                                            <polyline points="10 9 9 9 8 9" />
+                                        </svg>
+                                        Controle Processual (30 dias)
+                                    </h3>
+                                </div>
+                                <div id="secretario-grafico-documentos" style="position: relative; height: 250px;">
+                                    <canvas id="secretario-canvas-docs"></canvas>
+                                </div>
+                                <div id="secretario-total-docs" style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+                                    <span style="color: #64748b; font-size: 13px;">Total: <strong style="color: #1e293b;">0</strong> registros</span>
+                                </div>
+                            </div>
+
+                            <!-- Calendário de Projetos -->
+                            <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                    <h3 style="margin: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 15px;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                            <line x1="16" y1="2" x2="16" y2="6" />
+                                            <line x1="8" y1="2" x2="8" y2="6" />
+                                            <line x1="3" y1="10" x2="21" y2="10" />
+                                        </svg>
+                                        Projetos
+                                    </h3>
+                                    <button onclick="irParaProjetos()" style="background: none; border: none; color: #3b82f6; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                        Ver todos →
+                                    </button>
+                                </div>
+                                <div id="secretario-calendario-projetos">
+                                    <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 14px;">Carregando calendário...</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -643,7 +786,7 @@
             <!-- ABA: HISTÓRICO GERAL (Controle Processual) -->
             <section id="aba-historico-geral" class="content-section" style="display: none;">
                 <h1>Histórico Geral — Controle Processual</h1>
-                <button id="btn-teste-clique" class="btn-sidebar btn-fechamento" onclick="executarFechamentoAnualWrapper()">
+                <button id="btn-fechamento-anual" class="btn-sidebar btn-fechamento" onclick="executarFechamentoAnualWrapper()" style="display:none;">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                         <polyline points="22 4 12 14.01 9 11.01"></polyline>
@@ -834,10 +977,6 @@
                     </div>
                 </div>
             </section> <!-- ABA: TAREFAS -->
-            <section id="aba-tarefas" class="content-section" style="display: none;">
-                <h1>Minhas Tarefas</h1>
-                <p>Aqui aparecerá o seu histórico de tarefas.</p>
-            </section>
 
             <!-- ABA: PROJETOS (Calendário do Gerente) -->
             <section id="aba-projetos" class="content-section" style="display: none;">
@@ -915,7 +1054,7 @@
                 <div class="perfil-container">
                     <div class="perfil-avatar-sec">
                         <div class="avatar-grande-wrapper">
-                            <img id="perfil-foto-preview" src="https://via.placeholder.com/150" alt="Sua Foto">
+                            <img id="perfil-foto-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Crect width='150' height='150' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' font-size='14' fill='%2394a3b8' text-anchor='middle' dy='.3em'%3ESem Foto%3C/text%3E%3C/svg%3E" alt="Sua Foto">
                             <label for="upload-avatar" class="btn-trocar-foto">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">

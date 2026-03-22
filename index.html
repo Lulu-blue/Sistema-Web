@@ -5,7 +5,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login | Sistema</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Fonte Inter local - fallback para system fonts */
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 300;
+            font-display: swap;
+            src: local('Inter Light'), local('Inter-Light');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: local('Inter Regular'), local('Inter-Regular');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 600;
+            font-display: swap;
+            src: local('Inter SemiBold'), local('Inter-SemiBold');
+        }
+    </style>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -45,6 +68,89 @@
 
     <script src="lib/supabase.js"></script>
     <script src="lib/sweetalert2.all.min.js"></script>
+    <script>
+        // =============================================
+        // MONITORAMENTO DE CONEXÃO - LOGIN
+        // =============================================
+        (function() {
+            const banner = document.createElement('div');
+            banner.id = 'offline-banner';
+            banner.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                background: #ef4444;
+                color: white;
+                text-align: center;
+                padding: 12px;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                font-size: 14px;
+                font-weight: 600;
+                z-index: 99999;
+                display: none;
+                box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+                transition: transform 0.3s ease;
+            `;
+            banner.innerHTML = `
+                <span>📡 Você está offline. Verifique sua conexão com a internet para fazer login.</span>
+            `;
+            document.body.appendChild(banner);
+
+            let isOffline = false;
+
+            function showBanner() {
+                banner.style.display = 'block';
+                banner.style.transform = 'translateY(0)';
+                document.body.style.paddingTop = banner.offsetHeight + 'px';
+                isOffline = true;
+            }
+
+            function hideBanner() {
+                banner.style.transform = 'translateY(-100%)';
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    document.body.style.paddingTop = '0';
+                }, 300);
+                isOffline = false;
+            }
+
+            async function checkConnection() {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+                    
+                    const response = await fetch('https://marmpnusgmbjphffaynr.supabase.co/rest/v1/', {
+                        method: 'HEAD',
+                        signal: controller.signal,
+                        cache: 'no-store'
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (isOffline) hideBanner();
+                    return true;
+                } catch (error) {
+                    showBanner();
+                    return false;
+                }
+            }
+
+            window.addEventListener('online', () => {
+                checkConnection();
+            });
+
+            window.addEventListener('offline', () => {
+                showBanner();
+            });
+
+            // Verificar a cada 5 segundos
+            setInterval(checkConnection, 5000);
+            
+            // Verificar imediatamente
+            checkConnection();
+        })();
+    </script>
     <script src="script.js"></script>
 </body>
 

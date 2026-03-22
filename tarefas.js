@@ -10,9 +10,10 @@ var userRoleGlobal = '';
 var userIdGlobal = '';
 var ehGerenteKanban = false;
 var _abrindoDetalhe = false;
-var diretorModoVisualizacao = 'direcao'; // 'direcao' ou 'gerencia'
+var diretorModoVisualizacao = 'direcao'; // 'direcao', 'gerencia_posturas' ou 'gerencia_ambiental'
 var carregandoTarefas = false;
-var idsGerentesGlobal = [];
+var idsGerentesGlobal = []; // Gerentes de Posturas
+var idsGerentesAmbientalGlobal = []; // Gerentes de Regularização Ambiental
 var idsDiretoresGlobal = [];
 var moduloIniciado = false;
 var inicializacaoPromise = null;
@@ -34,41 +35,70 @@ async function carregarModuloTarefas() {
             if (user) {
                 userIdGlobal = user.id;
                 var { data: perfil } = await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
-                userRoleGlobal = perfil ? perfil.role.toLowerCase() : '';
+                userRoleGlobal = perfil ? perfil.role : '';
             }
 
-            // Ocultar sub-abas para Fiscais
+            // Ocultar sub-abas para Fiscais e equipe do Gerente de Regularização Ambiental
             var btnTabAtribuidas = document.getElementById('btn-tab-atribuidas');
             if (btnTabAtribuidas && btnTabAtribuidas.parentElement) {
-                if (userRoleGlobal === 'fiscal de posturas' || userRoleGlobal === 'administrador de posturas' || userRoleGlobal === 'fiscal') {
+                var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+                var isFiscal = roleLowerRaw.includes('fiscal');
+                var isAdminPostura = (roleLowerRaw.includes('administrativo') || roleLowerRaw.includes('administrador')) && roleLowerRaw.includes('postura');
+                // Novos cargos que não podem criar/editar tarefas
+                var isEquipeAmbiental = roleLowerRaw.includes('engenheiro') || 
+                                        roleLowerRaw.includes('agrônomo') || 
+                                        roleLowerRaw.includes('agronomo') ||
+                                        roleLowerRaw.includes('analista ambiental') ||
+                                        roleLowerRaw.includes('auxiliar de serviços');
+                if (isFiscal || isAdminPostura || isEquipeAmbiental) {
                     btnTabAtribuidas.parentElement.style.display = 'none';
                 } else {
                     btnTabAtribuidas.parentElement.style.display = 'flex';
                 }
             }
 
-            // Botão de Novo Evento para DIRETOR
+            // Botão de Novo Evento apenas para DIRETOR e SECRETÁRIO
             var btnNovoEvento = document.getElementById('btn-novo-evento-diretor');
             var btnNovaTarefa = document.getElementById('btn-nova-tarefa');
-            var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-            var ehSecretario = (userRoleGlobal === 'secretario' || userRoleGlobal === 'secretaria' || userRoleGlobal === 'secretário' || userRoleGlobal === 'secretária' || userRoleGlobal === 'secretário(a)');
+            var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+            // Verificação flexível para Diretor (qualquer variação)
+            var ehDiretor = roleLowerRaw.includes('diretor');
+            var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+            // Gerentes podem criar tarefas, mas não projetos/eventos
+            var ehGerente = roleLowerRaw.includes('gerente');
 
             if (btnNovoEvento) {
                 btnNovoEvento.style.display = (ehDiretor || ehSecretario) ? 'block' : 'none';
             }
-            if (btnNovaTarefa && (ehDiretor || ehSecretario)) {
-                btnNovaTarefa.style.display = 'block';
+            if (btnNovaTarefa) {
+                btnNovaTarefa.style.display = (ehDiretor || ehSecretario || ehGerente) ? 'block' : 'none';
             }
 
-            // Mapear Gerentes para filtros do Diretor
+            // Mapear Gerentes de Posturas para filtros do Diretor
             try {
                 var { data: gerentes } = await supabaseClient
                     .from('profiles')
                     .select('id')
-                    .in('role', ['gerente', 'gerente fiscal', 'gerente de posturas', 'Gerente', 'Gerente Fiscal', 'Gerente de Posturas']);
+                    .in('role', ['gerente', 'Gerente', 'gerente de posturas', 'Gerente de Posturas', 
+                                 'gerente de postura', 'Gerente de Postura', 'Gerente de Posturas', 
+                                 'gerente de posturas', 'Gerente De Posturas']);
                 idsGerentesGlobal = (gerentes || []).map(g => g.id);
+                console.log('[Tarefas] Gerentes de Posturas mapeados:', idsGerentesGlobal.length);
             } catch (e) {
-                console.error("Erro ao mapear gerentes:", e);
+                console.error("Erro ao mapear gerentes de posturas:", e);
+            }
+
+            // Mapear Gerentes de Regularização Ambiental para filtros do Diretor
+            try {
+                var { data: gerentesAmbiental } = await supabaseClient
+                    .from('profiles')
+                    .select('id')
+                    .in('role', ['Gerente de Regularização Ambiental', 'gerente de regularização ambiental',
+                                 'Gerente de Regularizacao Ambiental', 'gerente de regularizacao ambiental']);
+                idsGerentesAmbientalGlobal = (gerentesAmbiental || []).map(g => g.id);
+                console.log('[Tarefas] Gerentes de Regularização Ambiental mapeados:', idsGerentesAmbientalGlobal.length);
+            } catch (e) {
+                console.error("Erro ao mapear gerentes de regularização ambiental:", e);
             }
 
             // Mapear Diretores para filtros do Secretário
@@ -76,8 +106,10 @@ async function carregarModuloTarefas() {
                 var { data: diretores } = await supabaseClient
                     .from('profiles')
                     .select('id')
-                    .in('role', ['diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente']);
+                    .in('role', ['diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente', 
+                                 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'diretor(a)', 'diretor(a) de meio ambiente']);
                 idsDiretoresGlobal = (diretores || []).map(d => d.id);
+                console.log('[Tarefas] Diretores mapeados:', idsDiretoresGlobal.length);
             } catch (e) {
                 console.error("Erro ao mapear diretores:", e);
             }
@@ -123,16 +155,21 @@ async function carregarEventos() {
                 )
             `)
             .order('data_inicio', { ascending: true });
-        
+
         if (error) throw error;
-        
+
         var todosEventos = data || [];
-        
+
         // Filtrar eventos baseado no perfil do usuário
-        var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-        var ehFiscal = (userRoleGlobal === 'fiscal' || userRoleGlobal === 'fiscal de posturas');
-        var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas');
-        
+        var roleLower = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = roleLower.includes('diretor');
+        var ehFiscal = (userRoleGlobal === 'Fiscal' || userRoleGlobal === 'fiscal' || 
+                        roleLower.includes('fiscal') && roleLower.includes('postura'));
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw === 'administrativo' || 
+                         roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
+                         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura'));
+
         if (ehDiretor || ehFiscal) {
             // Diretor e Fiscal veem todos os eventos
             eventosMesCache = todosEventos;
@@ -140,12 +177,12 @@ async function carregarEventos() {
             // Gerentes veem apenas eventos onde:
             // 1. São o responsável direto do evento, OU
             // 2. São responsáveis por pelo menos uma tarefa vinculada
-            eventosMesCache = todosEventos.filter(function(ev) {
+            eventosMesCache = todosEventos.filter(function (ev) {
                 // Verifica se é responsável direto do evento
                 if (ev.responsavel_id === userIdGlobal) {
                     return true;
                 }
-                
+
                 // Verifica se é responsável por alguma tarefa vinculada
                 if (ev.tarefas && ev.tarefas.length > 0) {
                     for (var i = 0; i < ev.tarefas.length; i++) {
@@ -159,7 +196,7 @@ async function carregarEventos() {
                         }
                     }
                 }
-                
+
                 return false;
             });
         } else {
@@ -194,79 +231,79 @@ async function carregarEventos() {
         } else {
             var htmlCards = '';
             eventosParaExibir.forEach(function (ev) {
-                    var dataObj = new Date(ev.data_inicio);
-                    var diaNum = dataObj.getDate();
-                    var mesAbrev = dataObj.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
-                    
-                    var dataFimObj = ev.data_fim ? new Date(ev.data_fim) : null;
-                    var diasExibicao = diaNum;
-                    if (dataFimObj && dataFimObj.getDate() !== diaNum) {
-                        diasExibicao = diaNum + '/' + dataFimObj.getDate();
-                    }
+                var dataObj = new Date(ev.data_inicio);
+                var diaNum = dataObj.getDate();
+                var mesAbrev = dataObj.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
 
-                    var corBase = ev.cor || '#3b82f6';
-                    var statusObj = calcularStatusEvento(ev);
-                    
-                    // Agregar responsáveis de todas as tarefas vinculadas
-                    var nomesResponsaveis = new Set();
-                    if (ev.tarefas && ev.tarefas.length > 0) {
-                        ev.tarefas.forEach(function(t) {
-                            if (t.tarefa_responsaveis && t.tarefa_responsaveis.length > 0) {
-                                t.tarefa_responsaveis.forEach(function(tr) {
-                                    if (tr.profiles && tr.profiles.full_name) {
-                                        nomesResponsaveis.add(tr.profiles.full_name);
-                                    }
-                                });
-                            }
-                        });
-                    }
-                    
-                    var resp = nomesResponsaveis.size > 0 
-                               ? Array.from(nomesResponsaveis).join(', ') 
-                               : (ev.responsavel ? ev.responsavel.full_name : 'Não atribuído');
+                var dataFimObj = ev.data_fim ? new Date(ev.data_fim) : null;
+                var diasExibicao = diaNum;
+                if (dataFimObj && dataFimObj.getDate() !== diaNum) {
+                    diasExibicao = diaNum + '/' + dataFimObj.getDate();
+                }
 
-                    // Wrapper para card + detalhe
-                    htmlCards += '<div style="margin-bottom: 20px;">';
-                    
-                    // Card Principal
-                    htmlCards += '<div onclick="toggleDetalheEventoCard(\'' + ev.id + '\')" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
-                    
-                    // Lado Esquerdo: Data Colorida
-                    htmlCards += '<div style="background:' + corBase + '; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; flex-shrink: 0;">';
-                    htmlCards += '<span style="font-size: 1.8rem; font-weight: 800; line-height: 1;">' + diasExibicao + '</span>';
-                    htmlCards += '<span style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">' + mesAbrev + '</span>';
-                    htmlCards += '<div style="position: absolute; left: 80px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid ' + corBase + ';"></div>';
-                    htmlCards += '</div>';
+                var corBase = ev.cor || '#3b82f6';
+                var statusObj = calcularStatusEvento(ev);
 
-                    // Centro: Informações
-                    htmlCards += '<div style="flex: 1; padding: 15px 25px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">';
-                    htmlCards += '<div style="display: flex; justify-content: space-between; align-items: flex-start;">';
-                    htmlCards += '<h3 style="margin: 0; color: #1e293b; font-size: 1.1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + ev.titulo + '</h3>';
-                    htmlCards += '<svg id="seta-card-' + ev.id + '" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" style="transition:0.3s;"><path d="M6 9l6 6 6-6"/></svg>';
-                    htmlCards += '</div>';
-                    htmlCards += '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.85rem;">';
-                    htmlCards += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-                    htmlCards += 'Prazo: ' + (dataFimObj ? dataFimObj.toLocaleDateString('pt-BR') : dataObj.toLocaleDateString('pt-BR'));
-                    htmlCards += statusObj.badge;
-                    htmlCards += '</div>';
-                    htmlCards += '<div style="color: #94a3b8; font-size: 0.8rem; font-style: italic;">Resp: ' + resp + '</div>';
-                    htmlCards += '</div>';
+                // Agregar responsáveis de todas as tarefas vinculadas
+                var nomesResponsaveis = new Set();
+                if (ev.tarefas && ev.tarefas.length > 0) {
+                    ev.tarefas.forEach(function (t) {
+                        if (t.tarefa_responsaveis && t.tarefa_responsaveis.length > 0) {
+                            t.tarefa_responsaveis.forEach(function (tr) {
+                                if (tr.profiles && tr.profiles.full_name) {
+                                    nomesResponsaveis.add(tr.profiles.full_name);
+                                }
+                            });
+                        }
+                    });
+                }
 
-                    // Lado Direito: Barra Lateral de Status Vertical
-                    htmlCards += '<div style="background:' + corBase + '22; width: 40px; display: flex; align-items: center; justify-content: center; border-left: 1px solid ' + corBase + '22; flex-shrink: 0;">';
-                    htmlCards += '<span style="writing-mode: vertical-rl; transform: rotate(180deg); color: ' + corBase + '; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">' + statusObj.text + '</span>';
-                    htmlCards += '</div>';
+                var resp = nomesResponsaveis.size > 0
+                    ? Array.from(nomesResponsaveis).join(', ')
+                    : (ev.responsavel ? ev.responsavel.full_name : 'Não atribuído');
 
-                    htmlCards += '</div>'; // Fecha Card Principal
+                // Wrapper para card + detalhe
+                htmlCards += '<div style="margin-bottom: 20px;">';
 
-                    // Área de Detalhes (Oculta)
-                    htmlCards += '<div id="detalhe-evento-card-' + ev.id + '" style="display:none; background:#fcfdfe; border: 1px solid #f1f5f9; border-top:none; border-radius: 0 0 12px 12px; padding: 25px; margin-top: -5px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);">';
-                    htmlCards += renderizarConteudoExpandidoEvento(ev);
-                    htmlCards += '</div>';
+                // Card Principal
+                htmlCards += '<div onclick="toggleDetalheEventoCard(\'' + ev.id + '\')" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
 
-                    htmlCards += '</div>'; // Fecha Wrapper
-                });
-                containerCards.innerHTML = htmlCards;
+                // Lado Esquerdo: Data Colorida
+                htmlCards += '<div style="background:' + corBase + '; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; flex-shrink: 0;">';
+                htmlCards += '<span style="font-size: 1.8rem; font-weight: 800; line-height: 1;">' + diasExibicao + '</span>';
+                htmlCards += '<span style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">' + mesAbrev + '</span>';
+                htmlCards += '<div style="position: absolute; left: 80px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid ' + corBase + ';"></div>';
+                htmlCards += '</div>';
+
+                // Centro: Informações
+                htmlCards += '<div style="flex: 1; padding: 15px 25px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">';
+                htmlCards += '<div style="display: flex; justify-content: space-between; align-items: flex-start;">';
+                htmlCards += '<h3 style="margin: 0; color: #1e293b; font-size: 1.1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + ev.titulo + '</h3>';
+                htmlCards += '<svg id="seta-card-' + ev.id + '" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" style="transition:0.3s;"><path d="M6 9l6 6 6-6"/></svg>';
+                htmlCards += '</div>';
+                htmlCards += '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.85rem;">';
+                htmlCards += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+                htmlCards += 'Prazo: ' + (dataFimObj ? dataFimObj.toLocaleDateString('pt-BR') : dataObj.toLocaleDateString('pt-BR'));
+                htmlCards += statusObj.badge;
+                htmlCards += '</div>';
+                htmlCards += '<div style="color: #94a3b8; font-size: 0.8rem; font-style: italic;">Resp: ' + resp + '</div>';
+                htmlCards += '</div>';
+
+                // Lado Direito: Barra Lateral de Status Vertical
+                htmlCards += '<div style="background:' + corBase + '22; width: 40px; display: flex; align-items: center; justify-content: center; border-left: 1px solid ' + corBase + '22; flex-shrink: 0;">';
+                htmlCards += '<span style="writing-mode: vertical-rl; transform: rotate(180deg); color: ' + corBase + '; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">' + statusObj.text + '</span>';
+                htmlCards += '</div>';
+
+                htmlCards += '</div>'; // Fecha Card Principal
+
+                // Área de Detalhes (Oculta)
+                htmlCards += '<div id="detalhe-evento-card-' + ev.id + '" style="display:none; background:#fcfdfe; border: 1px solid #f1f5f9; border-top:none; border-radius: 0 0 12px 12px; padding: 25px; margin-top: -5px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);">';
+                htmlCards += renderizarConteudoExpandidoEvento(ev);
+                htmlCards += '</div>';
+
+                htmlCards += '</div>'; // Fecha Wrapper
+            });
+            containerCards.innerHTML = htmlCards;
         }
 
     } catch (err) {
@@ -276,22 +313,22 @@ async function carregarEventos() {
 
 function calcularStatusEvento(ev) {
     var hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    
+    hoje.setHours(0, 0, 0, 0);
+
     var dataInicio = new Date(ev.data_inicio);
-    dataInicio.setHours(0,0,0,0);
-    
+    dataInicio.setHours(0, 0, 0, 0);
+
     var dataFim = ev.data_fim ? new Date(ev.data_fim) : dataInicio;
-    dataFim.setHours(23,59,59,999);
+    dataFim.setHours(23, 59, 59, 999);
 
     if (hoje > dataFim) {
         return { text: 'Concluído', badge: '<span style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:8px;">Concluído</span>' };
     }
-    
+
     if (hoje >= dataInicio && hoje <= dataFim) {
         return { text: 'Em Progresso', badge: '<span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:8px;">Em Progresso</span>' };
     }
-    
+
     return { text: 'Pendente', badge: '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:8px;">Pendente</span>' };
 }
 
@@ -299,9 +336,9 @@ function toggleDetalheEventoCard(id) {
     var el = document.getElementById('detalhe-evento-card-' + id);
     var seta = document.getElementById('seta-card-' + id);
     if (!el) return;
-    
+
     var estaVisivel = el.style.display === 'block';
-    
+
     // Fecha todos os outros primeiro para um efeito sanfona (opcional, mas elegante)
     // document.querySelectorAll('[id^="detalhe-evento-card-"]').forEach(d => d.style.display = 'none');
     // document.querySelectorAll('[id^="seta-card-"]').forEach(s => s.style.transform = 'none');
@@ -317,37 +354,37 @@ function toggleDetalheEventoCard(id) {
 
 function renderizarConteudoExpandidoEvento(ev) {
     var html = '<div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">';
-    
+
     // Lado 1: Detalhes do Evento
     html += '<div>';
     html += '<h4 style="margin:0 0 10px 0; color:#1e293b; font-size:0.95rem;">Descrição do Projeto</h4>';
     html += '<p style="margin:0; color:#64748b; font-size:0.9rem; line-height:1.5;">' + (ev.descricao || 'Sem descrição detalhada.') + '</p>';
-    
+
     html += '<h4 style="margin:20px 0 10px 0; color:#1e293b; font-size:0.95rem;">Documentos</h4>';
     html += '<div id="anexos-evento-' + ev.id + '" style="display:flex; flex-wrap:wrap; gap:8px;">';
     html += '<span style="color:#94a3b8; font-size:0.85rem;">Carregando anexos...</span>';
     html += '</div>';
     html += '</div>';
-    
+
     // Lado 2: Lista de Tarefas Vinculadas
     html += '<div>';
     html += '<h4 style="margin:0 0 10px 0; color:#1e293b; font-size:0.95rem;">Tarefas e Acompanhamento</h4>';
-    
+
     var tarefas = ev.tarefas || [];
     if (tarefas.length > 0) {
-        tarefas.forEach(function(tarefa) {
+        tarefas.forEach(function (tarefa) {
             html += '<div style="background:white; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">';
             html += '<div style="display:flex; justify-content:space-between; margin-bottom:5px;">';
             html += '<span style="font-weight:700; color:#334155; font-size:0.9rem;">' + tarefa.titulo + '</span>';
             html += '<span style="color:#64748b; font-size:0.85rem; font-weight:600;">' + (tarefa.progresso || 0) + '%</span>';
             html += '</div>';
-            
+
             html += '<div style="width:100%; background:#f1f5f9; border-radius:4px; height:6px; overflow:hidden; margin-bottom:10px;">';
             html += '<div style="width:' + (tarefa.progresso || 0) + '%; background:#10b981; height:100%;"></div>';
             html += '</div>';
-            
+
             html += '<div style="display:flex; justify-content:space-between; align-items:center;">';
-            html += '<span style="font-size:0.75rem; color:#94a3b8;">Ref: #' + (tarefa.id.substring(0,6)) + '</span>';
+            html += '<span style="font-size:0.75rem; color:#94a3b8;">Ref: #' + (tarefa.id.substring(0, 6)) + '</span>';
             html += '<button onclick="abrirDetalheTarefa(\'' + tarefa.id + '\')" style="padding:5px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; cursor:pointer; color:#0c3e2b; font-weight:700; font-size:0.75rem; transition:0.2s;" onmouseover="this.style.background=\'#edf2f7\'" onmouseout="this.style.background=\'#f8fafc\'">Acessar Kanban</button>';
             html += '</div>';
             html += '</div>';
@@ -357,9 +394,14 @@ function renderizarConteudoExpandidoEvento(ev) {
     }
     html += '</div>';
 
-    // Controles Administrativos (Apenas Diretor)
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (ehDiretor) {
+    // Controles Administrativos
+    var roleLower = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLower.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    // Apenas Diretor e Secretário podem editar/excluir eventos e inserir tarefas em projetos
+    var podeEditarEvento = ehDiretor || ehSecretario;
+    
+    if (podeEditarEvento) {
         html += '<div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9;">';
         html += '<button onclick="abrirModalNovaTarefa(false, \'' + ev.id + '\')" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Inserir Tarefa</button>';
         html += '<button onclick="abrirModalEditarEvento(\'' + ev.id + '\')" style="background: white; color: #3b82f6; border: 1px solid #3b82f6; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=\'white\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar Projeto</button>';
@@ -367,8 +409,8 @@ function renderizarConteudoExpandidoEvento(ev) {
         html += '</div>';
     }
     html += '</div>';
-    
-    setTimeout(function() { carregarAnexosEvento(ev.id); }, 100);
+
+    setTimeout(function () { carregarAnexosEvento(ev.id); }, 100);
     return html;
 }
 
@@ -383,7 +425,7 @@ async function carregarAnexosEvento(eventoId) {
             return;
         }
         var html = '';
-        data.forEach(function(anexo) {
+        data.forEach(function (anexo) {
             html += '<a href="' + anexo.url + '" target="_blank" style="display:flex; align-items:center; gap:5px; background:white; border:1px solid #e2e8f0; padding:5px 10px; border-radius:6px; color:#334155; text-decoration:none; font-size:0.85rem;">';
             html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
             html += anexo.nome_arquivo + '</a>';
@@ -395,6 +437,15 @@ async function carregarAnexosEvento(eventoId) {
 }
 
 function abrirModalNovoEvento() {
+    // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
+        return;
+    }
+    
     var html = '<div class="modal-overlay ativo" id="modal-novo-evento" onclick="if(event.target===this)fecharModal(\'modal-novo-evento\')">';
     html += '<div class="modal-container" style="max-width:460px;">';
     html += '<div class="modal-header"><h2>Novo Evento</h2>';
@@ -413,6 +464,15 @@ function abrirModalNovoEvento() {
 }
 
 async function salvarEvento() {
+    // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
+        return;
+    }
+    
     var titulo = document.getElementById('evento-titulo').value.trim();
     var descricao = document.getElementById('evento-descricao').value.trim();
     var data = document.getElementById('evento-data').value;
@@ -437,8 +497,15 @@ async function salvarEvento() {
 }
 
 async function excluirEvento(id) {
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) { Swal.fire('Acesso Negado', 'Apenas o Diretor pode excluir eventos.', 'error'); return; }
+    var roleLower = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLower.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    
+    // Apenas Diretor e Secretário podem excluir eventos
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem excluir eventos.', 'error'); 
+        return; 
+    }
 
     if (!confirm('Excluir este evento e todas as tarefas vinculadas?')) return;
     try {
@@ -452,7 +519,7 @@ async function excluirEvento(id) {
 // ==========================================
 async function carregarTarefas() {
     if (carregandoTarefas) return;
-    
+
     // Se ainda estiver iniciando o módulo, espera um pouco ou retorna
     if (!moduloIniciado && !inicializacaoPromise) {
         await carregarModuloTarefas();
@@ -551,27 +618,29 @@ async function carregarTarefas() {
         // Garantir que temos o role atualizado
         if (!userRoleGlobal || !userIdGlobal) {
             try {
-        var authCheck = await getAuthUser();
+                var authCheck = await getAuthUser();
                 var uCheck = authCheck.data.user;
                 if (uCheck) {
                     userIdGlobal = uCheck.id;
                     var { data: pCheck } = await supabaseClient.from('profiles').select('role').eq('id', uCheck.id).maybeSingle();
-                    userRoleGlobal = pCheck ? pCheck.role.toLowerCase() : '';
+                    userRoleGlobal = pCheck ? pCheck.role : '';
                 }
             } catch (e) { console.error(e); }
         }
 
-        ehGerenteKanban = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin');
-        
-        // Se for diretor no modo 'gerencia', ele atua como gerente (vê tudo)
-        if ((userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor') && diretorModoVisualizacao === 'gerencia') {
+        // Verifica se é gerente (mas NÃO é Gerente de Regularização Ambiental)
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
+        ehGerenteKanban = (roleLowerRaw.includes('gerente') && !ehGerenteAmbiental);
+
+        // Se for diretor no modo 'gerencia' ou 'gerencia_posturas', ele atua como gerente (vê tudo dos gerentes de posturas)
+        if ((roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente') && 
+            (diretorModoVisualizacao === 'gerencia' || diretorModoVisualizacao === 'gerencia_posturas')) {
             ehGerenteKanban = true;
         }
-        
+
         // Se for secretario no sub-modo 'gerencia', também atua como gerente
-        if ((userRoleGlobal === 'secretario' || userRoleGlobal === 'secretaria' || 
-             userRoleGlobal === 'secretário' || userRoleGlobal === 'secretária' || 
-             userRoleGlobal === 'secretário(a)') && window.secretarioModoVisualizacao === 'direcao' && window.secretarioModoGerencia) {
+        if (userRoleGlobal === 'Secretário(a)' && window.secretarioModoVisualizacao === 'direcao' && window.secretarioModoGerencia) {
             ehGerenteKanban = true;
         }
 
@@ -585,19 +654,26 @@ async function carregarTarefas() {
             t._minhasSubIds = minhasSubIds;
 
             // FILTRO DIRETOR (Novo Sistema)
-            if (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor') {
+            var roleLowerFiltro = (userRoleGlobal || '').toLowerCase();
+            if (roleLowerFiltro.includes('diretor')) {
                 if (diretorModoVisualizacao === 'direcao') {
                     // Modo Direção: Ver apenas o que EU criei
                     if (t.criado_por !== userIdGlobal) return;
+                } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
+                    // Modo Gerência RA: Ver tarefas criadas por GERENTES DE REGULARIZAÇÃO AMBIENTAL 
+                    // OU onde algum membro da equipe RA é responsável
+                    var ehGerenteRACriador = idsGerentesAmbientalGlobal.indexOf(t.criado_por) !== -1;
+                    var temEquipeRAResponsavel = t._respUserIds.some(function (uid) {
+                        return idsGerentesAmbientalGlobal.indexOf(uid) !== -1;
+                    });
+                    if (!ehGerenteRACriador && !temEquipeRAResponsavel) return;
                 } else {
-                    // Modo Gerência: Ver apenas o que os GERENTES criaram
+                    // Modo Gerência Posturas: Ver apenas o que os GERENTES DE POSTURAS criaram
                     if (idsGerentesGlobal.indexOf(t.criado_por) === -1) return;
                 }
-            } 
+            }
             // FILTRO SECRETARIO
-            else if (userRoleGlobal === 'secretario' || userRoleGlobal === 'secretaria' || 
-                      userRoleGlobal === 'secretário' || userRoleGlobal === 'secretária' || 
-                      userRoleGlobal === 'secretário(a)') {
+            else if (userRoleGlobal === 'Secretário(a)') {
                 if (window.secretarioModoVisualizacao === 'direcao') {
                     if (window.secretarioModoGerencia) {
                         // Sub-modo Gerência: Ver tarefas dos GERENTES (igual Diretor)
@@ -605,19 +681,48 @@ async function carregarTarefas() {
                     } else {
                         // Modo Direção: Ver apenas tarefas criadas por Diretores ou onde Diretor é responsável
                         var ehDiretorCriador = idsDiretoresGlobal.indexOf(t.criado_por) !== -1;
-                        var temDiretorResponsavel = t._respUserIds.some(function(uid) { 
-                            return idsDiretoresGlobal.indexOf(uid) !== -1; 
+                        var temDiretorResponsavel = t._respUserIds.some(function (uid) {
+                            return idsDiretoresGlobal.indexOf(uid) !== -1;
                         });
                         if (!ehDiretorCriador && !temDiretorResponsavel) return;
                     }
+                } else if (window.secretarioModoVisualizacao === 'gerencia_ambiental') {
+                    // Modo Gerência RA: Ver tarefas criadas por GERENTES DE REGULARIZAÇÃO AMBIENTAL 
+                    // OU onde algum membro da equipe RA é responsável
+                    var ehGerenteRACriadorSec = idsGerentesAmbientalGlobal.indexOf(t.criado_por) !== -1;
+                    var temEquipeRAResponsavelSec = t._respUserIds.some(function (uid) {
+                        return idsGerentesAmbientalGlobal.indexOf(uid) !== -1;
+                    });
+                    if (!ehGerenteRACriadorSec && !temEquipeRAResponsavelSec) return;
                 } else {
                     // Modo normal: não aplica filtro especial (vê tudo ou conforme outras regras)
                     if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
                 }
             }
+            // FILTRO GERENTE DE POSTURAS - vê apenas o que criou ou onde é responsável
+            else if (ehGerenteKanban) {
+                // Verifica se é Gerente de Posturas (não é Gerente de Regularização Ambiental)
+                var ehGerentePosturas = roleLowerRaw.includes('postur');
+                if (ehGerentePosturas) {
+                    // Gerente de Posturas: vê tarefas que criou OU onde é responsável
+                    var ehResponsavel = t._respUserIds.indexOf(userIdGlobal) !== -1 || t._ehMinhaViaSub;
+                    var ehCriador = t.criado_por === userIdGlobal;
+                    if (!ehResponsavel && !ehCriador) return;
+                }
+                // Se for outro tipo de gerente (não Posturas, não Ambiental), vê tudo (comportamento anterior)
+            }
+            // FILTRO GERENTE DE REGULARIZAÇÃO AMBIENTAL
+            else if ((userRoleGlobal || '').toLowerCase().includes('regularizacao') || 
+                     (userRoleGlobal || '').toLowerCase().includes('regularização')) {
+                // Vê tarefas onde ele é responsável (diretamente ou via subtarefa) 
+                // OU tarefas que ele criou (mesmo que não seja responsável - para acompanhar equipe)
+                var ehResponsavel = t._respUserIds.indexOf(userIdGlobal) !== -1 || t._ehMinhaViaSub;
+                var ehCriador = t.criado_por === userIdGlobal;
+                if (!ehResponsavel && !ehCriador) return;
+            }
             else {
                 // Outros perfis: Fiscal só vê tarefas onde é responsável (diretamente ou via subtarefa)
-                if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
+                if (t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
             }
 
             // Filtrar do Kanban tarefas concluídas há mais de 30 dias (vão só pro histórico)
@@ -756,14 +861,25 @@ let _isSubMode = false;
 let _vincularEventoId = null;
 function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
     // Verificação de segurança: Diretor, Gerente e Secretario podem criar tarefas
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas');
-    var ehSecretario = (userRoleGlobal === 'secretario' || userRoleGlobal === 'secretaria' || userRoleGlobal === 'secretário' || userRoleGlobal === 'secretária' || userRoleGlobal === 'secretário(a)');
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehGerente = (roleLowerRaw.includes('gerente') || 
+                     roleLowerRaw === 'administrativo' || 
+                     roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
+                     roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura'));
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario);
     if (!ehDiretor && !ehGerente && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Secretários podem criar tarefas.', 'error');
         return;
     }
     
+    // Gerentes não podem criar tarefas dentro de projetos (apenas tarefas avulsas)
+    if (ehGerente && vincularEventoId) {
+        Swal.fire('Acesso Negado', 'Gerentes não podem inserir tarefas em projetos. Apenas Diretor e Secretário podem.', 'error');
+        return;
+    }
+
     _isSubMode = isSub;
     _vincularEventoId = vincularEventoId;
     arquivosTemporariosTarefa = []; // Reset arquivos tarefa ao abrir
@@ -791,9 +907,14 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
     carregarListaResponsaveis();
 }
 
+// Variável global para armazenar a lista completa de responsáveis
+var _responsaveisCache = [];
+
 async function carregarListaResponsaveis() {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
+    
+    console.log('[Tarefas] carregarListaResponsaveis - userIdGlobal:', userIdGlobal, 'userRoleGlobal:', userRoleGlobal);
 
     try {
         var { data: users, error } = await supabaseClient
@@ -802,33 +923,204 @@ async function carregarListaResponsaveis() {
             .order('full_name', { ascending: true });
 
         if (error) throw error;
+        
+        console.log('[Tarefas] Total de usuários carregados:', users ? users.length : 0);
+        console.log('[Tarefas] Usuários:', users ? users.map(u => ({ id: u.id, name: u.full_name, role: u.role })) : []);
 
-        var html = '';
-        var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-        var validRoles = ['fiscal', 'fiscal de posturas', 'administrador de posturas', 'gerente', 'gerente fiscal', 'gerente de posturas', 'admin', 'diretor', 'diretor de meio ambiente'];
+        // Filtrar usuários válidos e armazenar em cache
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+        var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
+        var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
+        // Cargos que podem ser atribuídos em tarefas
+        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
+        // Cargos da equipe do Gerente de Regularização Ambiental
+        var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
+        _responsaveisCache = [];
+        
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
             if (roleLower === 'inativo') return;
 
-            // Se for Diretor, ocultar fiscais na lista de responsáveis
-            if (ehDiretor && (roleLower.includes('fiscal') || roleLower === 'administrador de posturas')) {
-                // Permite se for ele mesmo (Diretor pode ter 'fiscal' no nome do cargo tecnicamente)
-                if (u.id !== userIdGlobal) return;
+            // Se for Diretor, pode atribuir tarefas para qualquer pessoa na hierarquia:
+            // - Ele mesmo (Diretor)
+            // - Secretário(a)
+            // - Gerentes (de Posturas, de Regularização Ambiental)
+            // - Equipe de RA (Fiscais, Administrativos de Posturas)
+            // - Equipe Ambiental (Engenheiros, Agrônomos, Analistas, Auxiliares)
+            // Não há exclusão para Diretor - ele vê todos
+
+            // Se for Gerente de Posturas, só pode atribuir para si mesmo, Fiscais e Administrativos de Posturas
+            if (ehGerentePosturas) {
+                var isEleMesmo = u.id === userIdGlobal;
+                var isFiscalPostura = roleLower.includes('fiscal') && roleLower.includes('postura');
+                var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura');
+                var isGerentePostura = roleLower.includes('gerente') && roleLower.includes('postura') && u.id === userIdGlobal;
+                // Só mostra se for ele mesmo, Fiscal ou Administrativo de Posturas
+                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura) return;
+                console.log('[Tarefas] Gerente Posturas - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo);
             }
 
-            var isValidRole = validRoles.indexOf(roleLower) !== -1;
+            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo ou para sua equipe
+            if (ehGerenteAmbiental) {
+                // Verifica se é ele mesmo
+                var isEleMesmo = u.id === userIdGlobal;
+                // Verifica se é da equipe ambiental
+                var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
+                                        roleLower.includes('engenheiro') || 
+                                        roleLower.includes('agrônomo') || 
+                                        roleLower.includes('agronomo') ||
+                                        roleLower.includes('analista ambiental') ||
+                                        roleLower.includes('auxiliar de serviços');
+                // Só mostra se for ele mesmo ou da sua equipe
+                if (!isEleMesmo && !isEquipeAmbiental) return;
+                // Debug: mostra quem está sendo incluído
+                console.log('[Tarefas] Gerente R.A. - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo);
+            }
 
-            if (isValidRole || roleLower.includes('administrador') || roleLower.includes('fiscal') || roleLower.includes('gerente') || roleLower.includes('diretor')) {
-                var checked = (u.id === userIdGlobal) ? ' checked' : '';
-                html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
-                html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
-                html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+            // Verifica se é um cargo válido (comparação case-insensitive)
+            var isValidRole = validRoles.some(function(r) { return r.toLowerCase() === roleLower; }) ||
+                              roleLower.includes('gerente') ||
+                              roleLower.includes('fiscal') ||
+                              roleLower.includes('administrativo') ||
+                              roleLower.includes('diretor') ||
+                              roleLower.includes('secretário') ||
+                              roleLower.includes('secretario');
+            // Verifica se é da equipe do Gerente de Regularização Ambiental
+            var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
+                                    roleLower.includes('engenheiro') || 
+                                    roleLower.includes('agrônomo') || 
+                                    roleLower.includes('agronomo') ||
+                                    roleLower.includes('analista ambiental') ||
+                                    roleLower.includes('auxiliar de serviços');
+            // Verifica se é o próprio usuário logado (para Gerente R.A. se incluir na lista)
+            var isProprioUsuario = String(u.id) === String(userIdGlobal);
+
+            if (isValidRole || isEquipeAmbiental || isProprioUsuario) {
+                _responsaveisCache.push({
+                    id: u.id,
+                    full_name: u.full_name,
+                    role: u.role,
+                    isProprioUsuario: isProprioUsuario
+                });
             }
         });
-        container.innerHTML = html || '<p style="color:#94a3b8;">Nenhum usuário encontrado.</p>';
+
+        // Renderizar com campo de pesquisa
+        renderizarListaResponsaveisComPesquisa('');
+        
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
+    }
+}
+
+// Variável para guardar o valor atual da pesquisa
+var _pesquisaResponsavelValor = '';
+
+// Função para renderizar a lista de responsáveis com campo de pesquisa
+function renderizarListaResponsaveisComPesquisa(filtro) {
+    var container = document.getElementById('tarefa-responsaveis-list');
+    if (!container) return;
+    
+    _pesquisaResponsavelValor = filtro || '';
+    var filtroLower = _pesquisaResponsavelValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Na primeira renderização, cria a estrutura completa
+    if (!document.getElementById('pesquisa-responsavel')) {
+        // Campo de pesquisa fixo
+        var html = '<div style="position:sticky; top:0; background:#f8fafc; padding-bottom:8px; border-bottom:1px solid #e2e8f0; margin-bottom:8px;">';
+        html += '<div style="position:relative;">';
+        html += '<svg style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:#94a3b8; pointer-events:none;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
+        html += '<input type="text" id="pesquisa-responsavel" placeholder="Pesquisar nome ou cargo..." ';
+        html += 'style="width:100%; padding:8px 12px 8px 36px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; box-sizing:border-box;">';
+        html += '</div></div>';
+        
+        // Lista de responsáveis (será preenchida dinamicamente)
+        html += '<div id="responsaveis-items" style="max-height:140px; overflow-y:auto;"></div>';
+        
+        // Contador
+        html += '<div style="padding-top:8px; border-top:1px solid #e2e8f0; margin-top:8px; font-size:12px; color:#64748b; text-align:center;">';
+        html += 'Selecionados: <span id="contador-selecionados">0</span> | ';
+        html += 'Mostrando: <span id="mostrando-responsaveis">0</span> de ' + _responsaveisCache.length;
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        // Adicionar event listener no input
+        document.getElementById('pesquisa-responsavel').addEventListener('input', function(e) {
+            filtrarResponsaveis(e.target.value);
+        });
+    }
+    
+    // Atualizar valor do input
+    var inputPesquisa = document.getElementById('pesquisa-responsavel');
+    if (inputPesquisa && filtro !== undefined) {
+        inputPesquisa.value = filtro;
+    }
+    
+    // Renderizar apenas a lista de itens
+    var listaContainer = document.getElementById('responsaveis-items');
+    if (!listaContainer) return;
+    
+    var usuariosFiltrados = _responsaveisCache.filter(function(u) {
+        if (!filtroLower) return true;
+        var nomeNormalizado = u.full_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var cargoNormalizado = (u.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return nomeNormalizado.includes(filtroLower) || cargoNormalizado.includes(filtroLower);
+    });
+    
+    var html = '';
+    if (usuariosFiltrados.length === 0) {
+        html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
+    } else {
+        usuariosFiltrados.forEach(function(u) {
+            var checked = u.isProprioUsuario ? ' checked' : '';
+            html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
+            html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
+            html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+        });
+    }
+    
+    listaContainer.innerHTML = html;
+    
+    // Atualizar contadores
+    atualizarContadorSelecionados();
+    var mostrandoEl = document.getElementById('mostrando-responsaveis');
+    if (mostrandoEl) {
+        mostrandoEl.textContent = usuariosFiltrados.length;
+    }
+    
+    // Adicionar listeners nos checkboxes
+    var checkboxes = listaContainer.querySelectorAll('.cb-responsavel');
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', atualizarContadorSelecionados);
+    });
+}
+
+// Função para filtrar responsáveis conforme usuário digita
+function filtrarResponsaveis(valor) {
+    renderizarListaResponsaveisComPesquisa(valor);
+    // Restaurar foco no input após renderização
+    setTimeout(function() {
+        var input = document.getElementById('pesquisa-responsavel');
+        if (input) {
+            input.focus();
+            // Posicionar cursor no final do texto
+            var len = input.value.length;
+            input.setSelectionRange(len, len);
+        }
+    }, 0);
+}
+
+// Função para atualizar o contador de selecionados
+function atualizarContadorSelecionados() {
+    var container = document.getElementById('tarefa-responsaveis-list');
+    if (!container) return;
+    var checkboxes = container.querySelectorAll('.cb-responsavel:checked');
+    var contador = document.getElementById('contador-selecionados');
+    if (contador) {
+        contador.textContent = checkboxes.length;
     }
 }
 
@@ -1027,9 +1319,13 @@ async function abrirDetalheTarefa(id) {
         var anx = anexos || [];
         var resps = responsaveis || [];
 
-        var ehGerente = (userRoleGlobal === 'gerente' || userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas' || userRoleGlobal === 'admin' || userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'Diretor de Meio Ambiente');
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw.includes('diretor'));
         var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
-        var podeEditar = ehGerente || ehResponsavel;
+        var ehDiretor = roleLowerRaw.includes('diretor');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var gerenteCriouTarefa = roleLowerRaw.includes('gerente') && tarefa.criado_por === userIdGlobal;
+        var podeEditar = ehDiretor || ehSecretario || gerenteCriouTarefa || ehResponsavel;
 
         var html = '<div class="modal-overlay ativo" id="modal-detalhe-tarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-tarefa\')">';
         html += '<div class="modal-container" style="max-width:600px;">';
@@ -1040,8 +1336,8 @@ async function abrirDetalheTarefa(id) {
         // Verificar se todas as subtarefas estão concluídas
         var todasSubConcluidas = subs.length === 0 || subs.every(function (s) { return s.status === 'concluida'; });
 
-        // Status — só quem pode editar a TAREFA PRINCIPAL (apenas gerente)
-        if (ehGerente) {
+        // Status — Diretor, Secretário ou Gerente que criou a tarefa podem alterar
+        if (ehDiretor || ehSecretario || gerenteCriouTarefa) {
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
             var statusOpts = [
                 { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
@@ -1109,9 +1405,13 @@ async function abrirDetalheTarefa(id) {
         html += '<div>';
         html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
         html += '<strong style="font-size:15px; color:#1e293b;">Subtarefas (' + subs.length + ')</strong>';
-        // Apenas Diretor pode criar subtarefas
-        var ehDiretorReal = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-        if (ehDiretorReal) {
+        // Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehDiretorReal = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehGerente = roleLowerRaw.includes('gerente');
+        var gerenteCriouTarefa = ehGerente && tarefa.criado_por === userIdGlobal;
+        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
             html += '<button onclick="abrirCriarSubtarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer;">+ Subtarefa</button>';
         }
         html += '</div>';
@@ -1156,7 +1456,8 @@ async function abrirDetalheTarefa(id) {
                         html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc</span>';
                     }
                 }
-                if (ehDiretorReal) {
+                // Botão excluir subtarefa - Diretor, Secretário e Gerente (se criou a tarefa pai)
+                if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
                     html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
                 }
                 html += '</div>';
@@ -1185,16 +1486,16 @@ async function abrirDetalheTarefa(id) {
             html += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
             html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
             html += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
-            if (ehDiretorReal) {
+            // Diretor, Secretário ou responsável podem excluir anexos
+            if (ehDiretorReal || ehSecretario || ehResponsavel) {
                 html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
             }
             html += '</div>';
         });
         html += '</div>';
 
-        // Botão excluir tarefa (Apenas Diretor)
-        var ehDiretorReal = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-        if (ehDiretorReal) {
+        // Botão excluir tarefa (Diretor, Secretário ou Gerente que criou a tarefa)
+        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
             html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
         }
 
@@ -1210,7 +1511,34 @@ async function abrirDetalheTarefa(id) {
 
 async function alterarStatusTarefa(id, novoStatus) {
     try {
+        // Verificação de segurança: Diretor, Secretário ou Gerente que criou a tarefa podem alterar status
+        var roleLower = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = roleLower.includes('diretor');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        
+        if (!ehDiretor && !ehSecretario) {
+            var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
+            if (!tarefa || tarefa.criado_por !== userIdGlobal) {
+                Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem alterar o status.', 'error');
+                return;
+            }
+        }
+        
         if (novoStatus === 'concluida') {
+            // Verificar se há subtarefas pendentes
+            var { data: subtarefas } = await supabaseClient
+                .from('tarefas')
+                .select('id, status')
+                .eq('tarefa_pai_id', id);
+            
+            if (subtarefas && subtarefas.length > 0) {
+                var subtarefasPendentes = subtarefas.filter(function(s) { return s.status !== 'concluida'; });
+                if (subtarefasPendentes.length > 0) {
+                    Swal.fire('Ação Bloqueada', 'Existem ' + subtarefasPendentes.length + ' subtarefa(s) pendente(s). Conclua todas as subtarefas antes de concluir esta tarefa.', 'warning');
+                    return;
+                }
+            }
+            
             // Verificar anexos
             const { data: anexos } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', id).limit(1);
             // Verificar resposta (supondo que resposta seja um campo na tabela tarefas ou em outra vinculada)
@@ -1230,8 +1558,18 @@ async function alterarStatusTarefa(id, novoStatus) {
 }
 
 async function excluirTarefa(id) {
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) { Swal.fire('Acesso Negado', 'Apenas o Diretor pode excluir tarefas.', 'error'); return; }
+    var roleLower = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLower.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    
+    // Se não for Diretor ou Secretário, verificar se é Gerente que criou a tarefa
+    if (!ehDiretor && !ehSecretario) {
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
+        if (!tarefa || tarefa.criado_por !== userIdGlobal) {
+            Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem excluí-la.', 'error'); 
+            return; 
+        }
+    }
 
     if (!confirm('Excluir esta tarefa e todas as subtarefas?')) return;
     try {
@@ -1261,6 +1599,9 @@ function abrirCriarSubtarefa(tarefaPaiId) {
     carregarListaResponsaveisSubtarefa();
 }
 
+// Variável global para cache de responsáveis de subtarefa
+var _responsaveisSubCache = [];
+
 async function carregarListaResponsaveisSubtarefa() {
     var container = document.getElementById('subtarefa-responsaveis-list');
     if (!container) return;
@@ -1273,29 +1614,202 @@ async function carregarListaResponsaveisSubtarefa() {
 
         if (error) throw error;
 
-        var validRoles = ['fiscal', 'fiscal de posturas', 'administrador de posturas', 'gerente', 'gerente fiscal', 'gerente de posturas', 'admin'];
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+        var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
+        var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
+        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
+        // Cargos da equipe do Gerente de Regularização Ambiental
+        var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
-        var html = '';
+        _responsaveisSubCache = [];
+        
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
-            if (roleLower === 'inativo') return; // Double check for 'inativo' just in case
+            if (roleLower === 'inativo') return;
 
-            var isValidRole = validRoles.indexOf(roleLower) !== -1;
+            // Se for Diretor, pode atribuir para qualquer pessoa na hierarquia (inclusive ele mesmo)
 
-            // Also allow roles that contain 'administrador', 'fiscal', or 'gerente'
-            if (isValidRole || roleLower.includes('administrador') || roleLower.includes('fiscal') || roleLower.includes('gerente')) {
-                html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
-                html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '" style="width:16px; height:16px; accent-color:#10b981;">';
-                html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+            // Se for Gerente de Posturas, só pode atribuir para si mesmo, Fiscais e Administrativos de Posturas
+            if (ehGerentePosturas) {
+                var isEleMesmo = u.id === userIdGlobal;
+                var isFiscalPostura = roleLower.includes('fiscal') && roleLower.includes('postura');
+                var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura');
+                var isGerentePostura = roleLower.includes('gerente') && roleLower.includes('postura') && u.id === userIdGlobal;
+                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura) return;
+            }
+
+            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo ou para sua equipe
+            if (ehGerenteAmbiental) {
+                var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
+                                        roleLower.includes('engenheiro') || 
+                                        roleLower.includes('agrônomo') || 
+                                        roleLower.includes('agronomo') ||
+                                        roleLower.includes('analista ambiental') ||
+                                        roleLower.includes('auxiliar de serviços');
+                if (u.id !== userIdGlobal && !isEquipeAmbiental) return;
+            }
+
+            // Verifica se é um cargo válido (comparação case-insensitive)
+            var isValidRole = validRoles.some(function(r) { return r.toLowerCase() === roleLower; }) ||
+                              roleLower.includes('gerente') ||
+                              roleLower.includes('fiscal') ||
+                              roleLower.includes('administrativo') ||
+                              roleLower.includes('diretor') ||
+                              roleLower.includes('secretário') ||
+                              roleLower.includes('secretario');
+            // Verifica se é da equipe do Gerente de Regularização Ambiental
+            var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
+                                    roleLower.includes('engenheiro') || 
+                                    roleLower.includes('agrônomo') || 
+                                    roleLower.includes('agronomo') ||
+                                    roleLower.includes('analista ambiental') ||
+                                    roleLower.includes('auxiliar de serviços');
+
+            if (isValidRole || isEquipeAmbiental) {
+                _responsaveisSubCache.push({
+                    id: u.id,
+                    full_name: u.full_name,
+                    role: u.role
+                });
             }
         });
-        container.innerHTML = html || '<p style="color:#94a3b8;">Nenhum usuário encontrado.</p>';
+
+        // Renderizar com pesquisa
+        renderizarListaResponsaveisSubComPesquisa('');
+        
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
     }
 }
 
+// Variável para guardar o valor atual da pesquisa de subtarefa
+var _pesquisaResponsavelSubValor = '';
+
+// Função para renderizar a lista de responsáveis da subtarefa com campo de pesquisa
+function renderizarListaResponsaveisSubComPesquisa(filtro) {
+    var container = document.getElementById('subtarefa-responsaveis-list');
+    if (!container) return;
+    
+    _pesquisaResponsavelSubValor = filtro || '';
+    var filtroLower = _pesquisaResponsavelSubValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Na primeira renderização, cria a estrutura completa
+    if (!document.getElementById('pesquisa-responsavel-sub')) {
+        // Campo de pesquisa fixo
+        var html = '<div style="position:sticky; top:0; background:#f8fafc; padding-bottom:8px; border-bottom:1px solid #e2e8f0; margin-bottom:8px;">';
+        html += '<div style="position:relative;">';
+        html += '<svg style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:#94a3b8; pointer-events:none;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
+        html += '<input type="text" id="pesquisa-responsavel-sub" placeholder="Pesquisar nome ou cargo..." ';
+        html += 'style="width:100%; padding:8px 12px 8px 36px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; box-sizing:border-box;">';
+        html += '</div></div>';
+        
+        // Lista de responsáveis (será preenchida dinamicamente)
+        html += '<div id="responsaveis-sub-items" style="max-height:140px; overflow-y:auto;"></div>';
+        
+        // Contador
+        html += '<div style="padding-top:8px; border-top:1px solid #e2e8f0; margin-top:8px; font-size:12px; color:#64748b; text-align:center;">';
+        html += 'Selecionados: <span id="contador-selecionados-sub">0</span> | ';
+        html += 'Mostrando: <span id="mostrando-responsaveis-sub">0</span> de ' + _responsaveisSubCache.length;
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        // Adicionar event listener no input
+        document.getElementById('pesquisa-responsavel-sub').addEventListener('input', function(e) {
+            filtrarResponsaveisSub(e.target.value);
+        });
+    }
+    
+    // Atualizar valor do input
+    var inputPesquisa = document.getElementById('pesquisa-responsavel-sub');
+    if (inputPesquisa && filtro !== undefined) {
+        inputPesquisa.value = filtro;
+    }
+    
+    // Renderizar apenas a lista de itens
+    var listaContainer = document.getElementById('responsaveis-sub-items');
+    if (!listaContainer) return;
+    
+    var usuariosFiltrados = _responsaveisSubCache.filter(function(u) {
+        if (!filtroLower) return true;
+        var nomeNormalizado = u.full_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var cargoNormalizado = (u.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return nomeNormalizado.includes(filtroLower) || cargoNormalizado.includes(filtroLower);
+    });
+    
+    var html = '';
+    if (usuariosFiltrados.length === 0) {
+        html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
+    } else {
+        usuariosFiltrados.forEach(function(u) {
+            html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
+            html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '" style="width:16px; height:16px; accent-color:#10b981;">';
+            html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
+        });
+    }
+    
+    listaContainer.innerHTML = html;
+    
+    // Atualizar contadores
+    atualizarContadorSelecionadosSub();
+    var mostrandoEl = document.getElementById('mostrando-responsaveis-sub');
+    if (mostrandoEl) {
+        mostrandoEl.textContent = usuariosFiltrados.length;
+    }
+    
+    // Adicionar listeners nos checkboxes
+    var checkboxes = listaContainer.querySelectorAll('.cb-resp-sub');
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', atualizarContadorSelecionadosSub);
+    });
+}
+
+// Função para filtrar responsáveis da subtarefa
+function filtrarResponsaveisSub(valor) {
+    renderizarListaResponsaveisSubComPesquisa(valor);
+    // Restaurar foco no input após renderização
+    setTimeout(function() {
+        var input = document.getElementById('pesquisa-responsavel-sub');
+        if (input) {
+            input.focus();
+            // Posicionar cursor no final do texto
+            var len = input.value.length;
+            input.setSelectionRange(len, len);
+        }
+    }, 0);
+}
+
+// Função para atualizar o contador de selecionados da subtarefa
+function atualizarContadorSelecionadosSub() {
+    var container = document.getElementById('subtarefa-responsaveis-list');
+    if (!container) return;
+    var checkboxes = container.querySelectorAll('.cb-resp-sub:checked');
+    var contador = document.getElementById('contador-selecionados-sub');
+    if (contador) {
+        contador.textContent = checkboxes.length;
+    }
+}
+
 async function confirmarSubtarefa(tarefaPaiId) {
+    // Verificação de segurança: Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehGerente = roleLowerRaw.includes('gerente');
+    
+    // Se for Gerente, verificar se criou a tarefa pai
+    var gerentePodeCriar = false;
+    if (ehGerente && !ehDiretor && !ehSecretario) {
+        var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
+        gerentePodeCriar = tarefaPai && tarefaPai.criado_por === userIdGlobal;
+    }
+    
+    if (!ehDiretor && !ehSecretario && !gerentePodeCriar) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem criar subtarefas.', 'error');
+        return;
+    }
+    
     var titulo = document.getElementById('subtarefa-titulo').value.trim();
     if (!titulo) { alert('Preencha o título da subtarefa.'); return; }
 
@@ -1360,6 +1874,28 @@ async function salvarSubtarefa(tarefaPaiId, titulo) {
 async function toggleSubtarefa(subId, checked) {
     var novoStatus = checked ? 'concluida' : 'pendente';
     try {
+        // Buscar informações da subtarefa e seus responsáveis
+        var { data: subInfo } = await supabaseClient
+            .from('tarefas')
+            .select('tarefa_pai_id, tarefa_responsaveis(user_id)')
+            .eq('id', subId)
+            .maybeSingle();
+        
+        if (!subInfo) return;
+        
+        // Verificar se o usuário é responsável pela subtarefa
+        var responsaveis = subInfo.tarefa_responsaveis || [];
+        var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
+        var roleLower = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = roleLower.includes('diretor');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        
+        // Só permite concluir se for responsável ou Diretor/Secretário
+        if (!ehResponsavel && !ehDiretor && !ehSecretario) {
+            Swal.fire('Acesso Negado', 'Apenas o responsável pela subtarefa pode concluí-la.', 'error');
+            return;
+        }
+        
         // Se marcando como concluída, verificar se tem anexo
         if (checked) {
             var { data: anexos } = await supabaseClient
@@ -1367,11 +1903,10 @@ async function toggleSubtarefa(subId, checked) {
                 .select('id')
                 .eq('tarefa_id', subId);
             if (!anexos || anexos.length === 0) {
-                alert('Anexe pelo menos um documento antes de concluir esta subtarefa.');
-                var { data: sub2 } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).maybeSingle();
-                if (sub2 && sub2.tarefa_pai_id) {
+                Swal.fire('Ação Bloqueada', 'Anexe pelo menos um documento antes de concluir esta subtarefa.', 'warning');
+                if (subInfo.tarefa_pai_id) {
                     fecharModal('modal-detalhe-tarefa');
-                    abrirDetalheTarefa(sub2.tarefa_pai_id);
+                    abrirDetalheTarefa(subInfo.tarefa_pai_id);
                 }
                 return;
             }
@@ -1400,8 +1935,23 @@ async function toggleSubtarefa(subId, checked) {
 }
 
 async function excluirSubtarefa(subId, tarefaPaiId) {
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) { Swal.fire('Acesso Negado', 'Apenas o Diretor pode excluir subtarefas.', 'error'); return; }
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehGerente = roleLowerRaw.includes('gerente');
+    
+    // Se for Gerente, verificar se criou a tarefa pai
+    var gerentePodeExcluir = false;
+    if (ehGerente && !ehDiretor && !ehSecretario) {
+        var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
+        gerentePodeExcluir = tarefaPai && tarefaPai.criado_por === userIdGlobal;
+    }
+    
+    // Apenas Diretor, Secretário e Gerente (se criou a tarefa pai) podem excluir subtarefas
+    if (!ehDiretor && !ehSecretario && !gerentePodeExcluir) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem excluir subtarefas.', 'error'); 
+        return; 
+    }
 
     try {
         await supabaseClient.from('tarefas').delete().eq('id', subId);
@@ -1419,6 +1969,27 @@ async function uploadAnexo(tarefaId, inputEl) {
     if (!file) return;
 
     try {
+        // Verificar se o usuário é responsável pela tarefa ou é Diretor/Secretário
+        var { data: tarefaInfo } = await supabaseClient
+            .from('tarefas')
+            .select('tarefa_pai_id, tarefa_responsaveis(user_id)')
+            .eq('id', tarefaId)
+            .maybeSingle();
+        
+        if (!tarefaInfo) { Swal.fire('Erro', 'Tarefa não encontrada.', 'error'); return; }
+        
+        var responsaveis = tarefaInfo.tarefa_responsaveis || [];
+        var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
+        var roleLower = (userRoleGlobal || '').toLowerCase();
+        var ehDiretor = roleLower.includes('diretor');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        
+        // Só permite anexar se for responsável ou Diretor/Secretário
+        if (!ehResponsavel && !ehDiretor && !ehSecretario) {
+            Swal.fire('Acesso Negado', 'Apenas o responsável pela tarefa pode anexar arquivos.', 'error');
+            return;
+        }
+        
         var filePath = tarefaId + '/' + Date.now() + '_' + file.name;
         var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
         if (uploadErr) throw uploadErr;
@@ -1432,7 +2003,6 @@ async function uploadAnexo(tarefaId, inputEl) {
         });
 
         // Detectar se é subtarefa para reabrir o modal correto
-        var { data: tarefaInfo } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', tarefaId).maybeSingle();
         var modalId = (tarefaInfo && tarefaInfo.tarefa_pai_id) ? tarefaInfo.tarefa_pai_id : tarefaId;
         fecharModal('modal-detalhe-tarefa');
         abrirDetalheTarefa(modalId);
@@ -1443,8 +2013,19 @@ async function uploadAnexo(tarefaId, inputEl) {
 }
 
 async function excluirAnexo(anexoId, tarefaId) {
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) { Swal.fire('Acesso Negado', 'Apenas o Diretor pode excluir anexos.', 'error'); return; }
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    
+    // Se não for Diretor ou Secretário, verificar se é responsável pela tarefa
+    if (!ehDiretor && !ehSecretario) {
+        var { data: responsaveis } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        var ehResponsavel = (responsaveis || []).some(function(r) { return r.user_id === userIdGlobal; });
+        if (!ehResponsavel) {
+            Swal.fire('Acesso Negado', 'Apenas o responsável pela tarefa pode excluir anexos.', 'error'); 
+            return; 
+        }
+    }
 
     if (!confirm('Excluir este anexo?')) return;
     try {
@@ -1517,14 +2098,27 @@ async function abrirHistoricoTarefas() {
         // Filtragem Baseada no Papel do Usuário
         if (typeof userRoleGlobal !== 'undefined') {
 
-            // Regra Específica: Gerente de Posturas só vê o que ELE criou
-            if (userRoleGlobal === 'gerente de posturas') {
+            // Regra Específica: Gerente de Posturas vê o que criou OU onde é responsável
+            var roleLowerHist = (userRoleGlobal || '').toLowerCase();
+            if (roleLowerHist.includes('gerente') && roleLowerHist.includes('postur')) {
+                var { data: respPosturas } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
+                var idsRespPosturas = respPosturas ? respPosturas.map(function (r) { return r.tarefa_id; }) : [];
+                
                 historicoTarefasDados = historicoTarefasDados.filter(function (t) {
-                    return t.criado_por === userIdGlobal;
+                    return t.criado_por === userIdGlobal || idsRespPosturas.indexOf(t.id) !== -1;
+                });
+            }
+            // Regra Específica: Gerente de Regularização Ambiental vê o que criou OU onde é responsável
+            else if (roleLowerHist.includes('regularizacao') || roleLowerHist.includes('regularização')) {
+                var { data: respAmbiental } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
+                var idsRespAmbiental = respAmbiental ? respAmbiental.map(function (r) { return r.tarefa_id; }) : [];
+                
+                historicoTarefasDados = historicoTarefasDados.filter(function (t) {
+                    return t.criado_por === userIdGlobal || idsRespAmbiental.indexOf(t.id) !== -1;
                 });
             }
             // Regra Específica: Fiscal e outros não-gerentes só veem o que foram ATRIBUÍDOS
-            else if (!ehGerenteKanban && userRoleGlobal !== 'admin') {
+            else if (!ehGerenteKanban && !roleLowerHist.includes('diretor') && !roleLowerHist.includes('secretário')) {
                 var { data: minhasResp } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
                 var meusIdsTasks = minhasResp ? minhasResp.map(function (r) { return r.tarefa_id; }) : [];
 
@@ -1811,16 +2405,28 @@ async function carregarMinhasTarefasModulo() {
 
     var container = document.getElementById('minhas-tarefas-container');
     if (!container) return;
-    
+
     container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">Processando projetos...</div>';
 
     try {
         var idsInteresse = [];
-        if (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor') {
-            idsInteresse = (diretorModoVisualizacao === 'direcao') ? [userIdGlobal] : idsGerentesGlobal;
+        var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        console.log('[Tarefas] carregarMinhasTarefasModulo - modo:', diretorModoVisualizacao, 'role:', userRoleGlobal);
+        console.log('[Tarefas] idsGerentesGlobal:', idsGerentesGlobal.length, 'idsGerentesAmbientalGlobal:', idsGerentesAmbientalGlobal.length);
+        
+        if (roleLowerRaw === 'diretor de meio ambiente' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor(a)') {
+            if (diretorModoVisualizacao === 'direcao') {
+                idsInteresse = [userIdGlobal];
+            } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
+                idsInteresse = idsGerentesAmbientalGlobal;
+            } else {
+                idsInteresse = idsGerentesGlobal;
+            }
         } else {
             idsInteresse = [userIdGlobal];
         }
+        
+        console.log('[Tarefas] idsInteresse:', idsInteresse.length, 'IDs:', idsInteresse);
 
         if (idsInteresse.length === 0) {
             container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">Nenhum responsável mapeado.</div>';
@@ -1843,7 +2449,12 @@ async function carregarMinhasTarefasModulo() {
         var filtradas = (tarefas || []).filter(t => respIdsSet.has(t.id));
 
         if (filtradas.length === 0) {
-            var msg = (diretorModoVisualizacao === 'gerencia') ? 'Os gerentes não possuem tarefas de projetos.' : 'Você não possui tarefas de projetos.';
+            var msg = 'Você não possui tarefas de projetos.';
+            if (diretorModoVisualizacao === 'gerencia' || diretorModoVisualizacao === 'gerencia_posturas') {
+                msg = 'Os gerentes de posturas não possuem tarefas de projetos.';
+            } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
+                msg = 'Os gerentes de regularização ambiental não possuem tarefas de projetos.';
+            }
             container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">' + msg + '</div>';
             return;
         }
@@ -1856,7 +2467,7 @@ async function carregarMinhasTarefasModulo() {
         html += '<th style="text-align:center; padding:12px; color:#64748b; font-weight:600; width:120px;">Status</th>';
         html += '</tr></thead><tbody>';
 
-        var hoje = new Date(); hoje.setHours(0,0,0,0);
+        var hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
         filtradas.forEach(function (t) {
             var prazoDt = t.prazo ? new Date(t.prazo) : null;
@@ -1925,7 +2536,7 @@ let tarefasTemporariasEvento = [];
 function renderizarListaTarefasTemporarias() {
     const cont = document.getElementById('ev-tarefas-lista');
     if (!cont) return;
-    
+
     if (tarefasTemporariasEvento.length === 0) {
         cont.innerHTML = '<p style="color: #94a3b8; font-size: 13px; font-style: italic;">Nenhuma tarefa adicionada ainda.</p>';
         return;
@@ -1953,59 +2564,61 @@ function removerTarefaTemporaria(idx) {
 }
 
 function abrirModalNovoEventoAvancado() {
-    // Verificação de segurança: apenas Diretor pode criar eventos
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor pode criar eventos.', 'error');
+    // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
     }
-    
-    tarefasTemporariasEvento = []; 
+
+    tarefasTemporariasEvento = [];
     arquivosTemporariosEvento = []; // Reset arquivos evento
     _vincularEventoId = null; // Reset vínculo ao abrir novo
     var html = '<div class="modal-overlay ativo" id="modal-evento-avancado" onclick="if(event.target===this)fecharModal(\'modal-evento-avancado\')">';
     html += '<div class="modal-container" style="max-width:700px;">';
-    
+
     html += '<div class="modal-header"><h2>Novo Projeto / Evento</h2>';
     html += '<button class="modal-close" onclick="fecharModal(\'modal-evento-avancado\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div>';
 
     html += '<div class="modal-body" style="background: #fff; padding: 25px;">';
-    
+
     // Seção Superior: Título e Descrição
     html += '<div class="campo-grupo"><label>Título do Evento / Projeto</label><input type="text" id="ev-titulo" placeholder="Ex: Mutirão de Limpeza Vila Nova"></div>';
     html += '<div class="campo-grupo"><label>Descrição Detalhada</label><textarea id="ev-descricao" rows="2" placeholder="Objetivos e informações base..."></textarea></div>';
-    
+
     // Grid: Data, Cor e Documentos
     html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">';
-        
-        // Coluna Esquerda: Data e Documentos
-        html += '<div>';
-        html += '<div class="campo-grupo"><label>Data do evento</label><input type="date" id="ev-data-inicio"></div>';
-        
-        html += '<div class="campo-grupo" style="margin-top: 15px;">';
-        html += '<label>Documentos</label>';
-        html += '<label style="display:flex; align-items:center; gap:8px; padding:10px; border:2px dashed #cbd5e1; border-radius:10px; cursor:pointer; background:#f8fafc; transition:0.2s;" onmouseover="this.style.borderColor=\'#10b981\'" onmouseout="this.style.borderColor=\'#cbd5e1\'">';
-        html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
-        html += '<span style="font-size:13px; color:#64748b;">Anexar arquivos (PDF, Imagens)</span>';
-        html += '<input type="file" id="ev-anexos-input" multiple style="display:none;" onchange="adicionarArquivosEvento(this)">';
-        html += '</label>';
-        html += '<div id="ev-anexos-preview" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:5px;"></div>';
-        html += '</div>';
-        html += '</div>';
 
-        // Coluna Direita: Cores (2 carreiras = 5 colunas para as 10 novas cores)
-        html += '<div style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #f1f5f9; height: fit-content;">';
-        html += '<label style="font-weight: 700; color: #475569; display: block; margin-bottom: 10px; font-size: 13px;">Cor do Evento</label>';
-        html += '<div id="ev-cor-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">';
-        const cores = ['#FF4D6D', '#F94144', '#F3722C', '#F8961E', '#F9C74F', '#90BE6D', '#43AA8B', '#00B4D8', '#0077B6', '#7209B7'];
-        cores.forEach((c, idx) => {
-            const selected = idx === 0 ? 'border: 2px solid #334155; transform: scale(1.1);' : 'border: 1px solid #e2e8f0;';
-            html += `<div onclick="selecionarCorEvento('${c}', this)" style="width: 30px; height: 30px; background: ${c}; border-radius: 6px; cursor: pointer; transition: 0.2s; ${selected}" class="ev-cor-dot"></div>`;
-        });
-        html += '<input type="hidden" id="ev-cor" value="#FF4D6D">';
-        html += '</div>';
-        html += '</div>';
+    // Coluna Esquerda: Data e Documentos
+    html += '<div>';
+    html += '<div class="campo-grupo"><label>Data do evento</label><input type="date" id="ev-data-inicio"></div>';
+
+    html += '<div class="campo-grupo" style="margin-top: 15px;">';
+    html += '<label>Documentos</label>';
+    html += '<label style="display:flex; align-items:center; gap:8px; padding:10px; border:2px dashed #cbd5e1; border-radius:10px; cursor:pointer; background:#f8fafc; transition:0.2s;" onmouseover="this.style.borderColor=\'#10b981\'" onmouseout="this.style.borderColor=\'#cbd5e1\'">';
+    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+    html += '<span style="font-size:13px; color:#64748b;">Anexar arquivos (PDF, Imagens)</span>';
+    html += '<input type="file" id="ev-anexos-input" multiple style="display:none;" onchange="adicionarArquivosEvento(this)">';
+    html += '</label>';
+    html += '<div id="ev-anexos-preview" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:5px;"></div>';
+    html += '</div>';
+    html += '</div>';
+
+    // Coluna Direita: Cores (2 carreiras = 5 colunas para as 10 novas cores)
+    html += '<div style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #f1f5f9; height: fit-content;">';
+    html += '<label style="font-weight: 700; color: #475569; display: block; margin-bottom: 10px; font-size: 13px;">Cor do Evento</label>';
+    html += '<div id="ev-cor-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">';
+    const cores = ['#FF4D6D', '#F94144', '#F3722C', '#F8961E', '#F9C74F', '#90BE6D', '#43AA8B', '#00B4D8', '#0077B6', '#7209B7'];
+    cores.forEach((c, idx) => {
+        const selected = idx === 0 ? 'border: 2px solid #334155; transform: scale(1.1);' : 'border: 1px solid #e2e8f0;';
+        html += `<div onclick="selecionarCorEvento('${c}', this)" style="width: 30px; height: 30px; background: ${c}; border-radius: 6px; cursor: pointer; transition: 0.2s; ${selected}" class="ev-cor-dot"></div>`;
+    });
+    html += '<input type="hidden" id="ev-cor" value="#FF4D6D">';
+    html += '</div>';
+    html += '</div>';
 
     html += '</div>'; // Fecha grid superior
 
@@ -2015,7 +2628,7 @@ function abrirModalNovoEventoAvancado() {
     html += '<div><label style="font-weight: 700; color: #1e293b; font-size: 14px; display: block;">Tarefas Vinculadas</label><span style="font-size: 12px; color: #64748b;">Clique abaixo para adicionar tarefas ao projeto.</span></div>';
     html += '<button onclick="abrirModalNovaTarefa(true)" style="background: #10b981; border: none; color: white; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 12px rgba(16,185,129,0.2);">+ Inserir Tarefa</button>';
     html += '</div>';
-    
+
     html += '<div id="ev-tarefas-lista" style="display: flex; flex-direction: column; gap: 10px;">';
     html += '<p style="color: #94a3b8; font-size: 13px; font-style: italic;">Nenhuma tarefa adicionada ainda.</p>';
     html += '</div>';
@@ -2027,7 +2640,7 @@ function abrirModalNovoEventoAvancado() {
     html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-evento-avancado\')">Cancelar</button>';
     html += '<button class="btn-salvar" onclick="salvarEventoAvancado()" id="btn-salvar-ev" style="background: #10b981; padding: 8px 30px;">Criar Projeto / Evento</button>';
     html += '</div>';
-    
+
     html += '</div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
@@ -2049,7 +2662,7 @@ async function carregarResponsaveisEmTodosSelects() {
     try {
         var { data: users, error } = await supabaseClient.from('profiles').select('id, full_name, role').order('full_name', { ascending: true });
         if (error) throw error;
-        
+
         selects.forEach(sel => {
             popularSelectResponsaveis(sel, users);
         });
@@ -2058,9 +2671,9 @@ async function carregarResponsaveisEmTodosSelects() {
 
 function popularSelectResponsaveis(select, users) {
     var html = '';
-    (users || []).forEach(function(u) {
+    (users || []).forEach(function (u) {
         var role = (u.role || '').toLowerCase();
-        if (role.includes('gerente') || role.includes('admin') || role.includes('diretor')) {
+        if (role.includes('gerente') || role.includes('administrativo') || role.includes('diretor')) {
             html += '<option value="' + u.id + '">' + u.full_name + '</option>';
         }
     });
@@ -2098,6 +2711,15 @@ function renderizarPreviewArquivosEvento() {
 }
 
 async function salvarEventoAvancado() {
+    // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
+        return;
+    }
+    
     var titulo = document.getElementById('ev-titulo').value.trim();
     var descricao = document.getElementById('ev-descricao').value.trim();
     var dataInicio = document.getElementById('ev-data-inicio').value;
@@ -2194,9 +2816,9 @@ async function uploadArquivosEvento(eventoId, files) {
         var path = eventoId + '/' + Date.now() + '_' + file.name;
         var { data, error } = await supabaseClient.storage.from('tarefa_anexos').upload(path, file);
         if (error) continue;
-        
+
         var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(path);
-        
+
         await supabaseClient.from('evento_anexos').insert({
             evento_id: eventoId,
             nome_arquivo: file.name,
@@ -2205,10 +2827,14 @@ async function uploadArquivosEvento(eventoId, files) {
     }
 }
 async function abrirModalEditarEvento(id) {
-    // Verificação de segurança: apenas Diretor pode editar eventos
-    var ehDiretor = (userRoleGlobal === 'diretor de meio ambiente' || userRoleGlobal === 'diretor');
-    if (!ehDiretor) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor pode editar eventos.', 'error');
+    // Verificação de segurança: apenas Diretor e Secretário podem editar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    
+    // Apenas Diretor e Secretário podem editar eventos
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem editar eventos.', 'error');
         return;
     }
     
@@ -2216,7 +2842,7 @@ async function abrirModalEditarEvento(id) {
     if (!ev) return;
 
     arquivosTemporariosEvento = []; // Reset para novos anexos
-    
+
     var dataFormatada = ev.data_inicio ? ev.data_inicio.split('T')[0] : '';
 
     var html = '<div class="modal-overlay ativo" id="modal-editar-evento" onclick="if(event.target===this)fecharModal(\'modal-editar-evento\')">';
@@ -2224,11 +2850,11 @@ async function abrirModalEditarEvento(id) {
     html += '<div class="modal-header"><h2>Editar Projeto / Evento</h2>';
     html += '<button class="modal-close" onclick="fecharModal(\'modal-editar-evento\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
-    
+
     html += '<div class="campo-grupo"><label>Título</label><input type="text" id="edit-ev-titulo" value="' + (ev.titulo || '') + '" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;"></div>';
     html += '<div class="campo-grupo"><label>Data do evento</label><input type="date" id="edit-ev-data" value="' + dataFormatada + '" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;"></div>';
     html += '<div class="campo-grupo"><label>Descrição</label><textarea id="edit-ev-descricao" rows="3" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">' + (ev.descricao || '') + '</textarea></div>';
-    
+
     html += '<div class="campo-grupo"><label style="font-weight:700; color:#475569; display:block; margin-bottom:8px;">Anexar mais Documentos</label>';
     html += '<label style="display:flex; align-items:center; gap:8px; padding:10px; border:2px dashed #cbd5e1; border-radius:10px; cursor:pointer; background:#f8fafc;">';
     html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
@@ -2276,6 +2902,15 @@ function removerArquivoEventoEdit(idx) {
 }
 
 async function salvarEdicaoEvento(id) {
+    // Verificação de segurança: apenas Diretor e Secretário podem editar eventos
+    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var ehDiretor = roleLowerRaw.includes('diretor');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    if (!ehDiretor && !ehSecretario) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem editar eventos.', 'error');
+        return;
+    }
+    
     var titulo = document.getElementById('edit-ev-titulo').value.trim();
     var data = document.getElementById('edit-ev-data').value;
     var descricao = document.getElementById('edit-ev-descricao').value.trim();
@@ -2330,6 +2965,11 @@ async function salvarEdicaoEvento(id) {
 function configurarModoTarefas(modo) {
     diretorModoVisualizacao = modo;
     
+    // Sincroniza com variável global para uso em painel.js
+    window.diretorModoVisualizacao = modo;
+    
+    console.log('[Tarefas] Modo configurado:', modo);
+
     // Atualiza a aba que estiver visível
     var contMinhas = document.getElementById('minhas-tarefas-container');
     if (contMinhas && contMinhas.style.display === 'block') {
@@ -2337,9 +2977,30 @@ function configurarModoTarefas(modo) {
     } else {
         carregarTarefas();
     }
-    
-    // Se estiver na Home e mudar para gerencia, atualiza os graficos
-    if (modo === 'gerencia' && typeof carregarGraficoFiscais === 'function') {
-        carregarGraficoFiscais();
-    }
+
+    // Dispara evento para notificar painel.js que o modo mudou
+    window.dispatchEvent(new CustomEvent('modoTarefasMudou', { detail: { modo: modo } }));
 }
+
+// Expõe funções globalmente
+window.configurarModoTarefas = configurarModoTarefas;
+window.abrirModalNovoEventoAvancado = abrirModalNovoEventoAvancado;
+window.abrirModalNovoEvento = abrirModalNovoEvento;
+window.salvarEvento = salvarEvento;
+window.excluirEvento = excluirEvento;
+window.abrirModalEditarEvento = abrirModalEditarEvento;
+window.salvarEdicaoEvento = salvarEdicaoEvento;
+window.salvarEventoAvancado = salvarEventoAvancado;
+window.abrirModalNovaTarefa = abrirModalNovaTarefa;
+window.salvarTarefa = salvarTarefa;
+window.excluirTarefa = excluirTarefa;
+window.abrirDetalheTarefa = abrirDetalheTarefa;
+window.alterarStatusTarefa = alterarStatusTarefa;
+window.abrirCriarSubtarefa = abrirCriarSubtarefa;
+window.confirmarSubtarefa = confirmarSubtarefa;
+window.excluirSubtarefa = excluirSubtarefa;
+window.toggleSubtarefa = toggleSubtarefa;
+window.uploadAnexo = uploadAnexo;
+window.excluirAnexo = excluirAnexo;
+window.carregarTarefas = carregarTarefas;
+window.carregarEventos = carregarEventos;

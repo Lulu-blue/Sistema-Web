@@ -1,6 +1,9 @@
 // painel.js
 // Usa o supabaseClient ja criado pelo protecao.js
 
+// Variável global para modo de visualização do Diretor
+window.diretorModoVisualizacao = window.diretorModoVisualizacao || 'direcao';
+
 async function sair() {
     console.log("Botao sair clicado!");
     try {
@@ -21,12 +24,34 @@ async function getAuthUser() {
     }
     try {
         const res = await window.authUserPromise;
-        if (res.error) window.authUserPromise = null; 
+        if (res.error) window.authUserPromise = null;
         return res;
     } catch (err) {
         window.authUserPromise = null;
         throw err;
     }
+}
+
+// --- FUNÇÕES DE HIERARQUIA DE PERMISSÕES ---
+function getNivelHierarquico(role) {
+    if (!role) return 0;
+    const roleLower = role.toLowerCase();
+    if (roleLower.includes('secretário') || roleLower.includes('secretario')) return 3;
+    if (roleLower.includes('diretor')) return 2;
+    if (roleLower.includes('gerente')) return 1;
+    return 0;
+}
+
+function isGerenteOuSuperior(role) {
+    return getNivelHierarquico(role) >= 1;
+}
+
+function isDiretorOuSuperior(role) {
+    return getNivelHierarquico(role) >= 2;
+}
+
+function isSecretario(role) {
+    return getNivelHierarquico(role) >= 3;
 }
 window.getAuthUser = getAuthUser;
 
@@ -97,41 +122,106 @@ async function carregarDadosIniciais() {
             var inputCargo = document.getElementById('perfil-cargo');
             if (inputCargo) inputCargo.value = (perfil.role || '').toUpperCase();
 
-            var userRole = (perfil.role || '').toLowerCase();
+            var userRole = perfil ? perfil.role : '';
             window.userRoleGlobal = userRole;
+            console.log("DEBUG - window.userRoleGlobal:", window.userRoleGlobal);
 
-            if (userRole === 'admin') {
+            if (userRole === 'administrativo de posturas') {
                 document.getElementById('admin-options').style.display = 'block';
                 var cardAdmin = document.getElementById('card-admin-stats');
                 if (cardAdmin) cardAdmin.style.display = 'block';
             }
 
-            if (userRole === 'gerente fiscal' || userRole === 'gerente de posturas') {
-                // Exibe as opcoes de gerencia na sidebar
-                var gOpts = document.getElementById('gerente-options');
-                if (gOpts) gOpts.style.display = 'block';
+            // Verificação flexível para Gerente, Diretor e Secretário (hierarquia)
+            var roleLower = (userRole || '').toLowerCase();
+            var isGerente = roleLower.includes('gerente');
+            var isDiretor = roleLower.includes('diretor');
+            var isSecretario = roleLower.includes('secretário') || roleLower.includes('secretario');
+            var isCargoGerencia = isGerente || isDiretor || isSecretario;
+            
+            console.log("DEBUG - Cargo:", roleLower, "| Gerencia:", isCargoGerencia);
+            
+            if (isCargoGerencia) {
+                console.log("DEBUG - Cargo de gerência detectado! Ativando opções.");
+                
+                // Apenas Gerente (puro) vê menus standalone
+                // Diretor e Secretário têm seus próprios menus estruturados
+                var isGerentePuro = isGerente && !isDiretor && !isSecretario;
+                
+                if (isGerentePuro) {
+                    console.log("DEBUG - Gerente puro detectado, ativando container");
+                    
+                    // Verificar se é Gerente de Posturas ou Gerente de Regularização Ambiental
+                    var isGerentePosturas = roleLower.includes('postura');
+                    var isGerenteAmbiental = roleLower.includes('regularizacao') || roleLower.includes('regularização');
+                    
+                    // Exibe as opcoes de gerencia na sidebar (apenas Gerente de Posturas)
+                    if (isGerentePosturas) {
+                        var gOpts = document.getElementById('gerente-options');
+                        if (gOpts) gOpts.style.display = 'block';
+                    }
 
-                if (userRole === 'gerente de posturas') {
-                    var pOpts = document.getElementById('gerente-posturas-options');
-                    if (pOpts) pOpts.style.display = 'block';
+                    // Ambos os gerentes veem Projetos (mas cada um só vê os seus)
+                    if (isGerentePosturas || isGerenteAmbiental) {
+                        var pOpts = document.getElementById('gerente-posturas-options');
+                        if (pOpts) pOpts.style.display = 'block';
+                    }
+
+                    // APENAS Gerente de Posturas vê: Historico Geral, Bairros, Home de Fiscais
+                    if (isGerentePosturas) {
+                        // Gerente veem Historico Geral standalone
+                        var ghg = document.getElementById('gerente-historico-geral');
+                        if (ghg) ghg.style.display = 'block';
+                        
+                        // Mostra grafico de fiscais na Home (apenas Gerente de Posturas)
+                        var hgc = document.getElementById('home-gerente-container');
+                        if (hgc) hgc.style.display = 'block';
+                        
+                        // Carrega dados do grafico
+                        if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                        if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
+                    }
+                    
+                    // Garante que containers de outros cargos estejam ocultos
+                    var hdc = document.getElementById('home-diretor-container');
+                    if (hdc) hdc.style.display = 'none';
+                    var hsc = document.getElementById('home-secretario-container');
+                    if (hsc) hsc.style.display = 'none';
+                    
+                    // Para Gerente de Regularização Ambiental, garante que home-gerente-container (fiscais) esteja oculto
+                    // E mostra o container da equipe de regularização ambiental
+                    if (isGerenteAmbiental) {
+                        var hgc = document.getElementById('home-gerente-container');
+                        if (hgc) hgc.style.display = 'none';
+                        // Mostra container da equipe
+                        var hga = document.getElementById('home-gerente-ambiental-container');
+                        if (hga) {
+                            hga.style.display = 'block';
+                            // Carrega a equipe
+                            if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
+                        }
+                    }
+                    
+                    // Mostra o wrapper comum de minhas tarefas (todos os gerentes)
+                    var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+                    if (mtWrapper) mtWrapper.style.display = 'block';
+                    
+                    // Carrega tarefas do gerente
+                    if (typeof carregarMinhasTarefasHome === 'function') {
+                        carregarMinhasTarefasHome('home-minhas-tarefas');
+                    }
                 }
-
-                // Gerente ve apenas Historico Geral (sem Produtividade e Historico pessoal)
-                var ghg = document.getElementById('gerente-historico-geral');
-                if (ghg) ghg.style.display = 'block';
-                // Mostra grafico de fiscais na Home
-                var hgc = document.getElementById('home-gerente-container');
-                if (hgc) hgc.style.display = 'block';
-                // Mostra botões de criar evento/tarefa
-                var btnEvento = document.getElementById('btn-novo-evento');
+                
+                // Mostra botões de criar evento/tarefa (todos os cargos de gerência)
+                var btnEvento = document.getElementById('btn-novo-evento-diretor');
                 if (btnEvento) btnEvento.style.display = 'inline-block';
                 var btnTarefa = document.getElementById('btn-nova-tarefa');
                 if (btnTarefa) btnTarefa.style.display = 'inline-block';
-                // Carrega dados do grafico
-                if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
             }
 
-            if (userRole === 'fiscal' || userRole === 'fiscal de posturas') {
+            // Verificação flexível para Fiscal (qualquer variante)
+            var roleLowerFiscal = (userRole || '').toLowerCase();
+            if (roleLowerFiscal === 'fiscal' || roleLowerFiscal.includes('fiscal') && roleLowerFiscal.includes('postura')) {
                 var fOpts2 = document.getElementById('fiscal-options');
                 if (fOpts2) fOpts2.style.display = 'block';
                 var hc = document.getElementById('home-produtividade-container');
@@ -141,24 +231,95 @@ async function carregarDadosIniciais() {
                 if (typeof carregarNPAIHome === 'function') carregarNPAIHome();
             }
 
-            if (userRole === 'administrador de posturas') {
+            var roleLower = (perfil.role || '').toLowerCase().trim();
+            console.log("DEBUG - roleLower (trimmed):", roleLower);
+            console.log("DEBUG - perfil.role original:", perfil.role);
+            // Verificação flexível para qualquer variante de administrativo/administrador de postura(s)
+            var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura') ||
+                                 roleLower.includes('administrador') && roleLower.includes('postura');
+            if (isAdminPostura) {
                 // Apenas exibe o botão do Histórico Geral no menu lateral.
-                // A home só mostrará o container padrão "Minhas Tarefas", que não está oculto.
+                console.log("DEBUG - Cargo admin reconhecido! Exibindo Histórico Geral.");
                 var ghg = document.getElementById('gerente-historico-geral');
-                if (ghg) ghg.style.display = 'block';
+                if (ghg) {
+                    ghg.style.display = 'block';
+                    console.log("DEBUG - Menu Histórico Geral ativado.");
+                } else {
+                    console.error("DEBUG - Elemento gerente-historico-geral não encontrado!");
+                }
+            } else {
+                console.log("DEBUG - Cargo não corresponde ao admin:", roleLower);
             }
 
-            if (userRole === 'diretor de meio ambiente' || userRole === 'Diretor de Meio Ambiente') {
+            // Controle de visibilidade do botão "Fechamento Anual"
+            // Apenas Fiscal e Administrativo de Postura NÃO devem ver o botão
+            var isFiscal = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
+            var btnFechamento = document.getElementById('btn-fechamento-anual');
+            if (btnFechamento) {
+                // Mostra o botão apenas se NÃO for Fiscal e NÃO for Admin de Postura
+                if (!isFiscal && !isAdminPostura) {
+                    btnFechamento.style.display = 'inline-flex';
+                } else {
+                    btnFechamento.style.display = 'none';
+                }
+            }
+
+            if (userRole === 'Diretor(a) de Meio Ambiente' || userRole === 'Diretor(a)' || isDiretor) {
                 document.getElementById('diretor-options').style.display = 'block';
                 document.getElementById('tarefas-comum').style.display = 'none';
+                // Mostra dashboard específico do Diretor na Home
+                var hdc = document.getElementById('home-diretor-container');
+                if (hdc) hdc.style.display = 'block';
+                // Garante que o container do Gerente esteja oculto (evita flash)
+                var hgc = document.getElementById('home-gerente-container');
+                if (hgc) hgc.style.display = 'none';
+                // Garante que menus standalone do Gerente estejam ocultos
+                var gOpts = document.getElementById('gerente-options');
+                if (gOpts) gOpts.style.display = 'none';
+                var ghg = document.getElementById('gerente-historico-geral');
+                if (ghg) ghg.style.display = 'none';
+                // Oculta o wrapper comum de minhas tarefas (Diretor tem o próprio)
+                var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                // Oculta containers do Fiscal
+                var hpc = document.getElementById('home-produtividade-container');
+                if (hpc) hpc.style.display = 'none';
+                var npai = document.getElementById('home-npai-container');
+                if (npai) npai.style.display = 'none';
+                // Carrega dashboard do Diretor (gestão de gerentes)
+                if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
             }
 
-            if (userRole === 'secretario' || userRole === 'secretaria' || userRole === 'secretário' || userRole === 'secretária' || userRole === 'secretário(a)') {
+            if (userRole === 'Secretário(a)' || isSecretario) {
+                console.log("DEBUG - Secretario detectado, ativando container");
                 document.getElementById('secretario-options').style.display = 'block';
                 document.getElementById('tarefas-comum').style.display = 'none';
-                // Inicializa modo do secretário
-                window.secretarioModoVisualizacao = window.secretarioModoVisualizacao || 'normal';
+                // Mostra dashboard específico do Secretário na Home
+                var hsc = document.getElementById('home-secretario-container');
+                if (hsc) hsc.style.display = 'block';
+                // Garante que containers de outros cargos estejam ocultos
+                var hgc = document.getElementById('home-gerente-container');
+                if (hgc) hgc.style.display = 'none';
+                var hdc = document.getElementById('home-diretor-container');
+                if (hdc) hdc.style.display = 'none';
+                // Oculta o wrapper comum de minhas tarefas (Secretário tem o próprio)
+                var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                // Oculta containers do Fiscal
+                var hpc = document.getElementById('home-produtividade-container');
+                if (hpc) hpc.style.display = 'none';
+                var npai = document.getElementById('home-npai-container');
+                if (npai) npai.style.display = 'none';
+                // Garante que menus standalone do Gerente estejam ocultos
+                var gOpts = document.getElementById('gerente-options');
+                if (gOpts) gOpts.style.display = 'none';
+                var ghg = document.getElementById('gerente-historico-geral');
+                if (ghg) ghg.style.display = 'none';
+                // Inicializa modo do secretário - modo 'direcao' para ver tarefas dos Diretores
+                window.secretarioModoVisualizacao = window.secretarioModoVisualizacao || 'direcao';
                 window.secretarioModoGerencia = window.secretarioModoGerencia || false;
+                // Carrega dashboard do Secretário (gestão de diretores)
+                if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
             }
         }
     } catch (erroGeral) {
@@ -168,46 +329,78 @@ async function carregarDadosIniciais() {
 }
 
 function mudarAba(idAba) {
+    console.log('DEBUG - mudarAba chamada com:', idAba, 'userRoleGlobal:', window.userRoleGlobal);
+    
     // Se for Diretor, fechar submenu ao mudar para abas fora dele
-    if (window.userRoleGlobal === 'diretor de meio ambiente' || window.userRoleGlobal === 'diretor') {
+    var roleLower = (window.userRoleGlobal || '').toLowerCase();
+    var isDiretor = roleLower === 'diretor(a)' || roleLower === 'diretor(a) de meio ambiente' || 
+                    roleLower === 'diretor' || roleLower === 'diretor de meio ambiente';
+    console.log('DEBUG - isDiretor:', isDiretor, 'roleLower:', roleLower);
+    
+    if (isDiretor) {
+        var btnClicado = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+        var btnClicadoId = btnClicado ? btnClicado.id : null;
+        
+        // Fechar submenu Gerência de Posturas
         var submenu = document.getElementById('diretor-submenu-gerencia');
+        console.log('DEBUG - submenu display:', submenu ? submenu.style.display : 'null');
         if (submenu && submenu.style.display === 'block') {
-            var btnClicado = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
             var dentroSubmenu = btnClicado ? submenu.contains(btnClicado) : false;
-            var ehBotaoToggle = btnClicado ? (btnClicado.id === 'btn-toggle-gerencia') : false;
-            
-            if (!dentroSubmenu && !ehBotaoToggle) {
+            var ehBotaoToggle = btnClicadoId === 'btn-toggle-gerencia';
+            var ehBotaoToggleAmbiental = btnClicadoId === 'btn-toggle-gerencia-ambiental'; // Fechar se clicar no outro botão
+            console.log('DEBUG - btnClicado:', btnClicadoId, 'ehBotaoToggle:', ehBotaoToggle, 'dentroSubmenu:', dentroSubmenu);
+
+            if (!dentroSubmenu && !ehBotaoToggle || ehBotaoToggleAmbiental) {
+                console.log('DEBUG - Fechando submenu do Diretor');
                 fecharGerenciaDiretor();
+            }
+        }
+        
+        // Fechar submenu Gerência de Regularização Ambiental
+        var submenuAmbiental = document.getElementById('diretor-submenu-gerencia-ambiental');
+        if (submenuAmbiental && submenuAmbiental.style.display === 'block') {
+            var dentroSubmenu = btnClicado ? submenuAmbiental.contains(btnClicado) : false;
+            var ehBotaoToggle = btnClicadoId === 'btn-toggle-gerencia-ambiental';
+            var ehBotaoTogglePosturas = btnClicadoId === 'btn-toggle-gerencia'; // Fechar se clicar no outro botão
+
+            if (!dentroSubmenu && !ehBotaoToggle || ehBotaoTogglePosturas) {
+                fecharGerenciaAmbientalDiretor();
             }
         }
     }
 
     // Se for Secretario, fechar submenu ao mudar para abas fora dele
-    if (window.userRoleGlobal === 'secretario' || window.userRoleGlobal === 'secretaria' || 
-        window.userRoleGlobal === 'secretário' || window.userRoleGlobal === 'secretária' ||
-        window.userRoleGlobal === 'secretário(a)') {
+    if (window.userRoleGlobal === 'Secretário(a)') {
         var submenu = document.getElementById('secretario-submenu-direcao');
         var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+        var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
         if (submenu && submenu.style.display === 'block') {
             var btnClicado = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
             var dentroSubmenu = btnClicado ? submenu.contains(btnClicado) : false;
             var ehBotaoToggle = btnClicado ? (btnClicado.id === 'btn-toggle-direcao') : false;
             var ehBotaoGerencia = btnClicado ? (btnClicado.id === 'btn-toggle-gerencia-secretario') : false;
+            var ehBotaoGerenciaAmbiental = btnClicado ? (btnClicado.id === 'btn-toggle-gerencia-ambiental-secretario') : false;
             var dentroSubmenuGerencia = btnClicado && submenuGerencia ? submenuGerencia.contains(btnClicado) : false;
-            
-            // Se clicou dentro do submenu mas FORA do sub-submenu, fechar o sub-submenu
-            if (dentroSubmenu && !dentroSubmenuGerencia && !ehBotaoGerencia) {
-                // Fechar apenas o sub-submenu de gerencia
+            var dentroSubmenuGerenciaAmbiental = btnClicado && submenuGerenciaAmbiental ? submenuGerenciaAmbiental.contains(btnClicado) : false;
+
+            // Se clicou dentro do submenu mas FORA dos sub-submenus, fechar os sub-submenus
+            if (dentroSubmenu && !dentroSubmenuGerencia && !ehBotaoGerencia && !dentroSubmenuGerenciaAmbiental && !ehBotaoGerenciaAmbiental) {
+                // Fechar sub-submenus
                 if (submenuGerencia) submenuGerencia.style.display = 'none';
+                if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
                 window.secretarioModoGerencia = false;
                 var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
                 if (btnGerencia && btnGerencia.querySelector('svg')) {
                     btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
                 }
+                var btnGerenciaAmbiental = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+                if (btnGerenciaAmbiental && btnGerenciaAmbiental.querySelector('svg')) {
+                    btnGerenciaAmbiental.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+                }
             }
-            
+
             // Se clicou fora de tudo, fechar o submenu principal também
-            if (!dentroSubmenu && !ehBotaoToggle && !ehBotaoGerencia && !dentroSubmenuGerencia) {
+            if (!dentroSubmenu && !ehBotaoToggle && !ehBotaoGerencia && !dentroSubmenuGerencia && !ehBotaoGerenciaAmbiental && !dentroSubmenuGerenciaAmbiental) {
                 fecharDirecaoSecretario();
             }
         }
@@ -221,27 +414,31 @@ function mudarAba(idAba) {
 
     if (idAba === 'home') {
         var hgc = document.getElementById('home-gerente-container');
+        var hga = document.getElementById('home-gerente-ambiental-container');
         var hdc = document.getElementById('home-diretor-container');
         var hsc = document.getElementById('home-secretario-container');
         var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
-        
+
         // SECRETARIO: tem prioridade pois é nivel mais alto
-        if (window.userRoleGlobal === 'secretario' || window.userRoleGlobal === 'secretaria' || 
-            window.userRoleGlobal === 'secretário' || window.userRoleGlobal === 'secretária' ||
-            window.userRoleGlobal === 'secretário(a)') {
+        if (window.userRoleGlobal === 'Secretário(a)') {
             // Manter submenu aberto se estiver em modo direcao
             var submenuSec = document.getElementById('secretario-submenu-direcao');
             var btnSec = document.getElementById('btn-toggle-direcao');
             var submenuGerenciaSec = document.getElementById('secretario-submenu-gerencia');
+
+            // Pegar referência ao container do gerente ambiental (sempre necessário)
+            var hga = document.getElementById('home-gerente-ambiental-container');
             
             if (window.secretarioModoVisualizacao === 'direcao') {
                 if (window.secretarioModoGerencia) {
                     // Sub-modo GERENCIA: mostra home do gerente (igual Diretor)
                     if (hsc) hsc.style.display = 'none';
                     if (hdc) hdc.style.display = 'none';
+                    if (hga) hga.style.display = 'none';  // OCULTAR container ambiental
                     if (hgc) {
                         hgc.style.display = 'block';
                         if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                        if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
                     }
                     if (mtWrapper) mtWrapper.style.display = 'none';
                     // Manter submenus abertos
@@ -251,6 +448,8 @@ function mudarAba(idAba) {
                 } else {
                     // Modo DIRECAO normal: espelha o modo Diretor (gerencia)
                     if (hsc) hsc.style.display = 'none';
+                    if (hgc) hgc.style.display = 'none';  // OCULTAR container gerente posturas
+                    if (hga) hga.style.display = 'none';  // OCULTAR container ambiental
                     if (hdc) {
                         hdc.style.display = 'block';
                         if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
@@ -261,10 +460,32 @@ function mudarAba(idAba) {
                     if (submenuGerenciaSec) submenuGerenciaSec.style.display = 'none';
                     if (btnSec && btnSec.querySelector('svg')) btnSec.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
                 }
+            } else if (window.secretarioModoVisualizacao === 'gerencia_ambiental') {
+                // Modo GERENCIA AMBIENTAL: mostra dashboard da equipe ambiental
+                var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
+                var btnGerenciaAmbiental = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+                
+                if (hsc) hsc.style.display = 'none';
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) {
+                    hga.style.display = 'block';
+                    if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                // Manter submenus abertos
+                if (submenuSec) submenuSec.style.display = 'block';
+                if (submenuGerenciaSec) submenuGerenciaSec.style.display = 'none';
+                if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'block';
+                if (btnSec && btnSec.querySelector('svg')) btnSec.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+                if (btnGerenciaAmbiental && btnGerenciaAmbiental.querySelector('svg')) {
+                    btnGerenciaAmbiental.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+                }
             } else {
                 // Modo normal: mostra gestao de diretores
                 if (hdc) hdc.style.display = 'none';
                 if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';  // OCULTAR container ambiental
                 if (hsc) {
                     hsc.style.display = 'block';
                     if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
@@ -277,20 +498,60 @@ function mudarAba(idAba) {
             }
         }
         // DIRETOR: Verifica o modo de visualizacao
-        else if (window.userRoleGlobal === 'diretor de meio ambiente' || window.userRoleGlobal === 'diretor') {
-            if (window.diretorModoVisualizacao === 'gerencia') {
-                // Modo GERENCIA: mostra o mesmo painel do Gerente (fiscais)
+        else if (isDiretor) {
+            console.log('DEBUG - Diretor detectado, modo:', window.diretorModoVisualizacao, 'userRoleGlobal:', window.userRoleGlobal);
+            
+            // Pegar referência ao container do gerente ambiental
+            var hga = document.getElementById('home-gerente-ambiental-container');
+            
+            if (window.diretorModoVisualizacao === 'gerencia' || window.diretorModoVisualizacao === 'gerencia_posturas') {
+                // Modo GERENCIA POSTURAS: mostra o painel do Gerente de Posturas
+                console.log('DEBUG - Modo GERENCIA POSTURAS: exibindo container do Gerente');
                 if (hdc) hdc.style.display = 'none';
                 if (hsc) hsc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
                 if (hgc) {
                     hgc.style.display = 'block';
-                    if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                    console.log('DEBUG - home-gerente-container display:', hgc.style.display);
+                    // Carrega os gráficos
+                    setTimeout(function() {
+                        console.log('DEBUG - Timeout executando, carregando graficos...');
+                        if (typeof carregarGraficoFiscais === 'function') {
+                            console.log('DEBUG - Chamando carregarGraficoFiscais');
+                            carregarGraficoFiscais();
+                        }
+                        if (typeof carregarRankingFiscaisHome === 'function') {
+                            console.log('DEBUG - Chamando carregarRankingFiscaisHome');
+                            carregarRankingFiscaisHome();
+                        }
+                    }, 100);
+                } else {
+                    console.error('DEBUG - home-gerente-container nao encontrado!');
+                }
+                // Mostra tabela minhas tarefas original
+                if (mtWrapper) mtWrapper.style.display = 'block';
+            } else if (window.diretorModoVisualizacao === 'gerencia_ambiental') {
+                // Modo GERENCIA AMBIENTAL: mostra o painel do Gerente de Regularização Ambiental
+                console.log('DEBUG - Modo GERENCIA AMBIENTAL: exibindo container do Gerente RA');
+                if (hdc) hdc.style.display = 'none';
+                if (hsc) hsc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) {
+                    hga.style.display = 'block';
+                    // Carrega os dados do gerente ambiental
+                    setTimeout(function() {
+                        if (typeof carregarDashboardGerenteAmbiental === 'function') {
+                            carregarDashboardGerenteAmbiental();
+                        }
+                    }, 100);
                 }
                 // Mostra tabela minhas tarefas original
                 if (mtWrapper) mtWrapper.style.display = 'block';
             } else {
                 // Modo DIRECAO (normal): mostra gestao de gerentes
+                console.log('DEBUG - Modo DIRECAO: exibindo container do Diretor');
                 if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
                 if (hsc) hsc.style.display = 'none';
                 if (hdc) {
                     hdc.style.display = 'block';
@@ -300,12 +561,32 @@ function mudarAba(idAba) {
                 if (mtWrapper) mtWrapper.style.display = 'none';
             }
         }
-        // GERENTE: mantem comportamento original
-        else if (userRoleGlobal === 'gerente fiscal' || userRoleGlobal === 'gerente de posturas') {
+        // GERENTE: mantem comportamento original (mas NÃO inclui Gerente de Regularização Ambiental)
+        else if ((window.userRoleGlobal || '').toLowerCase().includes('gerente') && 
+                 !(window.userRoleGlobal || '').toLowerCase().includes('regularizacao') && 
+                 !(window.userRoleGlobal || '').toLowerCase().includes('regularização')) {
+            console.log('DEBUG - Gerente de Posturas detectado');
             if (hgc) hgc.style.display = 'block';
             if (hdc) hdc.style.display = 'none';
             if (hsc) hsc.style.display = 'none';
             if (mtWrapper) mtWrapper.style.display = 'block';
+        }
+        // GERENTE DE REGULARIZAÇÃO AMBIENTAL: só vê minhas tarefas + equipe
+        else if ((window.userRoleGlobal || '').toLowerCase().includes('regularizacao') || 
+                 (window.userRoleGlobal || '').toLowerCase().includes('regularização')) {
+            console.log('DEBUG - Gerente de Regularizacao Ambiental detectado');
+            if (hgc) hgc.style.display = 'none';
+            if (hdc) hdc.style.display = 'none';
+            if (hsc) hsc.style.display = 'none';
+            if (mtWrapper) mtWrapper.style.display = 'block';
+            // Mostra container da equipe
+            var hga = document.getElementById('home-gerente-ambiental-container');
+            if (hga) {
+                hga.style.display = 'block';
+                if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
+            }
+        } else {
+            console.log('DEBUG - Cargo nao reconhecido. userRoleGlobal:', window.userRoleGlobal);
         }
     }
 
@@ -341,6 +622,94 @@ window.addEventListener('load', function () {
     if (typeof carregarMinhasTarefasHome === 'function') carregarMinhasTarefasHome();
 });
 
+// Listener para quando o modo de tarefas mudar (torna o painel reativo às mudanças do tarefas.js)
+window.addEventListener('modoTarefasMudou', function(e) {
+    var modo = e.detail.modo;
+    console.log('DEBUG - Evento modoTarefasMudou recebido:', modo);
+    
+    var roleLower = (window.userRoleGlobal || '').toLowerCase();
+    var isDiretor = roleLower === 'diretor(a)' || roleLower === 'diretor(a) de meio ambiente' || 
+                    roleLower === 'diretor' || roleLower === 'diretor de meio ambiente';
+    var isSecretario = window.userRoleGlobal === 'Secretário(a)';
+    
+    var abaHome = document.getElementById('aba-home');
+    var naHome = abaHome && abaHome.style.display === 'block';
+    
+    if (naHome) {
+        var hgc = document.getElementById('home-gerente-container');
+        var hga = document.getElementById('home-gerente-ambiental-container');
+        var hdc = document.getElementById('home-diretor-container');
+        var hsc = document.getElementById('home-secretario-container');
+        var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+        
+        if (isDiretor) {
+            // Lógica para Diretor
+            if (modo === 'gerencia' || modo === 'gerencia_posturas') {
+                if (hdc) hdc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hgc) hgc.style.display = 'block';
+                if (mtWrapper) mtWrapper.style.display = 'block';
+            } else if (modo === 'gerencia_ambiental') {
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) {
+                    hga.style.display = 'block';
+                    if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'block';
+            } else if (modo === 'direcao') {
+                if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hdc) {
+                    hdc.style.display = 'block';
+                    if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+            }
+        } else if (isSecretario) {
+            // Lógica para Secretário
+            if (modo === 'gerencia' || modo === 'gerencia_posturas') {
+                // Modo gerência de posturas
+                if (hsc) hsc.style.display = 'none';
+                if (hdc) hdc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hgc) {
+                    hgc.style.display = 'block';
+                    if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
+                    if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                window.secretarioModoVisualizacao = 'direcao';
+                window.secretarioModoGerencia = true;
+            } else if (modo === 'gerencia_ambiental') {
+                // Modo gerência ambiental
+                if (hsc) hsc.style.display = 'none';
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) {
+                    hga.style.display = 'block';
+                    if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                window.secretarioModoVisualizacao = 'gerencia_ambiental';
+                window.secretarioModoGerencia = false;
+            } else if (modo === 'direcao') {
+                // Modo direção
+                if (hsc) hsc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hdc) {
+                    hdc.style.display = 'block';
+                    if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                window.secretarioModoVisualizacao = 'direcao';
+                window.secretarioModoGerencia = false;
+            }
+        }
+    }
+});
+
 // --- LÓGICA DE DIRETOR: TOGGLE GERENCIA ---
 function fecharGerenciaDiretor() {
     var submenu = document.getElementById('diretor-submenu-gerencia');
@@ -353,40 +722,402 @@ function fecharGerenciaDiretor() {
     if (typeof window.configurarModoTarefas === 'function') {
         window.configurarModoTarefas('direcao');
     }
+    // Atualiza o home para mostrar o dashboard do diretor
+    atualizarHomeDiretor();
 }
 
 function toggleGerenciaPosturas() {
-    var submenu = document.getElementById('diretor-submenu-gerencia');
-    var btn = document.getElementById('btn-toggle-gerencia');
-    
-    if (!submenu || !btn) return;
+    try {
+        var submenu = document.getElementById('diretor-submenu-gerencia');
+        var btn = document.getElementById('btn-toggle-gerencia');
 
-    var estaAberto = submenu.style.display === 'block';
-    var naHomeGerente = estaAberto && document.getElementById('aba-home').style.display === 'block' && document.getElementById('home-gerente-container').style.display === 'block';
-
-    if (!estaAberto) {
-        // ABRIR
-        submenu.style.display = 'block';
-        if (btn.querySelector('svg')) {
-            btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+        if (!submenu || !btn) {
+            console.error('DEBUG - submenu ou btn nao encontrado');
+            return;
         }
-        
-        // Mudar para Home e mostrar containers de gerente
-        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia');
-        mudarAba('home');
-    } else if (estaAberto && !naHomeGerente) {
-        // JÁ ESTÁ ABERTO, MAS O USUÁRIO ESTÁ EM OUTRA ABA (ex: Projetos)
-        // Apenas volta para a Home do Gerente sem fechar a barra
-        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia');
-        mudarAba('home');
-    } else {
-        // FECHAR (Só se já estiver na aba dele)
-        fecharGerenciaDiretor();
-        mudarAba('home');
+
+        var estaAberto = submenu.style.display === 'block';
+        var abaHome = document.getElementById('aba-home');
+        var homeGerente = document.getElementById('home-gerente-container');
+        var naHomeGerente = estaAberto && abaHome && abaHome.style.display === 'block' && homeGerente && homeGerente.style.display === 'block';
+
+        console.log('DEBUG - toggleGerenciaPosturas: estaAberto=' + estaAberto + ', naHomeGerente=' + naHomeGerente);
+        console.log('DEBUG - abaHome display:', abaHome ? abaHome.style.display : 'null');
+        console.log('DEBUG - homeGerente display:', homeGerente ? homeGerente.style.display : 'null');
+
+        if (!estaAberto) {
+            // ABRIR
+            console.log('DEBUG - Abrindo submenu Gerencia');
+            
+            // Fechar o outro submenu (Gerência Ambiental) se estiver aberto
+            fecharGerenciaAmbientalDiretor();
+            
+            submenu.style.display = 'block';
+            if (btn.querySelector('svg')) {
+                btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+            }
+
+            // Mudar para Home e mostrar containers de gerente
+            console.log('DEBUG - Configurando modo gerencia posturas, typeof configurarModoTarefas:', typeof configurarModoTarefas);
+            if (typeof configurarModoTarefas === 'function') {
+                configurarModoTarefas('gerencia_posturas');
+                console.log('DEBUG - Modo configurado, diretorModoVisualizacao:', window.diretorModoVisualizacao);
+            } else {
+                // Fallback se a função não estiver disponível
+                window.diretorModoVisualizacao = 'gerencia_posturas';
+                console.log('DEBUG - Fallback: modo definido manualmente');
+            }
+            console.log('DEBUG - Chamando mudarAba home');
+            mudarAba('home');
+        } else if (estaAberto && !naHomeGerente) {
+            // JÁ ESTÁ ABERTO, MAS O USUÁRIO ESTÁ EM OUTRA ABA (ex: Projetos)
+            // Apenas volta para a Home do Gerente sem fechar a barra
+            console.log('DEBUG - Submenu aberto mas nao na home, mudando para home');
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_posturas');
+            else window.diretorModoVisualizacao = 'gerencia_posturas';
+            mudarAba('home');
+        } else {
+            // FECHAR (Só se já estiver na aba dele)
+            console.log('DEBUG - Fechando submenu Gerencia');
+            fecharGerenciaDiretor();
+            mudarAba('home');
+        }
+    } catch (err) {
+        console.error('DEBUG - Erro em toggleGerenciaPosturas:', err);
     }
 }
 window.toggleGerenciaPosturas = toggleGerenciaPosturas;
 window.fecharGerenciaDiretor = fecharGerenciaDiretor;
+
+// --- LÓGICA DE DIRETOR: TOGGLE GERENCIA REGULARIZAÇÃO AMBIENTAL ---
+function fecharGerenciaAmbientalDiretor() {
+    var submenu = document.getElementById('diretor-submenu-gerencia-ambiental');
+    var btn = document.getElementById('btn-toggle-gerencia-ambiental');
+    if (submenu) submenu.style.display = 'none';
+    if (btn) {
+        var svg = btn.querySelector('svg');
+        if (svg) svg.innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+    }
+    if (typeof window.configurarModoTarefas === 'function') {
+        window.configurarModoTarefas('direcao');
+    }
+    // Atualiza o home para mostrar o dashboard do diretor
+    atualizarHomeDiretor();
+}
+
+function toggleGerenciaAmbiental() {
+    try {
+        var submenu = document.getElementById('diretor-submenu-gerencia-ambiental');
+        var btn = document.getElementById('btn-toggle-gerencia-ambiental');
+
+        if (!submenu || !btn) {
+            console.error('DEBUG - submenu ambiental ou btn nao encontrado');
+            return;
+        }
+
+        var estaAberto = submenu.style.display === 'block';
+        var abaHome = document.getElementById('aba-home');
+        var homeGerente = document.getElementById('home-gerente-ambiental-container');
+        var naHomeGerente = estaAberto && abaHome && abaHome.style.display === 'block' && homeGerente && homeGerente.style.display === 'block';
+
+        console.log('DEBUG - toggleGerenciaAmbiental: estaAberto=' + estaAberto + ', naHomeGerente=' + naHomeGerente);
+
+        if (!estaAberto) {
+            // ABRIR
+            console.log('DEBUG - Abrindo submenu Gerencia Ambiental');
+            
+            // Fechar o outro submenu (Gerência de Posturas) se estiver aberto
+            fecharGerenciaDiretor();
+            
+            submenu.style.display = 'block';
+            if (btn.querySelector('svg')) {
+                btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
+            }
+
+            // Mudar para Home e mostrar containers de gerente RA
+            if (typeof configurarModoTarefas === 'function') {
+                configurarModoTarefas('gerencia_ambiental');
+            } else {
+                window.diretorModoVisualizacao = 'gerencia_ambiental';
+            }
+            mudarAba('home');
+        } else if (estaAberto && !naHomeGerente) {
+            // JÁ ESTÁ ABERTO, MAS O USUÁRIO ESTÁ EM OUTRA ABA
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
+            else window.diretorModoVisualizacao = 'gerencia_ambiental';
+            mudarAba('home');
+        } else {
+            // FECHAR (Só se já estiver na aba dele)
+            fecharGerenciaAmbientalDiretor();
+            mudarAba('home');
+        }
+    } catch (err) {
+        console.error('DEBUG - Erro em toggleGerenciaAmbiental:', err);
+    }
+}
+window.toggleGerenciaAmbiental = toggleGerenciaAmbiental;
+window.fecharGerenciaAmbientalDiretor = fecharGerenciaAmbientalDiretor;
+
+// --- FUNÇÃO PARA ATUALIZAR HOME DO DIRETOR ---
+function atualizarHomeDiretor() {
+    var hgc = document.getElementById('home-gerente-container');
+    var hga = document.getElementById('home-gerente-ambiental-container');
+    var hdc = document.getElementById('home-diretor-container');
+    
+    if (hgc) hgc.style.display = 'none';
+    if (hga) hga.style.display = 'none';
+    if (hdc) {
+        hdc.style.display = 'block';
+        if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
+    }
+}
+window.atualizarHomeDiretor = atualizarHomeDiretor;
+
+// --- FUNÇÃO PARA CARREGAR DASHBOARD DO GERENTE AMBIENTAL ---
+async function carregarDashboardGerenteAmbiental() {
+    console.log('DEBUG - carregarDashboardGerenteAmbiental chamado');
+    
+    // Contadores por cargo
+    var totalAgronomos = document.getElementById('gerente-amb-total-agronomos');
+    var totalCivis = document.getElementById('gerente-amb-total-civis');
+    var totalAnalistas = document.getElementById('gerente-amb-total-analistas');
+    var totalAuxiliares = document.getElementById('gerente-amb-total-auxiliares');
+    var containerLista = document.getElementById('gerente-ambiental-equipe-lista');
+    
+    try {
+        // Buscar membros da equipe ambiental (incluindo Gerente RA)
+        var { data: equipe, error } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, role, ativo')
+            .in('role', ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 
+                         'Auxiliar de Serviços II', 'Gerente de Regularização Ambiental',
+                         'gerente de regularização ambiental'])
+            .eq('ativo', true);
+        
+        if (error) throw error;
+        
+        var membros = equipe || [];
+        
+        // Buscar estatísticas de tarefas para cada membro
+        var membrosComStats = await Promise.all(membros.map(async function(m) {
+            var { data: tarefas } = await supabaseClient
+                .from('tarefas')
+                .select('status')
+                .eq('criado_por', m.id);
+            
+            var stats = { total: 0, concluidas: 0, pendentes: 0 };
+            if (tarefas) {
+                stats.total = tarefas.length;
+                stats.concluidas = tarefas.filter(t => t.status === 'concluida').length;
+                stats.pendentes = tarefas.filter(t => t.status !== 'concluida').length;
+            }
+            return { ...m, stats };
+        }));
+        
+        // Contar por cargo
+        var countAgronomos = membros.filter(m => m.role && m.role.includes('Agrônomo')).length;
+        var countCivis = membros.filter(m => m.role && m.role.includes('Civil')).length;
+        var countAnalistas = membros.filter(m => m.role && m.role.includes('Analista')).length;
+        var countAuxiliares = membros.filter(m => m.role && m.role.includes('Auxiliar')).length;
+        
+        // Atualizar contadores
+        if (totalAgronomos) totalAgronomos.textContent = countAgronomos;
+        if (totalCivis) totalCivis.textContent = countCivis;
+        if (totalAnalistas) totalAnalistas.textContent = countAnalistas;
+        if (totalAuxiliares) totalAuxiliares.textContent = countAuxiliares;
+        
+        // Renderizar lista da equipe
+        if (containerLista) {
+            if (membros.length === 0) {
+                containerLista.innerHTML = '<p style="color:#94a3b8; text-align:center; padding: 40px;">Nenhum membro da equipe encontrado.</p>';
+            } else {
+                var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+                membrosComStats.forEach(function(m) {
+                    html += '<div onclick="if(typeof abrirEstatisticasFuncionario === \'function\') abrirEstatisticasFuncionario(\'' + m.id + '\', \'' + (m.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (m.role || 'Sem cargo').replace(/'/g, "\\'") + '\'); else mostrarTarefasFuncionario(\'' + m.id + '\', \'' + (m.full_name || 'Sem nome') + '\');" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; transition:all 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'">';
+                    html += '<div style="display:flex; align-items:center; gap:12px;">';
+                    html += '<div style="width:40px; height:40px; background:linear-gradient(135deg, #065f46, #047857); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:600; font-size:16px;">' + (m.full_name ? m.full_name.charAt(0).toUpperCase() : '?') + '</div>';
+                    html += '<div>';
+                    html += '<div style="font-weight:600; color:#1e293b; font-size:15px;">' + (m.full_name || 'Sem nome') + '</div>';
+                    html += '<div style="font-size:13px; color:#64748b;">' + (m.role || 'Sem cargo') + '</div>';
+                    html += '</div>';
+                    html += '</div>';
+                    // Botão desativar
+                    html += '<button onclick="event.stopPropagation(); desativarFuncionarioAmbiental(\'' + m.id + '\')" style="background:#fee2e2; color:#ef4444; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Desativar</button>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                containerLista.innerHTML = html;
+            }
+        }
+        
+    } catch (err) {
+        console.error('Erro ao carregar dashboard gerente ambiental:', err);
+        if (containerLista) {
+            containerLista.innerHTML = '<p style="color:#ef4444; text-align:center; padding: 40px;">Erro ao carregar equipe.</p>';
+        }
+    }
+}
+
+// Função para mostrar tarefas de um funcionário específico
+async function mostrarTarefasFuncionario(userId, userName) {
+    try {
+        // Buscar tarefas criadas PELO usuário
+        var { data: tarefasCriadas, error: errorCriadas } = await supabaseClient
+            .from('tarefas')
+            .select('*, tarefa_responsaveis(user_id, user_name)')
+            .eq('criado_por', userId);
+        
+        if (errorCriadas) throw errorCriadas;
+        
+        // Buscar tarefas onde o usuário é responsável
+        var { data: tarefasResponsavel, error: errorResp } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('tarefa_id')
+            .eq('user_id', userId);
+        
+        if (errorResp) throw errorResp;
+        
+        // Se houver tarefas onde é responsável, buscar detalhes
+        var tarefasRespDetalhadas = [];
+        if (tarefasResponsavel && tarefasResponsavel.length > 0) {
+            var tarefaIds = tarefasResponsavel.map(tr => tr.tarefa_id);
+            var { data: tarefasResp } = await supabaseClient
+                .from('tarefas')
+                .select('*, tarefa_responsaveis(user_id, user_name)')
+                .in('id', tarefaIds);
+            
+            if (tarefasResp) {
+                tarefasRespDetalhadas = tarefasResp;
+            }
+        }
+        
+        // Combinar e remover duplicatas
+        var todasTarefas = [...(tarefasCriadas || [])];
+        tarefasRespDetalhadas.forEach(function(t) {
+            if (!todasTarefas.some(tc => tc.id === t.id)) {
+                todasTarefas.push(t);
+            }
+        });
+        
+        // Ordenar por data de criação
+        todasTarefas.sort(function(a, b) {
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+        
+        var lista = todasTarefas;
+        var concluidas = lista.filter(t => t.status === 'concluida');
+        var pendentes = lista.filter(t => t.status !== 'concluida');
+        var atrasadas = pendentes.filter(t => t.prazo && new Date(t.prazo) < new Date());
+        
+        var html = '<div style="max-height:400px; overflow-y:auto;">';
+        html += '<div style="display:flex; gap:16px; margin-bottom:16px;">';
+        html += '<div style="flex:1; text-align:center; padding:12px; background:#e0f2fe; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#0284c7;">' + lista.length + '</div><div style="font-size:12px; color:#0369a1;">Total</div></div>';
+        html += '<div style="flex:1; text-align:center; padding:12px; background:#dcfce7; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#16a34a;">' + concluidas.length + '</div><div style="font-size:12px; color:#166534;">Concluídas</div></div>';
+        html += '<div style="flex:1; text-align:center; padding:12px; background:#fef3c7; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#d97706;">' + pendentes.length + '</div><div style="font-size:12px; color:#92400e;">Pendentes</div></div>';
+        html += '<div style="flex:1; text-align:center; padding:12px; background:#fee2e2; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#dc2626;">' + atrasadas.length + '</div><div style="font-size:12px; color:#991b1b;">Atrasadas</div></div>';
+        html += '</div>';
+        
+        if (lista.length === 0) {
+            html += '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhuma tarefa encontrada.</p>';
+        } else {
+            html += '<div style="display:flex; flex-direction:column; gap:8px;">';
+            lista.forEach(function(t) {
+                var statusColor = t.status === 'concluida' ? '#10b981' : (t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
+                var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+                var atrasada = t.prazo && new Date(t.prazo) < new Date() && t.status !== 'concluida';
+                
+                html += '<div style="padding:12px; background:#f8fafc; border-radius:8px; border-left:4px solid ' + statusColor + ';">';
+                html += '<div style="display:flex; justify-content:space-between; align-items:center;">';
+                html += '<div style="font-weight:600; color:#1e293b;">' + t.titulo + '</div>';
+                html += '<span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; background:' + statusColor + '20; color:' + statusColor + ';">' + statusLabel + '</span>';
+                html += '</div>';
+                if (t.prazo) {
+                    html += '<div style="font-size:12px; color:' + (atrasada ? '#dc2626' : '#64748b') + '; margin-top:4px;">Prazo: ' + new Date(t.prazo).toLocaleDateString('pt-BR') + (atrasada ? ' (ATRASADA)' : '') + '</div>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        Swal.fire({
+            title: 'Tarefas de ' + userName,
+            html: html,
+            width: '600px',
+            showCloseButton: true,
+            showConfirmButton: false
+        });
+    } catch (err) {
+        console.error('Erro ao carregar tarefas:', err);
+        Swal.fire('Erro', 'Não foi possível carregar as tarefas.', 'error');
+    }
+}
+window.mostrarTarefasFuncionario = mostrarTarefasFuncionario;
+
+// Função para desativar funcionário da equipe ambiental
+async function desativarFuncionarioAmbiental(userId) {
+    var result = await Swal.fire({
+        title: 'Desativar Funcionário?',
+        text: 'O funcionário será marcado como inativo e não aparecerá mais na lista.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, desativar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444'
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    try {
+        // Atualiza o role para 'inativo' - conforme política de permissões do Diretor/Secretário
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ role: 'inativo', ativo: false })
+            .eq('id', userId);
+        
+        if (error) throw error;
+        
+        Swal.fire('Sucesso', 'Funcionário desativado com sucesso.', 'success');
+        carregarDashboardGerenteAmbiental();
+    } catch (err) {
+        console.error('Erro ao desativar funcionário:', err);
+        Swal.fire('Erro', 'Não foi possível desativar o funcionário. Verifique se você tem permissões.', 'error');
+    }
+}
+window.desativarFuncionarioAmbiental = desativarFuncionarioAmbiental;
+
+// Função para abrir form de novo funcionário (placeholder)
+function abrirFormNovoFuncionarioAmbiental() {
+    Swal.fire({
+        title: 'Novo Funcionário',
+        html:
+            '<input id="swal-nome" class="swal2-input" placeholder="Nome completo">' +
+            '<select id="swal-cargo" class="swal2-select" style="width: 80%; margin-top: 10px; padding: 10px;">' +
+            '<option value="">Selecione o cargo...</option>' +
+            '<option value="Engenheiro(a) Agrônomo(a)">Engenheiro(a) Agrônomo(a)</option>' +
+            '<option value="Engenheiro(a) Civil">Engenheiro(a) Civil</option>' +
+            '<option value="Analista Ambiental">Analista Ambiental</option>' +
+            '<option value="Auxiliar de Serviços II">Auxiliar de Serviços II</option>' +
+            '</select>',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Adicionar',
+        cancelButtonText: 'Cancelar',
+        preConfirm: () => {
+            return {
+                nome: document.getElementById('swal-nome').value,
+                cargo: document.getElementById('swal-cargo').value
+            }
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Aqui você implementaria a criação do usuário
+            Swal.fire('Info', 'Funcionalidade de criar usuário será implementada aqui.', 'info');
+        }
+    });
+}
+window.abrirFormNovoFuncionarioAmbiental = abrirFormNovoFuncionarioAmbiental;
+window.carregarDashboardGerenteAmbiental = carregarDashboardGerenteAmbiental;
 
 // --- LÓGICA DE SECRETÁRIO: TOGGLE DIREÇÃO ---
 window.secretarioModoVisualizacao = 'normal'; // 'normal' ou 'direcao'
@@ -395,31 +1126,81 @@ function fecharDirecaoSecretario() {
     var submenu = document.getElementById('secretario-submenu-direcao');
     var btn = document.getElementById('btn-toggle-direcao');
     var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+    var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
+    var btnGerenciaAmbiental = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+    
     if (submenu) submenu.style.display = 'none';
     if (submenuGerencia) submenuGerencia.style.display = 'none';
+    if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
     if (btn) {
         var svg = btn.querySelector('svg');
         if (svg) svg.innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+    }
+    if (btnGerenciaAmbiental && btnGerenciaAmbiental.querySelector('svg')) {
+        btnGerenciaAmbiental.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
     }
     window.secretarioModoVisualizacao = 'normal';
     window.secretarioModoGerencia = false;
 }
 
+// Função para ir para Home respeitando o perfil do usuário
+function irParaHome() {
+    var role = window.userRoleGlobal || '';
+    var roleLower = role.toLowerCase();
+    
+    // Secretário: vai para modo normal (dashboard de diretores)
+    if (role === 'Secretário(a)') {
+        fecharDirecaoSecretario();
+        mudarAba('home');
+    }
+    // Diretor: vai para modo direcao
+    else if (roleLower.includes('diretor')) {
+        fecharGerenciaDiretor();
+        fecharGerenciaAmbientalDiretor();
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+        mudarAba('home');
+    }
+    // Gerente de Posturas: vai para modo gerencia_posturas
+    else if (roleLower.includes('gerente') && !roleLower.includes('regularizacao') && !roleLower.includes('regularização')) {
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_posturas');
+        mudarAba('home');
+    }
+    // Gerente de Regularização Ambiental: vai para modo gerencia_ambiental
+    else if (roleLower.includes('regularizacao') || roleLower.includes('regularização')) {
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
+        mudarAba('home');
+    }
+    // Fiscal e outros: modo normal
+    else {
+        mudarAba('home');
+    }
+}
+window.irParaHome = irParaHome;
+
 // Toggle Gerência de Posturas para Secretário (sub-submenu)
 function toggleGerenciaPosturasSecretario() {
     var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
     var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
-    
+    var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
+    var btnGerenciaAmbiental = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+
     if (!submenuGerencia) return;
 
     var estaAberto = submenuGerencia.style.display === 'block';
 
     if (!estaAberto) {
         // ABRIR - modo gerencia
+        // Fechar o submenu de Gerência Ambiental se estiver aberto
+        if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
+        if (btnGerenciaAmbiental && btnGerenciaAmbiental.querySelector('svg')) {
+            btnGerenciaAmbiental.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        }
+        
         submenuGerencia.style.display = 'block';
         if (btnGerencia && btnGerencia.querySelector('svg')) {
             btnGerencia.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
         }
+        window.secretarioModoVisualizacao = 'direcao';
         window.secretarioModoGerencia = true;
         // Mudar para home do gerente
         mudarAba('home');
@@ -439,10 +1220,15 @@ function toggleDirecaoMeioAmbiente() {
     var submenu = document.getElementById('secretario-submenu-direcao');
     var btn = document.getElementById('btn-toggle-direcao');
     var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
-    
+    var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
+    var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
+    var btnGerenciaAmbiental = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+
     if (!submenu || !btn) return;
 
     var estaAberto = submenu.style.display === 'block';
+    var algumSubmenuAberto = (submenuGerencia && submenuGerencia.style.display === 'block') || 
+                              (submenuGerenciaAmbiental && submenuGerenciaAmbiental.style.display === 'block');
 
     if (!estaAberto) {
         // ABRIR - modo direcao (espelha o modo diretor)
@@ -450,15 +1236,32 @@ function toggleDirecaoMeioAmbiente() {
         if (btn.querySelector('svg')) {
             btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>'; // Seta pra cima
         }
-        
+
         window.secretarioModoVisualizacao = 'direcao';
         window.secretarioModoGerencia = false;
         if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
         mudarAba('home');
+    } else if (algumSubmenuAberto) {
+        // Se algum sub-submenu está aberto, fechar apenas os sub-submenus (não o menu principal)
+        // Isso requer um segundo clique para fechar o menu principal
+        if (submenuGerencia) submenuGerencia.style.display = 'none';
+        if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
+        if (btnGerencia && btnGerencia.querySelector('svg')) {
+            btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        }
+        if (btnGerenciaAmbiental && btnGerenciaAmbiental.querySelector('svg')) {
+            btnGerenciaAmbiental.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        }
+        window.secretarioModoGerencia = false;
+        window.secretarioModoVisualizacao = 'direcao';
+        // Mantém o modo direcao (home do diretor)
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+        mudarAba('home');
     } else {
         // FECHAR - volta para modo normal (gestao de diretores)
-        // Fechar também o sub-submenu de gerencia
+        // Fechar também os sub-submenus de gerencia
         if (submenuGerencia) submenuGerencia.style.display = 'none';
+        if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
         window.secretarioModoGerencia = false;
         fecharDirecaoSecretario();
         mudarAba('home');
@@ -466,6 +1269,58 @@ function toggleDirecaoMeioAmbiente() {
 }
 window.toggleDirecaoMeioAmbiente = toggleDirecaoMeioAmbiente;
 window.fecharDirecaoSecretario = fecharDirecaoSecretario;
+
+// --- LÓGICA DE SECRETÁRIO: TOGGLE GERENCIA REGULARIZAÇÃO AMBIENTAL ---
+function fecharGerenciaAmbientalSecretario() {
+    var submenu = document.getElementById('secretario-submenu-gerencia-ambiental');
+    var btn = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+    if (submenu) submenu.style.display = 'none';
+    if (btn) {
+        var svg = btn.querySelector('svg');
+        if (svg) svg.innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+    }
+    // Atualiza para modo direção
+    window.secretarioModoVisualizacao = 'direcao';
+    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+}
+
+// Toggle Gerência de Regularização Ambiental para Secretário (sub-submenu)
+function toggleGerenciaAmbientalSecretario() {
+    var submenu = document.getElementById('secretario-submenu-gerencia-ambiental');
+    var btn = document.getElementById('btn-toggle-gerencia-ambiental-secretario');
+    var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
+    
+    if (!submenu) return;
+    
+    var estaAberto = submenu.style.display === 'block';
+    
+    if (!estaAberto) {
+        // ABRIR - modo gerencia ambiental
+        // Fechar o outro submenu (Gerência de Posturas) se estiver aberto
+        if (submenuGerencia) submenuGerencia.style.display = 'none';
+        var btnGerencia = document.getElementById('btn-toggle-gerencia-secretario');
+        if (btnGerencia && btnGerencia.querySelector('svg')) {
+            btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        }
+        window.secretarioModoGerencia = false;
+        
+        submenu.style.display = 'block';
+        if (btn && btn.querySelector('svg')) {
+            btn.querySelector('svg').innerHTML = '<path d="M18 15l-6-6-6 6"></path>';
+        }
+        
+        // Configurar modo e ir para home
+        window.secretarioModoVisualizacao = 'gerencia_ambiental';
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
+        mudarAba('home');
+    } else {
+        // FECHAR
+        fecharGerenciaAmbientalSecretario();
+        mudarAba('home');
+    }
+}
+window.toggleGerenciaAmbientalSecretario = toggleGerenciaAmbientalSecretario;
+window.fecharGerenciaAmbientalSecretario = fecharGerenciaAmbientalSecretario;
 
 // --- RAMINHOS DECORATIVOS NO FUNDO ---
 function gerarRaminhos() {
@@ -738,7 +1593,7 @@ async function verificarLimpezaAgendada() {
         }
     } catch (e) { console.error("[Limpeza] Falha ao verificar role:", e); }
 
-    const isGerencial = userRole.trim() === 'Gerente de Posturas';
+    const isGerencial = (userRole || '').toLowerCase().includes('gerente');
 
     let swalActive = false;
     try {
@@ -808,19 +1663,19 @@ async function verificarLimpezaAgendada() {
         // --- DIAGNÓSTICO DE RLS ---
         if (deletadosCP === 0 && visivelCP && visivelCP.length > 0) {
             const msgRLS = "[Limpeza] ATENÇÃO: Os registros são VISÍVEIS mas NÃO puderam ser DELETADOS. " +
-                          "Isso indica bloqueio por RLS (Row Level Security) no Supabase. " +
-                          "Apenas o criador do registro ou um usuário com permissão de DELETE na política do banco pode excluir.";
+                "Isso indica bloqueio por RLS (Row Level Security) no Supabase. " +
+                "Apenas o criador do registro ou um usuário com permissão de DELETE na política do banco pode excluir.";
             console.error(msgRLS);
             console.info("%c[SUPABASE FIX] Execute este SQL no Dashboard do Supabase para corrigir:\n\n" +
-                         "ALTER POLICY \"Permitir exclusão para gerentes\" ON controle_processual \n" +
-                         "FOR DELETE TO authenticated \n" +
-                         "USING ( (SELECT role FROM profiles WHERE id = auth.uid()) = 'Gerente de Posturas' );", "color: orange; font-weight: bold;");
-            
+                "ALTER POLICY \"Permitir exclusão para gerentes\" ON controle_processual \n" +
+                "FOR DELETE TO authenticated \n" +
+                "USING ( (SELECT role FROM profiles WHERE id = auth.uid()) = 'Gerente de Posturas' );", "color: orange; font-weight: bold;");
+
             if (swalActive) {
                 Swal.fire({
                     title: 'Bloqueio de Permissão',
                     html: `O sistema encontrou ${visivelCP.length} registros de ${anoParaLimpar}, mas o <b>Supabase</b> não permitiu a exclusão.<br><br>` +
-                          `Certifique-se de que a política RLS da tabela <code>controle_processual</code> permite o <i>DELETE</i> para o seu cargo.`,
+                        `Certifique-se de que a política RLS da tabela <code>controle_processual</code> permite o <i>DELETE</i> para o seu cargo.`,
                     icon: 'warning'
                 });
             }
