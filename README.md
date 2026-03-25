@@ -17,11 +17,13 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
 | `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
 | `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
-| `gerente.js` | **Gestão de Fiscais**: Ranking de desempenho, gráficos de pontuação, cadastro e exclusão de fiscais, visualização de documentos por tipo |
+| `gerente.js` | **Gestão de Fiscais e Hierarquia Visual**: Ranking de desempenho, gráficos de pontuação, cadastro/exclusão de fiscais, visualização de documentos por tipo, e **árvore hierárquica completa da SEMAC** para Secretários |
 | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
 | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
 | `PERMISSOES_SETUP.md` | Guia de configuração de permissões hierárquicas |
+| `setup_permissoes_secretario.sql` | SQL para permissões especiais do Secretário e Devs |
+| `setup_permissoes_simples.sql` | SQL básico para permissões de Gerente+ |
 | `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
 
 ---
@@ -354,6 +356,41 @@ O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveita
 - **Contadores discretos** embaixo de cada cargo (ex: "3 diretores", "5 fiscais")
 - **Clique nos cards** abre estatísticas (tarefas + produtividade para Fiscais)
 
+#### Estrutura da Árvore Hierárquica (Visualização Secretário):
+
+```
+                    SEMAC
+                      │
+    ┌─────────────────┼─────────────────┐
+    │                 │                 │
+Diretor MA      Diretor CA      [Cargos Especiais]
+    │                 │              (embaixo)
+┌───┴───┐             │
+│       │             │
+Post.  Amb.      Gerente CA
+│       │             │
+Fisc.  Equipe    Coordenadores
+```
+
+**Características da visualização:**
+- **Diretor de Meio Ambiente**: Expandido horizontalmente com duas colunas internas (Posturas e Ambiental)
+- **Gerência de Posturas**: Coluna com Gerentes → Fiscais (grid 2 colunas)
+- **Gerência Ambiental**: Coluna com Gerentes → Equipe RA (grid 2 colunas)
+- **Diretor do Cuidado Animal**: Coluna única com Gerente → Coordenadores
+- **Cargos Especiais (RH/ADM e Jurídico)**: Seção separada embaixo de toda a hierarquia
+- **Cores por hierarquia**:
+  - Secretário: `#1e3a5f` (azul escuro)
+  - Diretor MA: `#7c3aed` (roxo)
+  - Gerência Posturas: `#0c3e2b` (verde escuro)
+  - Fiscais: `#b45309` (laranja)
+  - Gerência Ambiental: `#1e3a5f` (azul)
+  - Equipe RA: `#065f46` (verde)
+  - Diretor CA: `#db2777` (rosa)
+  - Gerente CA: `#be185d` (rosa escuro)
+  - Coordenadores: `#c026d3` (magenta)
+  - RH/ADM: `#0d9488` (verde água)
+  - Jurídico: `#4f46e5` (indigo)
+
 #### Coluna Direita - Dashboards:
 1. **Visão Geral de Tarefas**:
    - Cards com contadores de Pendentes, Em Progresso e Atrasadas
@@ -560,6 +597,21 @@ Configura políticas RLS para permitir que **Diretor** e **Secretário** gerenci
 - **INSERT**: Diretor/Secretário podem cadastrar novos funcionários
 - **UPDATE**: Diretor/Secretário podem atualizar qualquer perfil
 - **SELECT**: Todos autenticados podem visualizar perfis
+
+### Script: `setup_permissoes_secretario.sql`
+Configura permissões especiais para **Secretário** e **Desenvolvedores** gerenciarem qualquer usuário no sistema.
+
+#### Funções Criadas:
+| Função | Descrição | Quem pode usar |
+|--------|-----------|----------------|
+| `is_secretario_ou_dev(user_id)` | Verifica se é Secretário ou Dev | Interno |
+| `criar_novo_usuario(email, senha, nome, cargo, cpf, matricula)` | Cria usuário completo | Secretário/Dev |
+| `desativar_usuario(user_id)` | Soft delete (marca como inativo) | Secretário/Dev |
+| `excluir_usuario_permanente(user_id)` | Hard delete (apenas Devs) | Desenvolvedor |
+
+#### Critérios de Identificação:
+- **Secretário**: Campo `role` contém "Secretário", "Secretario", "Secretária" ou "Secretaria"
+- **Desenvolvedor**: Email contém "dev@", "admin@", "desenvolvedor" ou role contém "admin"
 
 ### Hierarquia de Exclusão:
 ```

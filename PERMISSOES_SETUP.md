@@ -261,6 +261,64 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
 }
 ```
 
+## 🔐 Opção 3: Permissões Especiais do Secretário e Desenvolvedores
+
+Para permitir que **Secretários** e **Desenvolvedores** possam **criar e excluir qualquer usuário** no sistema:
+
+### Executar o SQL
+
+Execute o arquivo `setup_permissoes_secretario.sql` no SQL Editor do Supabase:
+
+```sql
+-- 1. Isso cria funções para verificar se é Secretário ou Dev
+-- 2. Adiciona políticas RLS para DELETE/UPDATE em qualquer perfil
+-- 3. Cria funções seguras para criar/desativar/excluir usuários
+-- 4. Adiciona colunas 'ativo' e 'data_desativacao' na tabela profiles
+```
+
+### Uso das Funções
+
+#### Criar Novo Usuário (apenas Secretário/Dev):
+```sql
+SELECT criar_novo_usuario(
+    'email@exemplo.com',     -- email
+    'senhaSegura123',        -- senha
+    'Nome Completo',         -- nome
+    'Fiscal de Posturas',    -- cargo
+    '123.456.789-00',        -- CPF (opcional)
+    'MAT123'                 -- matrícula (opcional)
+);
+```
+
+#### Desativar Usuário (soft delete - apenas Secretário/Dev):
+```sql
+SELECT desativar_usuario('UUID-DO-USUARIO');
+```
+
+#### Excluir Permanentemente (apenas Desenvolvedores):
+```sql
+SELECT excluir_usuario_permanente('UUID-DO-USUARIO');
+```
+
+### Requisitos para Identificação
+
+O sistema identifica Secretários/Desenvolvedores por:
+
+| Tipo | Critério |
+|------|----------|
+| **Secretário** | Campo `role` contém "Secretário", "Secretario", "Secretária" ou "Secretaria" |
+| **Desenvolvedor** | Campo `email` contém "dev@", "admin@", ou "desenvolvedor"; OU `role` contém "admin" |
+
+### Segurança
+
+- ✅ Apenas Secretários e Devs podem executar estas funções
+- ✅ Não é possível excluir a si mesmo
+- ✅ Soft delete preserva dados do usuário (marca como inativo)
+- ✅ Hard delete apenas para desenvolvedores (usa com cuidado!)
+- ✅ Todas as operações verificam permissão antes de executar
+
+---
+
 ## 🛡️ Configuração das Variáveis de Ambiente
 
 No Supabase Dashboard:

@@ -3288,122 +3288,146 @@ async function carregarHierarquiaCompletaSecretario() {
             gerentesJuridico: gerentesJuridico.length,
             equipeRH: equipeRH.length,
             gerentesPosturas: gerentesPosturas.length,
-            fiscais: fiscais.length
+            gerentesAmbiental: gerentesAmbiental.length,
+            fiscais: fiscais.length,
+            equipeAmbiental: equipeAmbiental.length,
+            equipeCuidadoAnimal: equipeCuidadoAnimal.length
         });
 
-        // Criar árvore visual hierárquica compacta
-        var html = '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; padding: 10px; position: relative; font-size: 12px;">';
+        // Criar árvore visual hierárquica com linhas de conexão
+        var html = '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; padding: 0px 5px; position: relative; font-size: 12px; background: transparent; box-sizing: border-box;">';
         
-        // ===== NÍVEL 1: SECRETÁRIO (Top Level) =====
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<div style="display: inline-block; background: #1e3a5f; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700;">SECRETARIA MUNICIPAL</div>';
-        html += '<div style="width: 2px; height: 20px; background: linear-gradient(to bottom, #1e3a5f, #94a3b8); margin: 0 auto;"></div>';
+        // ===== NÍVEL 1: SECRETÁRIO =====
+        html += '<div style="text-align: center; position: relative; z-index: 2;">';
+        html += '<div style="display: inline-block; background: #1e3a5f; color: white; padding: 5px 14px; border-radius: 16px; font-size: 10px; font-weight: 700;">SEMAC</div>';
         html += '</div>';
-
-        // ===== NÍVEL 2: DIRETORES =====
-        html += '<div style="display: flex; justify-content: center; gap: 20px; width: 100%; flex-wrap: wrap;">';
-
-        // === COLUNA 1: DIRETOR DE MEIO AMBIENTE ===
-        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 280px;">';
-        html += '<span style="background: #7c3aed; color: white; padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) DE MEIO AMBIENTE</span>';
-        diretoresMA.forEach(function (d) { html += renderizarCardArvoreCompacto(d, '#7c3aed', 'diretor'); });
-        if (diretoresMA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; color: #94a3b8; font-size: 10px;">Nenhum</div>';
         
-        // Linha vertical
-        html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin: 6px 0;"></div>';
+        // Linha vertical Secretaria -> Diretores
+        html += '<div style="width: 2px; height: 15px; background: #1e3a5f; margin: 0 auto;"></div>';
         
-        // Subníveis lado a lado
-        html += '<div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">';
+        // ===== NÍVEL 2: DIRETORES E CARGOS =====
+        html += '<div style="display: flex; justify-content: center; gap: 35px; width: 100%; margin-top: 5px; flex-wrap: wrap; align-items: flex-start;">';
+        
+        // === DIRETOR DE MEIO AMBIENTE ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 700px; flex: 1;">';
+        html += '<span style="background: #7c3aed; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) DE MEIO AMBIENTE</span>';
+        diretoresMA.forEach(function (d) { html += renderizarCardArvore(d, '#7c3aed', 'diretor'); });
+        if (diretoresMA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) de Meio Ambiente\')" style="margin-top: 10px; background: #7c3aed15; border: 1px dashed #7c3aed; color: #7c3aed; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
+        
+        // Linha vertical para subníveis
+        html += '<div style="width: 2px; height: 15px; background: #7c3aed; margin: 8px 0 0 0;"></div>';
+        
+        // Container das duas gerências lado a lado
+        html += '<div style="display: flex; justify-content: center; gap: 45px; width: 100%; align-items: flex-start; padding: 0 10px; box-sizing: border-box;">';
         
         // Gerência de Posturas
-        html += '<div style="display: flex; flex-direction: column; align-items: center;">';
-        html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERÊNCIA POSTURAS</span>';
-        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 280px; flex: 0 0 auto;">';
+        html += '<div style="width: 2px; height: 15px; background: #0c3e2b;"></div>';
+        html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERÊNCIA POSTURAS</span>';
+        html += '<div style="width: 2px; height: 10px; background: #0c3e2b; margin: 2px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">';
         gerentesPosturas.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#0c3e2b', 'gerente_posturas'); });
         html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Posturas\')" style="margin-top: 8px; background: #0c3e2b15; border: 1px dashed #0c3e2b; color: #0c3e2b; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        
         // Fiscais
         if (fiscais.length > 0) {
-            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-            html += '<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">FISCAIS</span>';
-            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
-            fiscais.forEach(function (f) { html += renderizarCardArvoreMini(f, '#b45309', 'fiscal'); });
+            html += '<div style="width: 2px; height: 10px; background: #b45309; margin: 4px 0 2px 0;"></div>';
+            html += '<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">FISCAIS (' + fiscais.length + ')</span>';
+            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
+            fiscais.forEach(function (f) { html += renderizarCardArvoreCompacto(f, '#b45309', 'fiscal'); });
             html += '</div>';
         }
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Posturas\')" style="margin-top: 8px; background: #b4530915; border: 1px dashed #b45309; color: #b45309; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
         html += '</div>';
         
-        // Gerência de Regularização Ambiental
-        html += '<div style="display: flex; flex-direction: column; align-items: center;">';
-        html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERÊNCIA AMBIENTAL</span>';
-        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        // Gerência Ambiental
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 280px; flex: 0 0 auto;">';
+        html += '<div style="width: 2px; height: 15px; background: #1e3a5f;"></div>';
+        html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERÊNCIA AMBIENTAL</span>';
+        html += '<div style="width: 2px; height: 10px; background: #1e3a5f; margin: 2px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">';
         gerentesAmbiental.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#1e3a5f', 'gerente_ambiental'); });
         html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Regularização Ambiental\')" style="margin-top: 8px; background: #1e3a5f15; border: 1px dashed #1e3a5f; color: #1e3a5f; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        
         // Equipe RA
         if (equipeAmbiental.length > 0) {
-            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-            html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">EQUIPE RA</span>';
-            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
-            equipeAmbiental.forEach(function (e) { html += renderizarCardArvoreMini(e, '#065f46', 'equipe_ambiental'); });
+            html += '<div style="width: 2px; height: 10px; background: #065f46; margin: 4px 0 2px 0;"></div>';
+            html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">EQUIPE (' + equipeAmbiental.length + ')</span>';
+            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
+            equipeAmbiental.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#065f46', 'equipe_ambiental'); });
             html += '</div>';
         }
+        // Dropdown para Equipe RA
+        html += '<div style="position: relative; margin-top: 8px;">';
+        html += '<button id="btn-novo-equipe-ra" style="background: #065f4615; border: 1px dashed #065f46; color: #065f46; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;" onclick="toggleMenuEquipeRA()">+ Novo ▼</button>';
+        html += '<div id="menu-equipe-ra" style="display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); background: white; border: 1px solid #065f46; border-radius: 5px; padding: 3px; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Engenheiro(a) Agrônomo(a)\')">Eng. Agrônomo</div>';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Engenheiro(a) Civil\')">Eng. Civil</div>';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Analista Ambiental\')">Analista</div>';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Auxiliar de Serviços II\')">Auxiliar</div>';
+        html += '</div>';
+        html += '</div>';
         html += '</div>';
         
-        html += '</div>'; // Fim subníveis
-        html += '</div>'; // Fim coluna Diretor MA
-
-        // === COLUNA 2: DIRETOR DE CUIDADO ANIMAL ===
-        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 200px;">';
-        html += '<span style="background: #db2777; color: white; padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) CUIDADO ANIMAL</span>';
-        diretoresCA.forEach(function (d) { html += renderizarCardArvoreCompacto(d, '#db2777', 'diretor_ca'); });
-        if (diretoresCA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; color: #94a3b8; font-size: 10px;">Nenhum</div>';
+        html += '</div>'; // Fim container das duas gerências
+        html += '</div>'; // Fim Diretor MA
         
-        html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin: 6px 0;"></div>';
-        html += '<span style="background: #be185d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERENTE CA</span>';
-        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        // === DIRETOR CUIDADO ANIMAL ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 220px; flex: 0 0 auto;">';
+        html += '<span style="background: #db2777; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) CUIDADO ANIMAL</span>';
+        diretoresCA.forEach(function (d) { html += renderizarCardArvore(d, '#db2777', 'diretor_ca'); });
+        if (diretoresCA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) do Cuidado Animal\')" style="margin-top: 10px; background: #db277715; border: 1px dashed #db2777; color: #db2777; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
+        
+        html += '<div style="width: 2px; height: 15px; background: #db2777; margin: 8px 0 0 0;"></div>';
+        html += '<span style="background: #be185d; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERENTE CA</span>';
+        html += '<div style="width: 2px; height: 10px; background: #be185d; margin: 2px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">';
         gerentesCuidadoAnimal.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#be185d', 'gerente_ca'); });
         html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente do Cuidado Animal\')" style="margin-top: 8px; background: #be185d15; border: 1px dashed #be185d; color: #be185d; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
         
         if (equipeCuidadoAnimal.length > 0) {
-            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
-            html += '<span style="background: #c026d3; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">COORDENADORES</span>';
-            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
-            equipeCuidadoAnimal.forEach(function (e) { html += renderizarCardArvoreMini(e, '#c026d3', 'coordenador_ca'); });
+            html += '<div style="width: 2px; height: 10px; background: #c026d3; margin: 4px 0 2px 0;"></div>';
+            html += '<span style="background: #c026d3; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">COORD. (' + equipeCuidadoAnimal.length + ')</span>';
+            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin-top: 8px;">';
+            equipeCuidadoAnimal.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#c026d3', 'coordenador_ca'); });
             html += '</div>';
         }
-        html += '</div>'; // Fim coluna Diretor CA
-
-        // === COLUNA 3: JURÍDICO E RH (Sem título "Cargos Especiais") ===
-        if (gerentesJuridico.length > 0 || equipeRH.length > 0) {
-            html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 150px;">';
-            html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin-bottom: 6px;"></div>';
-            html += '<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">';
-            
-            if (gerentesJuridico.length > 0) {
-                html += '<div style="display: flex; flex-direction: column; align-items: center;">';
-                html += '<span style="background: #4f46e5; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">JURÍDICO</span>';
-                html += '<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">';
-                gerentesJuridico.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#4f46e5', 'juridico'); });
-                html += '</div>';
-                html += '</div>';
-            }
-            
-            if (equipeRH.length > 0) {
-                html += '<div style="display: flex; flex-direction: column; align-items: center;">';
-                html += '<span style="background: #0d9488; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">RH/ADM</span>';
-                html += '<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">';
-                equipeRH.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#0d9488', 'rh'); });
-                html += '</div>';
-                html += '</div>';
-            }
-            
-            html += '</div>';
-            html += '</div>';
-        }
-
-        html += '</div>'; // Fim Nível 2
-        html += '</div>'; // Fim container principal
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Coordenador(a) do Cuidado Animal\')" style="margin-top: 8px; background: #c026d315; border: 1px dashed #c026d3; color: #c026d3; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        html += '</div>';
+        
+        html += '</div>'; // Fim nível 2 (apenas diretores e hierarquia)
+        
+        // ===== CARGOS ESPECIAIS (RH/ADM e JURÍDICO) - EMBAIXO DE TUDO =====
+        html += '<div style="display: flex; justify-content: center; gap: 60px; width: 100%; margin-top: 25px; padding-top: 20px; border-top: 1px dashed #cbd5e1;">';
+        
+        // === RH / ADM ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 180px;">';
+        html += '<span style="background: #0d9488; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">RH / ADM</span>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+        equipeRH.forEach(function (e) { html += renderizarCardArvore(e, '#0d9488', 'rh'); });
+        if (equipeRH.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
+        html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Agente de Administração\')" style="margin-top: 10px; background: #0d948815; border: 1px dashed #0d9488; color: #0d9488; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
+        html += '</div>';
+        
+        // === JURÍDICO ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 180px;">';
+        html += '<span style="background: #4f46e5; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">JURÍDICO</span>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+        gerentesJuridico.forEach(function (g) { html += renderizarCardArvore(g, '#4f46e5', 'juridico'); });
+        if (gerentesJuridico.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
+        html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Interface Jurídica\')" style="margin-top: 10px; background: #4f46e515; border: 1px dashed #4f46e5; color: #4f46e5; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
+        html += '</div>';
+        
+        html += '</div>'; // Fim cargos especiais
+        
+        html += '</div>'; // Fim container
 
         console.log("DEBUG - HTML gerado para hierarquia (comprimento):", html.length);
         container.innerHTML = html;
@@ -3414,79 +3438,84 @@ async function carregarHierarquiaCompletaSecretario() {
     }
 }
 
-// Renderiza card padrão da árvore - Estilo Transparente com botão desativar
+// Renderiza card GRANDE (Diretores - nível 1)
 function renderizarCardArvore(funcionario, cor, tipo) {
-    // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
-    var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
+    var nomeAbreviado = (funcionario.full_name || 'Sem Nome');
+    if (nomeAbreviado.length > 22) nomeAbreviado = nomeAbreviado.substring(0, 21) + '...';
+    var onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
 
-    // Define a ação ao clicar
-    var onclickAction = '';
-    if (isFiscalPosturas) {
-        onclickAction = 'onclick="abrirEstatisticasComRelatorioFiscal(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
-    } else {
-        onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
-    }
+    // Card diretor - tamanho padrão
+    var html = '<div style="background: rgba(255,255,255,0.8); border-radius: 14px; padding: 14px 16px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; min-width: 220px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); position: relative;" onmouseover="this.style.background=\'white\';this.style.boxShadow=\'0 5px 15px ' + cor + '50\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.8)\';this.style.boxShadow=\'0 3px 10px rgba(0,0,0,0.08)\';this.style.transform=\'none\'" title="' + (funcionario.full_name || 'Sem Nome') + '">';
 
-    // Estilo transparente com borda colorida
-    var html = '<div style="background: transparent; border-radius: 16px; padding: 16px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px; min-width: 260px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.15)\';this.style.boxShadow=\'0 4px 20px ' + cor + '40, 0 0 30px ' + cor + '20\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'0 2px 12px rgba(0,0,0,0.05)\';this.style.transform=\'none\'">';
-
-    // Avatar com borda colorida
     if (funcionario.avatar_url) {
-        html += '<div style="position: relative;"><img src="' + funcionario.avatar_url + '" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 3px solid ' + cor + ';"></div>';
+        html += '<img src="' + funcionario.avatar_url + '" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
     } else {
-        html += '<div style="width: 48px; height: 48px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+        html += '<div style="width: 44px; height: 44px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; font-weight: 600;">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
     }
 
-    // Info
-    html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
-    html += '<div style="font-weight: 700; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
-    html += '<div style="font-size: 11px; color: ' + cor + '; font-weight: 700;">' + (funcionario.role || '---') + '</div>';
-    if (funcionario.matricula) {
-        html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">Matrícula: ' + funcionario.matricula + '</div>';
-    }
+    html += '<div style="flex: 1; min-width: 0; overflow: hidden;" ' + onclickAction + '>';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + nomeAbreviado + '</div>';
+    html += '<div style="font-size: 11px; color: ' + cor + '; font-weight: 600;">' + (funcionario.role || '---') + '</div>';
     html += '</div>';
 
-    // Botão desativar (lixeira SVG)
-    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 6px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar funcionário">';
-    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;" onmouseover="this.style.transform=\'scale(1.1)\'" onmouseout="this.style.transform=\'scale(1)\'"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 5px; border-radius: 5px;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     html += '</button>';
 
     html += '</div>';
     return html;
 }
 
-// Renderiza card compacto para equipes (fiscais e equipe ambiental) - Estilo Transparente
-function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
-    // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
-    var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
+// Renderiza card MÉDIO (Gerentes - nível 2) - 10% menor que o grande
+function renderizarCardArvoreMedio(funcionario, cor, tipo) {
+    var nomeAbreviado = (funcionario.full_name || 'Sem Nome');
+    if (nomeAbreviado.length > 16) nomeAbreviado = nomeAbreviado.substring(0, 15) + '...';
+    var onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
 
-    // Define a ação ao clicar
-    var onclickAction = '';
-    if (isFiscalPosturas) {
-        onclickAction = 'onclick="abrirEstatisticasComRelatorioFiscal(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
-    } else {
-        onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
-    }
+    // Card médio (90% do tamanho do grande)
+    var html = '<div style="background: rgba(255,255,255,0.75); border-radius: 11px; padding: 9px 10px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 9px; min-width: 175px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); position: relative;" onmouseover="this.style.background=\'white\';this.style.boxShadow=\'0 4px 12px ' + cor + '40\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.75)\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\';this.style.transform=\'none\'" title="' + (funcionario.full_name || 'Sem Nome') + '">';
 
-    // Estilo transparente compacto
-    var html = '<div style="background: transparent; border-radius: 12px; padding: 10px 8px 10px 12px; border: 1px solid ' + cor + '; border-left: 3px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 6px; position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\';this.style.boxShadow=\'0 2px 12px ' + cor + '30\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'none\'">';
-
-    // Avatar pequeno
     if (funcionario.avatar_url) {
-        html += '<img src="' + funcionario.avatar_url + '" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
+        html += '<img src="' + funcionario.avatar_url + '" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
     } else {
-        html += '<div style="width: 32px; height: 32px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+        html += '<div style="width: 34px; height: 34px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 13px; color: white; font-weight: 600;">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
     }
 
-    // Info compacta
-    html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
-    html += '<div style="font-weight: 600; color: #1e293b; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
-    html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">' + (funcionario.matricula || '---') + '</div>';
+    html += '<div style="flex: 1; min-width: 0; overflow: hidden;" ' + onclickAction + '>';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + nomeAbreviado + '</div>';
+    html += '<div style="font-size: 9px; color: ' + cor + '; font-weight: 600;">' + (funcionario.role || '---') + '</div>';
     html += '</div>';
 
-    // Botão desativar (lixeira SVG pequeno)
-    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar">';
-    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 5px;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    html += '</button>';
+
+    html += '</div>';
+    return html;
+}
+
+// Renderiza card PEQUENO (Fiscais/Equipe - nível 3) - Tamanho adequado para não sobrepor
+function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
+    var nomeAbreviado = (funcionario.full_name || 'Sem Nome');
+    if (nomeAbreviado.length > 18) nomeAbreviado = nomeAbreviado.substring(0, 17) + '...';
+    var onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
+
+    // Card compacto para Fiscais e Equipe RA
+    var html = '<div style="background: rgba(255,255,255,0.75); border-radius: 8px; padding: 6px 8px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; min-width: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" onmouseover="this.style.background=\'white\';this.style.boxShadow=\'0 4px 12px ' + cor + '40\'" onmouseout="this.style.background=\'rgba(255,255,255,0.75)\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.08)\'" title="' + (funcionario.full_name || 'Sem Nome') + '">';
+
+    if (funcionario.avatar_url) {
+        html += '<img src="' + funcionario.avatar_url + '" style="width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
+    } else {
+        html += '<div style="width: 26px; height: 26px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 11px; color: white; font-weight: 600;">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+    }
+
+    html += '<div style="flex: 1; min-width: 0; overflow: hidden;" ' + onclickAction + '>';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + nomeAbreviado + '</div>';
+    html += '<div style="font-size: 8px; color: ' + cor + '; font-weight: 600;">' + (funcionario.matricula || '---') + '</div>';
+    html += '</div>';
+
+    html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 2px; border-radius: 4px;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     html += '</button>';
 
     html += '</div>';
@@ -3495,7 +3524,10 @@ function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
 
 // Renderiza card mini para equipes (mais compacto ainda)
 function renderizarCardArvoreMini(funcionario, cor, tipo) {
-    var html = '<div style="background: transparent; border-radius: 8px; padding: 6px 8px; border: 1px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\'" onmouseout="this.style.background=\'transparent\'" onclick="mostrarTarefasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')">';
+    var nomeAbreviado = (funcionario.full_name || 'Sem Nome');
+    if (nomeAbreviado.length > 10) nomeAbreviado = nomeAbreviado.substring(0, 9) + '...';
+    
+    var html = '<div style="background: transparent; border-radius: 8px; padding: 6px 8px; border: 1px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\'" onmouseout="this.style.background=\'transparent\'" onclick="mostrarTarefasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')" title="' + (funcionario.full_name || 'Sem Nome') + '">';
     
     // Avatar mini
     if (funcionario.avatar_url) {
@@ -3505,12 +3537,33 @@ function renderizarCardArvoreMini(funcionario, cor, tipo) {
     }
     
     // Info mini
-    html += '<div style="flex: 1; min-width: 0;">';
-    html += '<div style="font-weight: 600; color: #1e293b; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
+    html += '<div style="flex: 1; min-width: 0; overflow: hidden;">';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">' + nomeAbreviado + '</div>';
     html += '</div>';
     
     html += '</div>';
     return html;
+}
+
+// Função para toggle do menu dropdown da Equipe RA
+function toggleMenuEquipeRA() {
+    var menu = document.getElementById('menu-equipe-ra');
+    if (menu) {
+        if (menu.style.display === 'none' || menu.style.display === '') {
+            menu.style.display = 'block';
+            // Fechar ao clicar fora
+            setTimeout(function() {
+                document.addEventListener('click', function closeMenu(e) {
+                    if (!e.target.closest('#btn-novo-equipe-ra') && !e.target.closest('#menu-equipe-ra')) {
+                        menu.style.display = 'none';
+                        document.removeEventListener('click', closeMenu);
+                    }
+                });
+            }, 100);
+        } else {
+            menu.style.display = 'none';
+        }
+    }
 }
 
 // Renderiza uma seção da hierarquia
