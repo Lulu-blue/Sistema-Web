@@ -40,7 +40,7 @@ async function buscarUsuarioPorNomeMatricula(nome, matricula) {
             .eq('matricula', matricula)
             .eq('ativo', true)
             .maybeSingle();
-        
+
         if (error) throw error;
         return data;
     } catch (err) {
@@ -63,7 +63,7 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
             .from('tarefas')
             .select('id')
             .eq('criado_por', usuarioOrigemId);
-        
+
         if (err1) throw err1;
 
         if (tarefasCriadas && tarefasCriadas.length > 0) {
@@ -71,7 +71,7 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
                 .from('tarefas')
                 .update({ criado_por: usuarioDestinoId })
                 .eq('criado_por', usuarioOrigemId);
-            
+
             if (updateErr1) throw updateErr1;
             resultados.tarefasCriadas = tarefasCriadas.length;
         }
@@ -82,13 +82,13 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
             .from('tarefa_responsaveis')
             .select('*')
             .eq('user_id', usuarioOrigemId);
-        
+
         if (err2) throw err2;
 
         if (responsaveisOrigem && responsaveisOrigem.length > 0) {
             for (var i = 0; i < responsaveisOrigem.length; i++) {
                 var resp = responsaveisOrigem[i];
-                
+
                 // Verificar se o novo usuário já é responsável por esta tarefa
                 var { data: existeDestino, error: errExiste } = await supabaseClient
                     .from('tarefa_responsaveis')
@@ -96,7 +96,7 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
                     .eq('tarefa_id', resp.tarefa_id)
                     .eq('user_id', usuarioDestinoId)
                     .maybeSingle();
-                
+
                 if (errExiste) throw errExiste;
 
                 if (existeDestino) {
@@ -109,12 +109,12 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
                     // Atualizar para o novo usuário
                     var { error: updateErr2 } = await supabaseClient
                         .from('tarefa_responsaveis')
-                        .update({ 
+                        .update({
                             user_id: usuarioDestinoId,
                             user_name: nomeDestino
                         })
                         .eq('id', resp.id);
-                    
+
                     if (updateErr2) throw updateErr2;
                 }
             }
@@ -127,7 +127,7 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
             .select('id')
             .eq('criado_por', usuarioOrigemId)
             .not('tarefa_pai_id', 'is', null);
-        
+
         if (err3) throw err3;
 
         if (subtarefasCriadas && subtarefasCriadas.length > 0) {
@@ -136,7 +136,7 @@ async function transferirTarefasUsuario(usuarioOrigemId, usuarioDestinoId, nomeD
                 .update({ criado_por: usuarioDestinoId })
                 .eq('criado_por', usuarioOrigemId)
                 .not('tarefa_pai_id', 'is', null);
-            
+
             if (updateErr3) throw updateErr3;
             resultados.subtarefasCriadas = subtarefasCriadas.length;
         }
@@ -321,9 +321,9 @@ async function carregarRankingFiscaisHome() {
 
         fiscais.forEach(function (f) {
             var pts = mapPontuacao[f.id] || 0;
-            dadosFiscais.push({ 
-                nome: f.full_name || 'Sem Nome', 
-                pontos: pts 
+            dadosFiscais.push({
+                nome: f.full_name || 'Sem Nome',
+                pontos: pts
             });
         });
 
@@ -363,10 +363,10 @@ async function carregarRankingFiscaisHome() {
                     },
                     tooltip: {
                         callbacks: {
-                            title: function(context) {
+                            title: function (context) {
                                 return dadosFiscais[context[0].dataIndex].nome;
                             },
-                            label: function(context) {
+                            label: function (context) {
                                 return context.parsed.y + ' pontos';
                             }
                         },
@@ -928,14 +928,14 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             .eq('user_id', fiscalId);
 
         let tarefasStatus = { concluidas: 0, emProgresso: 0, atrasadas: 0 };
-        
+
         if (tarefasFiscal && tarefasFiscal.length > 0) {
             const tarefaIds = tarefasFiscal.map(t => t.tarefa_id);
             const { data: tarefas } = await supabaseClient
                 .from('tarefas')
                 .select('status, prazo')
                 .in('id', tarefaIds);
-            
+
             if (tarefas) {
                 const hoje = new Date().toISOString().split('T')[0];
                 tarefas.forEach(t => {
@@ -1103,9 +1103,9 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         if (canvasPizza.chartInstance) {
             canvasPizza.chartInstance.destroy();
         }
-        
+
         const cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
-        
+
         canvasPizza.chartInstance = new Chart(canvasPizza, {
             type: 'doughnut',
             data: {
@@ -1131,7 +1131,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 const label = context.label || '';
                                 const value = context.parsed || 0;
                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
@@ -1154,7 +1154,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         if (canvasColunas.chartInstance) {
             canvasColunas.chartInstance.destroy();
         }
-        
+
         canvasColunas.chartInstance = new Chart(canvasColunas, {
             type: 'bar',
             data: {
@@ -1194,14 +1194,14 @@ function fecharRelatorioGerente() {
         // Destruir gráficos antes de remover o modal para liberar memória
         var canvasPizza = document.getElementById('grafico-pizza-docs');
         var canvasColunas = document.getElementById('grafico-colunas-tarefas');
-        
+
         if (canvasPizza && canvasPizza.chartInstance) {
             canvasPizza.chartInstance.destroy();
         }
         if (canvasColunas && canvasColunas.chartInstance) {
             canvasColunas.chartInstance.destroy();
         }
-        
+
         modal.remove();
     }
 }
@@ -1356,7 +1356,7 @@ async function salvarNovoFiscal() {
             var modal = document.getElementById('modal-novo-fiscal');
             if (modal) modal.remove();
             if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
-        if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
+            if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
             if (typeof carregarRankingFiscaisHome === 'function') carregarRankingFiscaisHome();
         }, 1500);
 
@@ -1450,16 +1450,16 @@ async function buscarNovoResponsavel() {
     var nome = document.getElementById('transferir-nome').value.trim();
     var matricula = document.getElementById('transferir-matricula').value.trim();
     var resultadoDiv = document.getElementById('resultado-busca-usuario');
-    
+
     if (!nome || !matricula) {
         resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
         return;
     }
-    
+
     resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
-    
+
     var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
-    
+
     if (usuario) {
         novoResponsavelSelecionado = usuario;
         resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
@@ -1494,7 +1494,7 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
         msgEl.style.color = '#ef4444';
         return;
     }
-    
+
     // Validar transferência se checkbox marcado
     if (chkTransferir && chkTransferir.checked) {
         if (!novoResponsavelSelecionado) {
@@ -1544,11 +1544,11 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
         if (chkTransferir && chkTransferir.checked && novoResponsavelSelecionado) {
             btnExcluir.textContent = 'Transferindo tarefas...';
             var resultadoTransferencia = await transferirTarefasUsuario(
-                fiscalId, 
-                novoResponsavelSelecionado.id, 
+                fiscalId,
+                novoResponsavelSelecionado.id,
                 novoResponsavelSelecionado.full_name
             );
-            
+
             if (resultadoTransferencia.erro) {
                 throw new Error('Erro na transferência de tarefas: ' + resultadoTransferencia.erro);
             }
@@ -1558,9 +1558,9 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
         // O histórico de documentos é preservado
         var { error: deleteErr } = await supabaseClient
             .from('profiles')
-            .update({ 
+            .update({
                 role: 'inativo',
-                ativo: false 
+                ativo: false
             })
             .eq('id', fiscalId);
 
@@ -1578,7 +1578,7 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
         novoResponsavelSelecionado = null;
 
         // Fechar e atualizar ranking
-        setTimeout(function() {
+        setTimeout(function () {
             var modal = document.getElementById('modal-excluir-fiscal');
             if (modal) modal.remove();
             if (typeof carregarGraficoFiscais === 'function') carregarGraficoFiscais();
@@ -2555,8 +2555,8 @@ async function carregarGerentesAmbientalHierarquiaDiretor() {
         var { data: gerentes, error: errGerentes } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url, email_real, matricula')
-            .in('role', ['Gerente de Regularização Ambiental', 'gerente de regularização ambiental', 
-                         'Gerente de Regularizacao Ambiental', 'gerente de regularizacao ambiental']);
+            .in('role', ['Gerente de Regularização Ambiental', 'gerente de regularização ambiental',
+                'Gerente de Regularizacao Ambiental', 'gerente de regularizacao ambiental']);
 
         if (errGerentes) throw errGerentes;
 
@@ -2572,7 +2572,7 @@ async function carregarGerentesAmbientalHierarquiaDiretor() {
         var html = '';
         var cores = ['#3b82f6', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#ec4899'];
 
-        gerentes.forEach(function(gerente, index) {
+        gerentes.forEach(function (gerente, index) {
             var cor = cores[index % cores.length];
 
             var fotoHtml = '';
@@ -2805,16 +2805,16 @@ async function buscarNovoResponsavelGerente() {
     var nome = document.getElementById('transferir-gerente-nome').value.trim();
     var matricula = document.getElementById('transferir-gerente-matricula').value.trim();
     var resultadoDiv = document.getElementById('resultado-busca-usuario-gerente');
-    
+
     if (!nome || !matricula) {
         resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
         return;
     }
-    
+
     resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
-    
+
     var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
-    
+
     if (usuario) {
         novoResponsavelGerenteSelecionado = usuario;
         resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
@@ -2836,7 +2836,7 @@ async function excluirGerenteDiretor(gerenteId, nomeGerente) {
         msgEl.style.color = '#ef4444';
         return;
     }
-    
+
     // Validar transferência se checkbox marcado
     if (chkTransferir && chkTransferir.checked) {
         if (!novoResponsavelGerenteSelecionado) {
@@ -2854,11 +2854,11 @@ async function excluirGerenteDiretor(gerenteId, nomeGerente) {
         if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteSelecionado) {
             btn.textContent = 'Transferindo tarefas...';
             var resultadoTransferencia = await transferirTarefasUsuario(
-                gerenteId, 
-                novoResponsavelGerenteSelecionado.id, 
+                gerenteId,
+                novoResponsavelGerenteSelecionado.id,
                 novoResponsavelGerenteSelecionado.full_name
             );
-            
+
             if (resultadoTransferencia.erro) {
                 throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
             }
@@ -2878,7 +2878,7 @@ async function excluirGerenteDiretor(gerenteId, nomeGerente) {
         }
         msgSucesso += '<br><small>Histórico preservado.</small></span>';
         msgEl.innerHTML = msgSucesso;
-        
+
         // Limpar variável
         novoResponsavelGerenteSelecionado = null;
 
@@ -3089,16 +3089,16 @@ async function buscarNovoResponsavelGerenteAmb() {
     var nome = document.getElementById('transferir-gerente-amb-nome').value.trim();
     var matricula = document.getElementById('transferir-gerente-amb-matricula').value.trim();
     var resultadoDiv = document.getElementById('resultado-busca-usuario-gerente-amb');
-    
+
     if (!nome || !matricula) {
         resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
         return;
     }
-    
+
     resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
-    
+
     var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
-    
+
     if (usuario) {
         novoResponsavelGerenteAmbSelecionado = usuario;
         resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
@@ -3120,7 +3120,7 @@ async function excluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
         msgEl.style.color = '#ef4444';
         return;
     }
-    
+
     // Validar transferência se checkbox marcado
     if (chkTransferir && chkTransferir.checked) {
         if (!novoResponsavelGerenteAmbSelecionado) {
@@ -3138,11 +3138,11 @@ async function excluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
         if (chkTransferir && chkTransferir.checked && novoResponsavelGerenteAmbSelecionado) {
             btn.textContent = 'Transferindo tarefas...';
             var resultadoTransferencia = await transferirTarefasUsuario(
-                gerenteId, 
-                novoResponsavelGerenteAmbSelecionado.id, 
+                gerenteId,
+                novoResponsavelGerenteAmbSelecionado.id,
                 novoResponsavelGerenteAmbSelecionado.full_name
             );
-            
+
             if (resultadoTransferencia.erro) {
                 throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
             }
@@ -3162,7 +3162,7 @@ async function excluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
         }
         msgSucesso += '<br><small>Histórico preservado.</small></span>';
         msgEl.innerHTML = msgSucesso;
-        
+
         // Limpar variável
         novoResponsavelGerenteAmbSelecionado = null;
 
@@ -3187,11 +3187,21 @@ async function excluirGerenteAmbientalDiretor(gerenteId, nomeGerente) {
 
 // Funcao principal que carrega o dashboard do Secretario
 async function carregarDashboardSecretario() {
+    console.log("DEBUG - Iniciando carregarDashboardSecretario");
     try {
+        console.log("DEBUG - Chamando carregarHierarquiaCompletaSecretario");
         await carregarHierarquiaCompletaSecretario();
+
+        console.log("DEBUG - Chamando carregarResumoTarefasSecretario");
         await carregarResumoTarefasSecretario();
+
+        console.log("DEBUG - Chamando carregarGraficoDocumentosSecretario");
         await carregarGraficoDocumentosSecretario();
+
+        console.log("DEBUG - Chamando carregarCalendarioProjetosSecretario");
         await carregarCalendarioProjetosSecretario();
+
+        console.log("DEBUG - Dashboard do secretario carregado com sucesso");
     } catch (err) {
         console.error("Erro ao carregar dashboard do secretario:", err);
     }
@@ -3199,7 +3209,9 @@ async function carregarDashboardSecretario() {
 
 // Carrega a hierarquia completa de funcionários em formato de árvore
 async function carregarHierarquiaCompletaSecretario() {
+    console.log("DEBUG - Iniciando carregarHierarquiaCompletaSecretario");
     var container = document.getElementById('secretario-arvore-hierarquia');
+    console.log("DEBUG - Container:", container);
     if (!container) return;
 
     try {
@@ -3220,159 +3232,180 @@ async function carregarHierarquiaCompletaSecretario() {
         }
 
         // Separar por hierarquia
-        var diretores = [];
+        var diretoresMA = [];
+        var diretoresCA = [];
+        var gerentesJuridico = [];
+        var equipeRH = [];
+
         var gerentesPosturas = [];
         var gerentesAmbiental = [];
+        var gerentesCuidadoAnimal = [];
         var fiscais = [];
         var equipeAmbiental = [];
+        var equipeCuidadoAnimal = [];
 
-        funcionarios.forEach(function(f) {
-            var role = (f.role || '').toLowerCase();
-            if (role.includes('secretário') || role.includes('secretario')) {
-                return; // Não mostrar o próprio secretário
-            } else if (role.includes('diretor')) {
-                diretores.push(f);
-            } else if (role.includes('gerente') && role.includes('postura')) {
+        funcionarios.forEach(function (f) {
+            var roleRaw = (f.role || '').toLowerCase();
+            var roleNorm = roleRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+            if (roleRaw.includes('secretario') || roleRaw.includes('secretário')) {
+                return; // Não mostrar secretário
+            }
+
+            // LÍDERES (Nível 1)
+            if (roleNorm.includes('diretor') && roleNorm.includes('cuidado') && roleNorm.includes('animal')) {
+                diretoresCA.push(f);
+            } else if (roleNorm.includes('diretor')) {
+                diretoresMA.push(f);
+            } else if (roleNorm.includes('gerente') && roleNorm.includes('interface') && roleNorm.includes('juridica')) {
+                gerentesJuridico.push(f);
+            } else if (roleNorm.includes('agente') && roleNorm.includes('administracao')) {
+                equipeRH.push(f);
+            }
+            // GERENTES E EQUIPES (Nível 2 e 3)
+            else if (roleNorm.includes('gerente') && roleNorm.includes('cuidado') && roleNorm.includes('animal')) {
+                gerentesCuidadoAnimal.push(f);
+            } else if (roleNorm.includes('gerente') && roleNorm.includes('postura')) {
                 gerentesPosturas.push(f);
-            } else if (role.includes('gerente') && (role.includes('ambiental') || role.includes('regulariza'))) {
+            } else if (roleNorm.includes('gerente') && (roleNorm.includes('ambiental') || roleNorm.includes('regulariza'))) {
                 gerentesAmbiental.push(f);
-            } else if (role.includes('fiscal') || role.includes('administrativo')) {
+            } else if (roleNorm.includes('coordenador') && roleNorm.includes('cuidado') && roleNorm.includes('animal')) {
+                equipeCuidadoAnimal.push(f);
+            } else if (roleNorm.includes('fiscal') || roleNorm.includes('administrativo')) {
                 fiscais.push(f);
-            } else if (role.includes('engenheiro') || role.includes('analista') || role.includes('auxiliar')) {
+            }
+            // EQUIPE DE REGULARIZAÇÃO AMBIENTAL
+            else if (roleNorm.includes('agronomo') || roleNorm.includes('agrônomo') ||
+                     roleNorm.includes('engenheiro') || roleNorm.includes('engenheira') ||
+                     roleNorm.includes('analista') || roleNorm.includes('auxiliar')) {
                 equipeAmbiental.push(f);
             }
         });
 
-        // Criar árvore visual transparente
-        var html = '<div style="display: flex; flex-direction: column; align-items: center; min-width: 800px; padding: 20px;">';
-        
-        // NÍVEL 1: DIRETORES (Topo)
-        html += '<div style="margin-bottom: 40px;">';
-        html += '<div style="text-align: center; margin-bottom: 12px;">';
-        html += '<span style="background: #7c3aed; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(124, 58, 237, 0.4);">DIREÇÃO</span>';
-        html += '</div>';
-        html += '<div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 12px;">';
-        diretores.forEach(function(d) {
-            html += renderizarCardArvore(d, '#7c3aed', 'diretor');
+        console.log("DEBUG - Funcionários processados:", {
+            diretoresMA: diretoresMA.length,
+            diretoresCA: diretoresCA.length,
+            gerentesJuridico: gerentesJuridico.length,
+            equipeRH: equipeRH.length,
+            gerentesPosturas: gerentesPosturas.length,
+            fiscais: fiscais.length
         });
-        if (diretores.length === 0) {
-            html += '<div style="padding: 20px 40px; border-radius: 12px; color: #64748b; font-style: italic; border: 1px dashed #94a3b8;">Nenhum diretor cadastrado</div>';
-        }
-        html += '</div>';
-        // Contador discreto
-        html += '<div style="text-align: center; margin-bottom: 12px;">';
-        html += '<span style="color: #94a3b8; font-size: 12px; font-weight: 500;">' + diretores.length + ' ' + (diretores.length === 1 ? 'diretor' : 'diretores') + '</span>';
-        html += '</div>';
-        // Botão Novo Diretor
-        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) de Meio Ambiente\')" style="background: transparent; border: 2px dashed #7c3aed; color: #7c3aed; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#7c3aed\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#7c3aed\'">+ Novo Diretor</button>';
-        html += '</div>';
+
+        // Criar árvore visual hierárquica compacta
+        var html = '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; padding: 10px; position: relative; font-size: 12px;">';
         
-        // LINHA CONECTORA (se houver diretores e gerentes)
-        if ((gerentesPosturas.length > 0 || gerentesAmbiental.length > 0) && diretores.length > 0) {
-            html += '<div style="position: relative; height: 50px; width: 100%; max-width: 600px; margin-bottom: 10px;">';
-            html += '<div style="position: absolute; left: 50%; top: 0; width: 2px; height: 50px; background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%); transform: translateX(-50%);"></div>';
-            html += '<div style="position: absolute; left: 25%; top: 50px; width: 50%; height: 2px; background: linear-gradient(90deg, #94a3b8 0%, #cbd5e1 50%, #94a3b8 100%);"></div>';
-            html += '<div style="position: absolute; left: 25%; top: 50px; width: 2px; height: 20px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%);"></div>';
-            html += '<div style="position: absolute; right: 25%; top: 50px; width: 2px; height: 20px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%);"></div>';
+        // ===== NÍVEL 1: SECRETÁRIO (Top Level) =====
+        html += '<div style="text-align: center; margin-bottom: 10px;">';
+        html += '<div style="display: inline-block; background: #1e3a5f; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700;">SECRETARIA MUNICIPAL</div>';
+        html += '<div style="width: 2px; height: 20px; background: linear-gradient(to bottom, #1e3a5f, #94a3b8); margin: 0 auto;"></div>';
+        html += '</div>';
+
+        // ===== NÍVEL 2: DIRETORES =====
+        html += '<div style="display: flex; justify-content: center; gap: 20px; width: 100%; flex-wrap: wrap;">';
+
+        // === COLUNA 1: DIRETOR DE MEIO AMBIENTE ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 280px;">';
+        html += '<span style="background: #7c3aed; color: white; padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) DE MEIO AMBIENTE</span>';
+        diretoresMA.forEach(function (d) { html += renderizarCardArvoreCompacto(d, '#7c3aed', 'diretor'); });
+        if (diretoresMA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; color: #94a3b8; font-size: 10px;">Nenhum</div>';
+        
+        // Linha vertical
+        html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin: 6px 0;"></div>';
+        
+        // Subníveis lado a lado
+        html += '<div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">';
+        
+        // Gerência de Posturas
+        html += '<div style="display: flex; flex-direction: column; align-items: center;">';
+        html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERÊNCIA POSTURAS</span>';
+        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        gerentesPosturas.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#0c3e2b', 'gerente_posturas'); });
+        html += '</div>';
+        // Fiscais
+        if (fiscais.length > 0) {
+            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+            html += '<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">FISCAIS</span>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
+            fiscais.forEach(function (f) { html += renderizarCardArvoreMini(f, '#b45309', 'fiscal'); });
             html += '</div>';
         }
-        
-        // NÍVEL 2: GERENTES (Lado a lado)
-        html += '<div style="display: flex; justify-content: space-between; width: 100%; max-width: 950px; gap: 60px; margin-top: 20px;">';
-        
-        // Coluna da Esquerda: Gerência de Posturas
-        html += '<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">';
-        html += '<div style="text-align: center; margin-bottom: 16px;">';
-        html += '<span style="background: #0c3e2b; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(12, 62, 43, 0.4);">GERÊNCIA DE POSTURAS</span>';
-        html += '</div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 14px; align-items: center; margin-bottom: 12px;">';
-        gerentesPosturas.forEach(function(g) {
-            html += renderizarCardArvore(g, '#0c3e2b', 'gerente_posturas');
-        });
-        if (gerentesPosturas.length === 0) {
-            html += '<div style="padding: 16px 32px; border-radius: 12px; color: #64748b; font-style: italic; font-size: 13px; border: 1px dashed #94a3b8;">Nenhum gerente</div>';
-        }
-        html += '</div>';
-        // Contador discreto
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + gerentesPosturas.length + ' ' + (gerentesPosturas.length === 1 ? 'gerente' : 'gerentes') + '</span>';
-        html += '</div>';
-        // Botão Novo Gerente de Posturas
-        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Posturas\')" style="background: transparent; border: 2px dashed #0c3e2b; color: #0c3e2b; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#0c3e2b\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#0c3e2b\'">+ Novo Gerente</button>';
-        
-        // LINHA CONECTORA para Fiscais
-        if (fiscais.length > 0 && gerentesPosturas.length > 0) {
-            html += '<div style="height: 40px; width: 2px; background: linear-gradient(180deg, #cbd5e1 0%, #b45309 100%); margin: 14px 0;"></div>';
-        } else if (gerentesPosturas.length > 0) {
-            html += '<div style="height: 30px; width: 2px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%); margin: 14px 0;"></div>';
-        }
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="background: #b45309; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 10px rgba(180, 83, 9, 0.4);">FISCAIS</span>';
-        html += '</div>';
-        html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 420px; margin-bottom: 10px;">';
-        fiscais.forEach(function(f) {
-            html += renderizarCardArvoreCompacto(f, '#b45309', 'fiscal');
-        });
-        if (fiscais.length === 0) {
-            html += '<div style="padding: 12px 24px; border-radius: 10px; color: #64748b; font-style: italic; font-size: 12px; border: 1px dashed #94a3b8;">Nenhum fiscal</div>';
-        }
-        html += '</div>';
-        // Contador discreto
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + fiscais.length + ' ' + (fiscais.length === 1 ? 'fiscal' : 'fiscais') + '</span>';
-        html += '</div>';
-        // Botão Novo Fiscal
-        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Posturas\')" style="background: transparent; border: 2px dashed #b45309; color: #b45309; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#b45309\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#b45309\'">+ Novo Fiscal</button>';
         html += '</div>';
         
-        // Coluna da Direita: Gerência de Regularização Ambiental
-        html += '<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">';
-        html += '<div style="text-align: center; margin-bottom: 16px;">';
-        html += '<span style="background: #1e3a5f; color: white; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 12px rgba(30, 58, 95, 0.4);">GERÊNCIA DE REG. AMBIENTAL</span>';
+        // Gerência de Regularização Ambiental
+        html += '<div style="display: flex; flex-direction: column; align-items: center;">';
+        html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERÊNCIA AMBIENTAL</span>';
+        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        gerentesAmbiental.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#1e3a5f', 'gerente_ambiental'); });
         html += '</div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 14px; align-items: center; margin-bottom: 12px;">';
-        gerentesAmbiental.forEach(function(g) {
-            html += renderizarCardArvore(g, '#1e3a5f', 'gerente_ambiental');
-        });
-        if (gerentesAmbiental.length === 0) {
-            html += '<div style="padding: 16px 32px; border-radius: 12px; color: #64748b; font-style: italic; font-size: 13px; border: 1px dashed #94a3b8;">Nenhum gerente</div>';
+        // Equipe RA
+        if (equipeAmbiental.length > 0) {
+            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+            html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">EQUIPE RA</span>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
+            equipeAmbiental.forEach(function (e) { html += renderizarCardArvoreMini(e, '#065f46', 'equipe_ambiental'); });
+            html += '</div>';
         }
-        html += '</div>';
-        // Contador discreto
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + gerentesAmbiental.length + ' ' + (gerentesAmbiental.length === 1 ? 'gerente' : 'gerentes') + '</span>';
-        html += '</div>';
-        // Botão Novo Gerente de RA
-        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Regularizacao Ambiental\')" style="background: transparent; border: 2px dashed #1e3a5f; color: #1e3a5f; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#1e3a5f\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#1e3a5f\'">+ Novo Gerente</button>';
-        
-        // LINHA CONECTORA para Equipe Ambiental
-        if (equipeAmbiental.length > 0 && gerentesAmbiental.length > 0) {
-            html += '<div style="height: 40px; width: 2px; background: linear-gradient(180deg, #cbd5e1 0%, #065f46 100%); margin: 14px 0;"></div>';
-        } else if (gerentesAmbiental.length > 0) {
-            html += '<div style="height: 30px; width: 2px; background: linear-gradient(180deg, #94a3b8 0%, #cbd5e1 100%); margin: 14px 0;"></div>';
-        }
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="background: #065f46; color: white; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 10px rgba(6, 95, 70, 0.4);">EQUIPE AMBIENTAL</span>';
-        html += '</div>';
-        html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 420px; margin-bottom: 10px;">';
-        equipeAmbiental.forEach(function(e) {
-            html += renderizarCardArvoreCompacto(e, '#065f46', 'equipe_ambiental');
-        });
-        if (equipeAmbiental.length === 0) {
-            html += '<div style="padding: 12px 24px; border-radius: 10px; color: #64748b; font-style: italic; font-size: 12px; border: 1px dashed #94a3b8;">Nenhum membro</div>';
-        }
-        html += '</div>';
-        // Contador discreto
-        html += '<div style="text-align: center; margin-bottom: 10px;">';
-        html += '<span style="color: #94a3b8; font-size: 11px; font-weight: 500;">' + equipeAmbiental.length + ' ' + (equipeAmbiental.length === 1 ? 'membro' : 'membros') + '</span>';
-        html += '</div>';
-        // Botão Novo Membro da Equipe (com seleção de cargo)
-        html += '<button onclick="abrirFormNovoFuncionarioEquipeAmbiental()" style="background: transparent; border: 2px dashed #065f46; color: #065f46; padding: 8px 20px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=\'#065f46\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#065f46\'">+ Novo Membro</button>';
         html += '</div>';
         
-        html += '</div>'; // Fim nível 2
-        html += '</div>'; // Fim container
+        html += '</div>'; // Fim subníveis
+        html += '</div>'; // Fim coluna Diretor MA
 
+        // === COLUNA 2: DIRETOR DE CUIDADO ANIMAL ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 200px;">';
+        html += '<span style="background: #db2777; color: white; padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) CUIDADO ANIMAL</span>';
+        diretoresCA.forEach(function (d) { html += renderizarCardArvoreCompacto(d, '#db2777', 'diretor_ca'); });
+        if (diretoresCA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; color: #94a3b8; font-size: 10px;">Nenhum</div>';
+        
+        html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin: 6px 0;"></div>';
+        html += '<span style="background: #be185d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">GERENTE CA</span>';
+        html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        gerentesCuidadoAnimal.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#be185d', 'gerente_ca'); });
+        html += '</div>';
+        
+        if (equipeCuidadoAnimal.length > 0) {
+            html += '<div style="width: 2px; height: 12px; background: #cbd5e1; margin: 4px 0;"></div>';
+            html += '<span style="background: #c026d3; color: white; padding: 2px 6px; border-radius: 8px; font-size: 7px; font-weight: 700;">COORDENADORES</span>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 200px;">';
+            equipeCuidadoAnimal.forEach(function (e) { html += renderizarCardArvoreMini(e, '#c026d3', 'coordenador_ca'); });
+            html += '</div>';
+        }
+        html += '</div>'; // Fim coluna Diretor CA
+
+        // === COLUNA 3: JURÍDICO E RH (Sem título "Cargos Especiais") ===
+        if (gerentesJuridico.length > 0 || equipeRH.length > 0) {
+            html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 150px;">';
+            html += '<div style="width: 2px; height: 20px; background: #cbd5e1; margin-bottom: 6px;"></div>';
+            html += '<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">';
+            
+            if (gerentesJuridico.length > 0) {
+                html += '<div style="display: flex; flex-direction: column; align-items: center;">';
+                html += '<span style="background: #4f46e5; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">JURÍDICO</span>';
+                html += '<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">';
+                gerentesJuridico.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#4f46e5', 'juridico'); });
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            if (equipeRH.length > 0) {
+                html += '<div style="display: flex; flex-direction: column; align-items: center;">';
+                html += '<span style="background: #0d9488; color: white; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700;">RH/ADM</span>';
+                html += '<div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">';
+                equipeRH.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#0d9488', 'rh'); });
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            html += '</div>';
+        }
+
+        html += '</div>'; // Fim Nível 2
+        html += '</div>'; // Fim container principal
+
+        console.log("DEBUG - HTML gerado para hierarquia (comprimento):", html.length);
         container.innerHTML = html;
 
     } catch (err) {
@@ -3385,7 +3418,7 @@ async function carregarHierarquiaCompletaSecretario() {
 function renderizarCardArvore(funcionario, cor, tipo) {
     // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
     var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
-    
+
     // Define a ação ao clicar
     var onclickAction = '';
     if (isFiscalPosturas) {
@@ -3393,17 +3426,17 @@ function renderizarCardArvore(funcionario, cor, tipo) {
     } else {
         onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
     }
-    
+
     // Estilo transparente com borda colorida
     var html = '<div style="background: transparent; border-radius: 16px; padding: 16px; border: 2px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px; min-width: 260px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.15)\';this.style.boxShadow=\'0 4px 20px ' + cor + '40, 0 0 30px ' + cor + '20\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'0 2px 12px rgba(0,0,0,0.05)\';this.style.transform=\'none\'">';
-    
+
     // Avatar com borda colorida
     if (funcionario.avatar_url) {
         html += '<div style="position: relative;"><img src="' + funcionario.avatar_url + '" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 3px solid ' + cor + ';"></div>';
     } else {
         html += '<div style="width: 48px; height: 48px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
     }
-    
+
     // Info
     html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
     html += '<div style="font-weight: 700; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
@@ -3412,12 +3445,12 @@ function renderizarCardArvore(funcionario, cor, tipo) {
         html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">Matrícula: ' + funcionario.matricula + '</div>';
     }
     html += '</div>';
-    
+
     // Botão desativar (lixeira SVG)
     html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 6px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar funcionário">';
     html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;" onmouseover="this.style.transform=\'scale(1.1)\'" onmouseout="this.style.transform=\'scale(1)\'"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     html += '</button>';
-    
+
     html += '</div>';
     return html;
 }
@@ -3426,7 +3459,7 @@ function renderizarCardArvore(funcionario, cor, tipo) {
 function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
     // Verifica se é Fiscal de Posturas para mostrar gráfico + relatório
     var isFiscalPosturas = (funcionario.role || '').toLowerCase().includes('fiscal') && (funcionario.role || '').toLowerCase().includes('postura');
-    
+
     // Define a ação ao clicar
     var onclickAction = '';
     if (isFiscalPosturas) {
@@ -3434,27 +3467,47 @@ function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
     } else {
         onclickAction = 'onclick="abrirEstatisticasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')"';
     }
-    
+
     // Estilo transparente compacto
     var html = '<div style="background: transparent; border-radius: 12px; padding: 10px 8px 10px 12px; border: 1px solid ' + cor + '; border-left: 3px solid ' + cor + '; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 6px; position: relative;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\';this.style.boxShadow=\'0 2px 12px ' + cor + '30\'" onmouseout="this.style.background=\'transparent\';this.style.boxShadow=\'none\'">';
-    
+
     // Avatar pequeno
     if (funcionario.avatar_url) {
         html += '<img src="' + funcionario.avatar_url + '" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid ' + cor + ';">';
     } else {
         html += '<div style="width: 32px; height: 32px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: 600; border: 2px solid ' + cor + ';">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
     }
-    
+
     // Info compacta
     html += '<div style="flex: 1; min-width: 0;" ' + onclickAction + '>';
     html += '<div style="font-weight: 600; color: #1e293b; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
     html += '<div style="font-size: 10px; color: #475569; font-weight: 500;">' + (funcionario.matricula || '---') + '</div>';
     html += '</div>';
-    
+
     // Botão desativar (lixeira SVG pequeno)
     html += '<button onclick="event.stopPropagation(); confirmarDesativarFuncionarioArvore(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || '').replace(/'/g, "\\'") + '\')" style="background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" onmouseover="this.style.background=\'rgba(239,68,68,0.1)\'" onmouseout="this.style.background=\'transparent\'" title="Desativar">';
     html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     html += '</button>';
+
+    html += '</div>';
+    return html;
+}
+
+// Renderiza card mini para equipes (mais compacto ainda)
+function renderizarCardArvoreMini(funcionario, cor, tipo) {
+    var html = '<div style="background: transparent; border-radius: 8px; padding: 6px 8px; border: 1px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\'" onmouseout="this.style.background=\'transparent\'" onclick="mostrarTarefasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')">';
+    
+    // Avatar mini
+    if (funcionario.avatar_url) {
+        html += '<img src="' + funcionario.avatar_url + '" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid ' + cor + ';">';
+    } else {
+        html += '<div style="width: 20px; height: 20px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 9px; color: white; font-weight: 600;">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
+    }
+    
+    // Info mini
+    html += '<div style="flex: 1; min-width: 0;">';
+    html += '<div style="font-weight: 600; color: #1e293b; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">' + (funcionario.full_name || 'Sem Nome') + '</div>';
+    html += '</div>';
     
     html += '</div>';
     return html;
@@ -3468,13 +3521,13 @@ function renderizarSecaoHierarquia(titulo, funcionarios, cor, tipo) {
     html += '<h4 style="margin: 0; color: ' + cor + '; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">' + titulo + '</h4>';
     html += '<span style="background: ' + cor + '20; color: ' + cor + '; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">' + funcionarios.length + '</span>';
     html += '</div>';
-    
+
     html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">';
-    
-    funcionarios.forEach(function(f) {
+
+    funcionarios.forEach(function (f) {
         var isFiscalPosturas = (f.role || '').toLowerCase().includes('fiscal') && (f.role || '').toLowerCase().includes('postura');
         var isFiscal = (f.role || '').toLowerCase().includes('fiscal');
-        
+
         // Determinar ação ao clicar
         var onclickAction = '';
         if (isFiscalPosturas) {
@@ -3484,16 +3537,16 @@ function renderizarSecaoHierarquia(titulo, funcionarios, cor, tipo) {
             // Outros cargos mostram tarefas
             onclickAction = 'onclick="mostrarTarefasFuncionario(\'' + f.id + '\', \'' + (f.full_name || 'Sem nome').replace(/'/g, "\\'") + '\')"';
         }
-        
+
         html += '<div ' + onclickAction + ' style="background: white; border-radius: 10px; padding: 14px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 12px;" onmouseover="this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'none\';this.style.transform=\'none\'">';
-        
+
         // Avatar
         if (f.avatar_url) {
             html += '<img src="' + f.avatar_url + '" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 3px solid ' + cor + ';">';
         } else {
             html += '<div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, ' + cor + ', #666); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; font-weight: 600;">' + (f.full_name ? f.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
         }
-        
+
         // Info
         html += '<div style="flex: 1; min-width: 0;">';
         html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (f.full_name || 'Sem Nome') + '</div>';
@@ -3502,7 +3555,7 @@ function renderizarSecaoHierarquia(titulo, funcionarios, cor, tipo) {
             html += '<div style="font-size: 11px; color: #94a3b8;">Matrícula: ' + f.matricula + '</div>';
         }
         html += '</div>';
-        
+
         // Ícone de ação
         if (isFiscalPosturas) {
             html += '<div style="color: ' + cor + ';" title="Ver relatório de produtividade">';
@@ -3513,13 +3566,13 @@ function renderizarSecaoHierarquia(titulo, funcionarios, cor, tipo) {
             html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
             html += '</div>';
         }
-        
+
         html += '</div>';
     });
-    
+
     html += '</div>';
     html += '</div>';
-    
+
     return html;
 }
 
@@ -3557,12 +3610,12 @@ async function carregarResumoTarefasSecretario() {
         // Últimas 5 tarefas
         html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 12px; font-size: 14px;">Próximas Tarefas:</div>';
         html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
-        
-        tarefas.slice(0, 5).forEach(function(t) {
+
+        tarefas.slice(0, 5).forEach(function (t) {
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b';
             var statusLabel = t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente';
             var atrasada = t.prazo && new Date(t.prazo) < new Date();
-            
+
             html += '<div style="padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid ' + statusColor + '; display: flex; justify-content: space-between; align-items: center;">';
             html += '<div>';
             html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px;">' + (t.titulo || 'Sem título') + '</div>';
@@ -3573,11 +3626,11 @@ async function carregarResumoTarefasSecretario() {
             html += '<span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: ' + statusColor + '20; color: ' + statusColor + ';">' + statusLabel + '</span>';
             html += '</div>';
         });
-        
+
         if (tarefas.length > 5) {
             html += '<div style="text-align: center; padding: 10px; color: #94a3b8; font-size: 13px;">+' + (tarefas.length - 5) + ' tarefas pendentes</div>';
         }
-        
+
         html += '</div>';
 
         container.innerHTML = html;
@@ -3619,7 +3672,7 @@ async function carregarGraficoDocumentosSecretario() {
         var contagem = {};
         var totalDocs = 0;
         if (docs) {
-            docs.forEach(function(d) {
+            docs.forEach(function (d) {
                 var tipo = d.categoria_id || 'Outros';
                 var nome = nomesTipo[tipo] || ('Cat. ' + tipo);
                 if (!contagem[nome]) contagem[nome] = 0;
@@ -3673,7 +3726,7 @@ async function carregarGraficoDocumentosSecretario() {
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 var label = context.label || '';
                                 var value = context.raw || 0;
                                 var pct = totalDocs > 0 ? Math.round((value / totalDocs) * 100) : 0;
@@ -3723,10 +3776,10 @@ async function carregarCalendarioProjetosSecretario() {
 
         // Grid do calendario (7 colunas)
         html += '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 12px;">';
-        
+
         // Cabecalho dos dias da semana
         var diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-        diasSemana.forEach(function(dia) {
+        diasSemana.forEach(function (dia) {
             html += '<div style="text-align: center; font-size: 10px; color: #94a3b8; font-weight: 600; padding: 4px;">' + dia + '</div>';
         });
 
@@ -3744,11 +3797,11 @@ async function carregarCalendarioProjetosSecretario() {
         for (var dia = 1; dia <= diasNoMes; dia++) {
             var dataStr = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
             var isHoje = isMesAtual && dia === hoje.getDate();
-            
+
             // Verificar se tem evento neste dia
             var eventosNoDia = [];
             if (eventos) {
-                eventos.forEach(function(ev) {
+                eventos.forEach(function (ev) {
                     var inicio = ev.data_inicio ? ev.data_inicio.substring(0, 10) : null;
                     var fim = ev.data_fim ? ev.data_fim.substring(0, 10) : inicio;
                     if (dataStr >= inicio && dataStr <= fim) {
@@ -3764,11 +3817,11 @@ async function carregarCalendarioProjetosSecretario() {
             var cursor = temEvento ? 'pointer' : 'default';
 
             html += '<div style="aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: ' + bgColor + '; color: ' + textColor + '; border: ' + border + '; cursor: ' + cursor + ';"';
-            
+
             if (temEvento) {
                 html += ' onclick="irParaProjetos()" title="' + eventosNoDia[0].titulo + '"';
             }
-            
+
             html += '>' + dia + '</div>';
         }
 
@@ -3778,12 +3831,12 @@ async function carregarCalendarioProjetosSecretario() {
         if (eventos && eventos.length > 0) {
             html += '<div style="border-top: 1px solid #e2e8f0; padding-top: 12px;">';
             html += '<div style="font-size: 11px; color: #94a3b8; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Próximos eventos</div>';
-            
-            eventos.slice(0, 3).forEach(function(ev) {
+
+            eventos.slice(0, 3).forEach(function (ev) {
                 var dataInicio = new Date(ev.data_inicio);
                 var dataStr = dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 var cor = ev.cor || '#3b82f6';
-                
+
                 html += '<div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer;" onclick="irParaProjetos()">';
                 html += '<div style="width: 8px; height: 8px; border-radius: 50%; background: ' + cor + ';"></div>';
                 html += '<div style="flex: 1; min-width: 0;">';
@@ -3834,23 +3887,23 @@ async function carregarTarefasDiretoresSecretario() {
             .from('profiles')
             .select('id')
             .in('role', ['Diretor(a)', 'Diretor(a) de Meio Ambiente', 'diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente']);
-        
+
         if (errD) throw errD;
-        
+
         if (!diretores || diretores.length === 0) {
             container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:15px;">Nenhum diretor encontrado.</div>';
             return;
         }
-        
-        var diretorIds = diretores.map(function(d) { return d.id; });
-        
+
+        var diretorIds = diretores.map(function (d) { return d.id; });
+
         // Buscar tarefas criadas pelos diretores ou onde diretor é responsável
         // Primeiro buscar responsabilidades
         var { data: respDiretores, error: errR } = await supabaseClient
             .from('tarefa_responsaveis')
             .select('tarefa_id')
             .in('user_id', diretorIds);
-        
+
         // Buscar tarefas criadas pelos diretores
         var { data: tarefasCriadas, error: errC } = await supabaseClient
             .from('tarefas')
@@ -3858,20 +3911,20 @@ async function carregarTarefasDiretoresSecretario() {
             .in('criado_por', diretorIds)
             .neq('status', 'concluida')
             .order('prazo', { ascending: true });
-        
+
         if (errC) throw errC;
-        
+
         var tarefas = tarefasCriadas || [];
-        
+
         // Adicionar tarefas onde diretor é responsável (evitando duplicatas)
         if (respDiretores && respDiretores.length > 0) {
-            var tarefaIdsResp = respDiretores.map(function(r) { return r.tarefa_id; });
+            var tarefaIdsResp = respDiretores.map(function (r) { return r.tarefa_id; });
             var idsExistentes = {};
-            tarefas.forEach(function(t) { idsExistentes[t.id] = true; });
-            
+            tarefas.forEach(function (t) { idsExistentes[t.id] = true; });
+
             // Filtrar apenas IDs que não estão na lista
-            var idsNovos = tarefaIdsResp.filter(function(id) { return !idsExistentes[id]; });
-            
+            var idsNovos = tarefaIdsResp.filter(function (id) { return !idsExistentes[id]; });
+
             if (idsNovos.length > 0) {
                 var { data: tarefasResp, error: errT } = await supabaseClient
                     .from('tarefas')
@@ -3879,28 +3932,28 @@ async function carregarTarefasDiretoresSecretario() {
                     .in('id', idsNovos)
                     .neq('status', 'concluida')
                     .order('prazo', { ascending: true });
-                
+
                 if (errT) throw errT;
-                (tarefasResp || []).forEach(function(t) { tarefas.push(t); });
+                (tarefasResp || []).forEach(function (t) { tarefas.push(t); });
             }
         }
-        
+
         if (tarefas.length === 0) {
             container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:15px;">Nenhuma tarefa dos diretores.</div>';
             return;
         }
-        
+
         // Ordenar por prazo
-        tarefas.sort(function(a, b) {
+        tarefas.sort(function (a, b) {
             if (!a.prazo && !b.prazo) return 0;
             if (!a.prazo) return 1;
             if (!b.prazo) return -1;
             return new Date(a.prazo) - new Date(b.prazo);
         });
-        
+
         // Renderizar (simplificado)
         renderizarTarefasSecretario(container, tarefas);
-        
+
     } catch (err) {
         console.error("Erro ao carregar tarefas dos diretores:", err);
         container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px; font-size:15px;">Erro ao carregar tarefas.</div>';
@@ -3912,29 +3965,29 @@ async function renderizarTarefasSecretario(container, tarefas) {
     try {
         // Buscar nomes dos criadores
         var criadorIds = [];
-        tarefas.forEach(function(t) {
+        tarefas.forEach(function (t) {
             if (t.criado_por && criadorIds.indexOf(t.criado_por) === -1) {
                 criadorIds.push(t.criado_por);
             }
         });
-        
+
         var criadorMap = {};
         if (criadorIds.length > 0) {
             var { data: criadores } = await supabaseClient
                 .from('profiles')
                 .select('id, full_name')
                 .in('id', criadorIds);
-            (criadores || []).forEach(function(c) { criadorMap[c.id] = c.full_name; });
+            (criadores || []).forEach(function (c) { criadorMap[c.id] = c.full_name; });
         }
-        
+
         var html = '<div style="max-height: 400px; overflow-y: auto;">';
-        
-        tarefas.slice(0, 10).forEach(function(t) {
+
+        tarefas.slice(0, 10).forEach(function (t) {
             var prazo = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
             var criador = criadorMap[t.criado_por] || 'Desconhecido';
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : (t.status === 'pendente' ? '#f59e0b' : '#10b981');
             var statusText = t.status === 'em_progresso' ? 'Em progresso' : (t.status === 'pendente' ? 'Pendente' : 'Concluída');
-            
+
             html += '<div style="padding: 12px; border-bottom: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'" onclick="if(typeof abrirDetalheTarefa===\'function\')abrirDetalheTarefa(' + t.id + ')">';
             html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">' + (t.titulo || 'Sem título') + '</div>';
             html += '<div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b;">';
@@ -3946,14 +3999,14 @@ async function renderizarTarefasSecretario(container, tarefas) {
             html += '</div>';
             html += '</div>';
         });
-        
+
         if (tarefas.length > 10) {
             html += '<div style="text-align: center; padding: 12px; color: #94a3b8; font-size: 13px;">+' + (tarefas.length - 10) + ' tarefas - veja mais na aba Tarefas</div>';
         }
-        
+
         html += '</div>';
         container.innerHTML = html;
-        
+
     } catch (err) {
         console.error("Erro ao renderizar tarefas:", err);
         container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px;">Erro ao exibir tarefas.</div>';
@@ -4219,16 +4272,16 @@ async function buscarNovoResponsavelDiretor() {
     var nome = document.getElementById('transferir-diretor-nome').value.trim();
     var matricula = document.getElementById('transferir-diretor-matricula').value.trim();
     var resultadoDiv = document.getElementById('resultado-busca-usuario-diretor');
-    
+
     if (!nome || !matricula) {
         resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
         return;
     }
-    
+
     resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
-    
+
     var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
-    
+
     if (usuario) {
         novoResponsavelDiretorSelecionado = usuario;
         resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>✓ Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
@@ -4251,7 +4304,7 @@ async function excluirDiretorSecretario(diretorId, nomeDiretor) {
         msgEl.style.color = '#ef4444';
         return;
     }
-    
+
     // Validar transferência se checkbox marcado
     if (chkTransferir && chkTransferir.checked) {
         if (!novoResponsavelDiretorSelecionado) {
@@ -4269,11 +4322,11 @@ async function excluirDiretorSecretario(diretorId, nomeDiretor) {
         if (chkTransferir && chkTransferir.checked && novoResponsavelDiretorSelecionado) {
             btn.textContent = 'Transferindo tarefas...';
             var resultadoTransferencia = await transferirTarefasUsuario(
-                diretorId, 
-                novoResponsavelDiretorSelecionado.id, 
+                diretorId,
+                novoResponsavelDiretorSelecionado.id,
                 novoResponsavelDiretorSelecionado.full_name
             );
-            
+
             if (resultadoTransferencia.erro) {
                 throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
             }
@@ -4293,7 +4346,7 @@ async function excluirDiretorSecretario(diretorId, nomeDiretor) {
         }
         msgSucesso += '<br><small>Histórico preservado.</small></span>';
         msgEl.innerHTML = msgSucesso;
-        
+
         // Limpar variável
         novoResponsavelDiretorSelecionado = null;
 
@@ -4357,7 +4410,7 @@ async function carregarEquipeAmbiental() {
             'Auxiliar de Serviços II': 0
         };
 
-        (funcionarios || []).forEach(function(f) {
+        (funcionarios || []).forEach(function (f) {
             if (contadores.hasOwnProperty(f.role)) {
                 contadores[f.role]++;
             }
@@ -4387,7 +4440,7 @@ async function carregarEquipeAmbiental() {
             'Auxiliar de Serviços II': '#8b5cf6'       // Roxo
         };
 
-        funcionarios.forEach(function(func) {
+        funcionarios.forEach(function (func) {
             var cor = coresPorCargo[func.role] || '#64748b';
 
             var fotoHtml = '';
@@ -4435,7 +4488,7 @@ function abrirFormNovoFuncionarioAmbiental() {
     modal.id = 'modal-novo-func-ambiental';
     modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
 
-    var optionsCargos = CARGOS_EQUIPE_AMBIENTAL.map(function(c) {
+    var optionsCargos = CARGOS_EQUIPE_AMBIENTAL.map(function (c) {
         return '<option value="' + c + '">' + c + '</option>';
     }).join('');
 
@@ -4693,7 +4746,7 @@ async function buscarEstatisticasFuncionario(funcId) {
         .select('tarefa_id')
         .eq('user_id', funcId);
 
-    var tarefaIds = (tarefasResp || []).map(function(r) { return r.tarefa_id; });
+    var tarefaIds = (tarefasResp || []).map(function (r) { return r.tarefa_id; });
 
     if (tarefaIds.length > 0) {
         // Buscar detalhes das tarefas
@@ -4702,7 +4755,7 @@ async function buscarEstatisticasFuncionario(funcId) {
             .select('id, status, prazo, tarefa_pai_id')
             .in('id', tarefaIds);
 
-        (tarefas || []).forEach(function(t) {
+        (tarefas || []).forEach(function (t) {
             // Separar tarefas principais de subtarefas
             if (t.tarefa_pai_id) {
                 // É subtarefa
@@ -4756,12 +4809,12 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
     // Seção de Tarefas
     html += '<div style="margin-bottom:30px;">';
     html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:18px;">Tarefas</h3>';
-    
+
     if (totalTarefas === 0) {
         html += '<div style="color:#94a3b8;text-align:center;padding:20px;">Nenhuma tarefa atribuída</div>';
     } else {
         html += '<div style="display:flex;align-items:flex-end;justify-content:center;gap:20px;height:200px;margin-bottom:16px;">';
-        
+
         // Barra Concluídas
         var alturaConc = totalTarefas > 0 ? (stats.tarefas.concluidas / totalTarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4769,7 +4822,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.concluidas + ';border-radius:8px 8px 0 0;height:' + alturaConc + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Concluídas</div>';
         html += '</div>';
-        
+
         // Barra Em Progresso
         var alturaProg = totalTarefas > 0 ? (stats.tarefas.emProgresso / totalTarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4777,7 +4830,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.emProgresso + ';border-radius:8px 8px 0 0;height:' + alturaProg + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Em Progresso</div>';
         html += '</div>';
-        
+
         // Barra Atrasadas
         var alturaAtras = totalTarefas > 0 ? (stats.tarefas.atrasadas / totalTarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4785,7 +4838,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.atrasadas + ';border-radius:8px 8px 0 0;height:' + alturaAtras + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
         html += '</div>';
-        
+
         // Barra Pendentes
         var alturaPend = totalTarefas > 0 ? (stats.tarefas.pendentes / totalTarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4793,7 +4846,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPend + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
         html += '</div>';
-        
+
         html += '</div>';
     }
     html += '</div>';
@@ -4801,12 +4854,12 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
     // Seção de Subtarefas
     html += '<div style="margin-bottom:30px;">';
     html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:18px;">Subtarefas</h3>';
-    
+
     if (totalSubtarefas === 0) {
         html += '<div style="color:#94a3b8;text-align:center;padding:20px;">Nenhuma subtarefa atribuída</div>';
     } else {
         html += '<div style="display:flex;align-items:flex-end;justify-content:center;gap:20px;height:200px;margin-bottom:16px;">';
-        
+
         // Barra Concluídas
         var alturaConcSub = totalSubtarefas > 0 ? (stats.subtarefas.concluidas / totalSubtarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4814,7 +4867,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.concluidas + ';border-radius:8px 8px 0 0;height:' + alturaConcSub + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Concluídas</div>';
         html += '</div>';
-        
+
         // Barra Em Progresso
         var alturaProgSub = totalSubtarefas > 0 ? (stats.subtarefas.emProgresso / totalSubtarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4822,7 +4875,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.emProgresso + ';border-radius:8px 8px 0 0;height:' + alturaProgSub + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Em Progresso</div>';
         html += '</div>';
-        
+
         // Barra Atrasadas
         var alturaAtrasSub = totalSubtarefas > 0 ? (stats.subtarefas.atrasadas / totalSubtarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4830,7 +4883,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.atrasadas + ';border-radius:8px 8px 0 0;height:' + alturaAtrasSub + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
         html += '</div>';
-        
+
         // Barra Pendentes
         var alturaPendSub = totalSubtarefas > 0 ? (stats.subtarefas.pendentes / totalSubtarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
@@ -4838,7 +4891,7 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPendSub + 'px;"></div>';
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
         html += '</div>';
-        
+
         html += '</div>';
     }
     html += '</div>';
@@ -4912,7 +4965,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     if (errResp) throw errResp;
 
-    var tarefaIds = responsaveis ? responsaveis.map(function(r) { return r.tarefa_id; }) : [];
+    var tarefaIds = responsaveis ? responsaveis.map(function (r) { return r.tarefa_id; }) : [];
 
     // Buscar tarefas principais (não subtarefas)
     var tarefasPrincipais = [];
@@ -4938,12 +4991,12 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     // Combinar tarefas (evitando duplicatas)
     var tarefasMap = {};
-    (tarefasPrincipais || []).forEach(function(t) { tarefasMap[t.id] = t; });
-    (tarefasCriadas || []).forEach(function(t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
+    (tarefasPrincipais || []).forEach(function (t) { tarefasMap[t.id] = t; });
+    (tarefasCriadas || []).forEach(function (t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
     var todasTarefas = Object.values(tarefasMap);
 
     // Buscar subtarefas das tarefas principais
-    var paiIds = todasTarefas.map(function(t) { return t.id; });
+    var paiIds = todasTarefas.map(function (t) { return t.id; });
     var subtarefas = [];
     if (paiIds.length > 0) {
         var { data: subs, error: errSubs } = await supabaseClient
@@ -4956,8 +5009,8 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     }
 
     // Buscar subtarefas onde o usuário é responsável diretamente
-    var subtarefaIds = tarefaIds.filter(function(id) {
-        return !todasTarefas.some(function(t) { return t.id === id; });
+    var subtarefaIds = tarefaIds.filter(function (id) {
+        return !todasTarefas.some(function (t) { return t.id === id; });
     });
     if (subtarefaIds.length > 0) {
         var { data: subsResp, error: errSubsResp } = await supabaseClient
@@ -4966,8 +5019,8 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
             .in('id', subtarefaIds);
 
         if (errSubsResp) throw errSubsResp;
-        (subsResp || []).forEach(function(s) {
-            if (!subtarefas.some(function(sub) { return sub.id === s.id; })) {
+        (subsResp || []).forEach(function (s) {
+            if (!subtarefas.some(function (sub) { return sub.id === s.id; })) {
                 subtarefas.push(s);
             }
         });
@@ -4991,7 +5044,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
         projetos: eventos ? eventos.length : 0
     };
 
-    todasTarefas.forEach(function(t) {
+    todasTarefas.forEach(function (t) {
         var prazo = t.prazo ? new Date(t.prazo) : null;
         var atrasada = prazo && prazo < hoje && t.status !== 'concluida';
 
@@ -5012,7 +5065,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
         }
     });
 
-    subtarefas.forEach(function(s) {
+    subtarefas.forEach(function (s) {
         var prazo = s.prazo ? new Date(s.prazo) : null;
         var atrasada = prazo && prazo < hoje && s.status !== 'concluida';
 
@@ -5038,27 +5091,27 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     // Cards de resumo
     html += '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:16px;margin-bottom:30px;">';
-    
+
     html += '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:12px;padding:20px;text-align:center;color:white;">';
     html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.atrasadas + stats.subtarefas.atrasadas) + '</div>';
     html += '<div style="font-size:13px;opacity:0.9;">Atrasadas</div>';
     html += '</div>';
-    
+
     html += '<div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:12px;padding:20px;text-align:center;color:white;">';
     html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.concluidas + stats.subtarefas.concluidas) + '</div>';
     html += '<div style="font-size:13px;opacity:0.9;">Concluídas</div>';
     html += '</div>';
-    
+
     html += '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:12px;padding:20px;text-align:center;color:white;">';
     html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.emProgresso + stats.subtarefas.emProgresso) + '</div>';
     html += '<div style="font-size:13px;opacity:0.9;">Em Progresso</div>';
     html += '</div>';
-    
+
     html += '<div style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:12px;padding:20px;text-align:center;color:white;">';
     html += '<div style="font-size:32px;font-weight:700;">' + stats.projetos + '</div>';
     html += '<div style="font-size:13px;opacity:0.9;">Projetos</div>';
     html += '</div>';
-    
+
     html += '</div>';
 
     // Gráfico de barras
@@ -5082,7 +5135,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Total</th>';
     html += '</tr></thead>';
     html += '<tbody>';
-    
+
     html += '<tr style="border-bottom:1px solid #e2e8f0;">';
     html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Tarefas</td>';
     html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.tarefas.atrasadas + '</td>';
@@ -5091,7 +5144,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.tarefas.pendentes + '</td>';
     html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.tarefas.atrasadas + stats.tarefas.concluidas + stats.tarefas.emProgresso + stats.tarefas.pendentes) + '</td>';
     html += '</tr>';
-    
+
     html += '<tr>';
     html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Subtarefas</td>';
     html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.subtarefas.atrasadas + '</td>';
@@ -5100,14 +5153,14 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.subtarefas.pendentes + '</td>';
     html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.subtarefas.atrasadas + stats.subtarefas.concluidas + stats.subtarefas.emProgresso + stats.subtarefas.pendentes) + '</td>';
     html += '</tr>';
-    
+
     html += '</tbody></table>';
     html += '</div>';
 
     container.innerHTML = html;
 
     // Criar gráfico
-    setTimeout(function() {
+    setTimeout(function () {
         var ctx = document.getElementById('grafico-estatisticas-funcionario');
         if (!ctx) return;
 
@@ -5508,16 +5561,16 @@ async function buscarNovoResponsavelArvore() {
     var nome = document.getElementById('transferir-arvore-nome').value.trim();
     var matricula = document.getElementById('transferir-arvore-matricula').value.trim();
     var resultadoDiv = document.getElementById('resultado-busca-arvore');
-    
+
     if (!nome || !matricula) {
         resultadoDiv.innerHTML = '<p style="color:#ef4444;font-size:12px;">Preencha nome e matrícula.</p>';
         return;
     }
-    
+
     resultadoDiv.innerHTML = '<p style="color:#64748b;font-size:12px;">Buscando...</p>';
-    
+
     var usuario = await buscarUsuarioPorNomeMatricula(nome, matricula);
-    
+
     if (usuario) {
         novoResponsavelArvoreSelecionado = usuario;
         resultadoDiv.innerHTML = '<p style="color:#16a34a;font-size:12px;"><strong>Usuário encontrado:</strong> ' + usuario.full_name + ' (' + usuario.role + ')</p>';
@@ -5539,7 +5592,7 @@ async function executarDesativarFuncionarioArvoreComTransferencia(funcionarioId)
         msgEl.style.color = '#ef4444';
         return;
     }
-    
+
     // Validar transferência se checkbox marcado
     if (chkTransferir && chkTransferir.checked) {
         if (!novoResponsavelArvoreSelecionado) {
@@ -5557,11 +5610,11 @@ async function executarDesativarFuncionarioArvoreComTransferencia(funcionarioId)
         if (chkTransferir && chkTransferir.checked && novoResponsavelArvoreSelecionado) {
             btn.textContent = 'Transferindo tarefas...';
             var resultadoTransferencia = await transferirTarefasUsuario(
-                funcionarioId, 
-                novoResponsavelArvoreSelecionado.id, 
+                funcionarioId,
+                novoResponsavelArvoreSelecionado.id,
                 novoResponsavelArvoreSelecionado.full_name
             );
-            
+
             if (resultadoTransferencia.erro) {
                 throw new Error('Erro na transferência: ' + resultadoTransferencia.erro);
             }
@@ -5672,7 +5725,7 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
 
         if (errResp) throw errResp;
 
-        var tarefaIds = responsaveis ? responsaveis.map(function(r) { return r.tarefa_id; }) : [];
+        var tarefaIds = responsaveis ? responsaveis.map(function (r) { return r.tarefa_id; }) : [];
 
         var tarefasPrincipais = [];
         if (tarefaIds.length > 0) {
@@ -5695,8 +5748,8 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
         if (errCriadas) throw errCriadas;
 
         var tarefasMap = {};
-        (tarefasPrincipais || []).forEach(function(t) { tarefasMap[t.id] = t; });
-        (tarefasCriadas || []).forEach(function(t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
+        (tarefasPrincipais || []).forEach(function (t) { tarefasMap[t.id] = t; });
+        (tarefasCriadas || []).forEach(function (t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
         var todasTarefas = Object.values(tarefasMap);
 
         // Calcular estatísticas
@@ -5709,7 +5762,7 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
         };
 
         var hoje = new Date().toISOString().split('T')[0];
-        todasTarefas.forEach(function(t) {
+        todasTarefas.forEach(function (t) {
             if (t.status === 'concluida') {
                 stats.concluidas++;
             } else if (t.prazo && t.prazo < hoje) {
@@ -5737,7 +5790,7 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
         container.innerHTML = html;
 
         // Criar gráfico
-        setTimeout(function() {
+        setTimeout(function () {
             var ctx = document.getElementById('grafico-status-tarefas-fiscal');
             if (ctx && typeof Chart !== 'undefined') {
                 new Chart(ctx, {
@@ -5787,15 +5840,15 @@ async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
             .order('created_at', { ascending: false });
 
         var todosRegs = (regProd || []).concat(regCP || []);
-        var registrosFiltrados = todosRegs.filter(function(r) { return (r.pontuacao || 0) !== 0; });
+        var registrosFiltrados = todosRegs.filter(function (r) { return (r.pontuacao || 0) !== 0; });
 
         // Calcular totais
-        var pontuacaoTotal = registrosFiltrados.reduce(function(sum, r) { return sum + (r.pontuacao || 0); }, 0);
+        var pontuacaoTotal = registrosFiltrados.reduce(function (sum, r) { return sum + (r.pontuacao || 0); }, 0);
         var totalDocumentos = registrosFiltrados.length;
 
         // Agrupar por tipo
         var docPorTipo = {};
-        registrosFiltrados.forEach(function(r) {
+        registrosFiltrados.forEach(function (r) {
             var tipo = r.categoria || 'Outros';
             if (!docPorTipo[tipo]) docPorTipo[tipo] = 0;
             docPorTipo[tipo]++;
@@ -5821,7 +5874,7 @@ async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
             html += '<p style="color:#64748b;font-size:13px;text-align:center;">Nenhum registro encontrado.</p>';
         } else {
             html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-            registrosFiltrados.slice(0, 5).forEach(function(r) {
+            registrosFiltrados.slice(0, 5).forEach(function (r) {
                 var data = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
                 html += '<div style="background:#f8fafc;border-radius:8px;padding:10px;border:1px solid #e2e8f0;">';
                 html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
@@ -5839,7 +5892,7 @@ async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
 
         // Criar gráfico de documentos
         if (Object.keys(docPorTipo).length > 0) {
-            setTimeout(function() {
+            setTimeout(function () {
                 var ctx = document.getElementById('grafico-docs-tipo-fiscal');
                 if (ctx && typeof Chart !== 'undefined') {
                     var labels = Object.keys(docPorTipo).slice(0, 5);

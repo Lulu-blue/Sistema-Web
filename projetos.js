@@ -8,8 +8,13 @@ function inicializarCalendario() {
 }
 
 function renderizarCalendario() {
-    const grid = document.getElementById('calendario-grid');
-    const titulo = document.getElementById('calendario-mes-ano');
+    renderizarCalendarioEspecifico('calendario-grid', 'calendario-mes-ano');
+    renderizarCalendarioEspecifico('home-calendario-grid', 'home-calendario-mes-ano');
+}
+
+function renderizarCalendarioEspecifico(gridId, tituloId) {
+    const grid = document.getElementById(gridId);
+    const titulo = document.getElementById(tituloId);
 
     if (!grid || !titulo) return;
 

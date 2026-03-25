@@ -15,6 +15,9 @@ var carregandoTarefas = false;
 var idsGerentesGlobal = []; // Gerentes de Posturas
 var idsGerentesAmbientalGlobal = []; // Gerentes de Regularização Ambiental
 var idsDiretoresGlobal = [];
+var idsCuidadoAnimalGlobal = [];
+var idsJuridicoGlobal = [];
+var idsRHGlobal = [];
 var moduloIniciado = false;
 var inicializacaoPromise = null;
 
@@ -96,28 +99,38 @@ async function carregarModuloTarefas() {
                     .in('role', ['Gerente de Regularização Ambiental', 'gerente de regularização ambiental',
                                  'Gerente de Regularizacao Ambiental', 'gerente de regularizacao ambiental']);
                 idsGerentesAmbientalGlobal = (gerentesAmbiental || []).map(g => g.id);
-                console.log('[Tarefas] Gerentes de Regularização Ambiental mapeados:', idsGerentesAmbientalGlobal.length);
-            } catch (e) {
-                console.error("Erro ao mapear gerentes de regularização ambiental:", e);
-            }
 
-            // Mapear Diretores para filtros do Secretário
-            try {
-                var { data: diretores } = await supabaseClient
-                    .from('profiles')
-                    .select('id')
-                    .in('role', ['diretor', 'Diretor', 'diretor de meio ambiente', 'Diretor de Meio Ambiente', 
-                                 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'diretor(a)', 'diretor(a) de meio ambiente']);
-                idsDiretoresGlobal = (diretores || []).map(d => d.id);
-                console.log('[Tarefas] Diretores mapeados:', idsDiretoresGlobal.length);
+                // 2. Mapear todos para filtros do Secretário via normalização
+                var { data: profiles } = await supabaseClient.from('profiles').select('id, role');
+                if (profiles) {
+                    var normalizeStr = function(str) {
+                        return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    };
+
+                    idsCuidadoAnimalGlobal = profiles.filter(p => normalizeStr(p.role).includes('cuidado animal')).map(p => p.id);
+                    idsJuridicoGlobal = profiles.filter(p => normalizeStr(p.role).includes('juridica')).map(p => p.id);
+                    idsRHGlobal = profiles.filter(p => normalizeStr(p.role).includes('administracao')).map(p => p.id);
+                    idsDiretoresGlobal = profiles.filter(p => {
+                        var n = normalizeStr(p.role);
+                        return n.includes('diretor') && !n.includes('cuidado animal');
+                    }).map(p => p.id);
+
+                    console.log('[Tarefas] IDs Mapeados:', {
+                        CA: idsCuidadoAnimalGlobal.length,
+                        Juridico: idsJuridicoGlobal.length,
+                        RH: idsRHGlobal.length,
+                        Diretores: idsDiretoresGlobal.length,
+                        GerentesRA: idsGerentesAmbientalGlobal.length
+                    });
+                }
             } catch (e) {
-                console.error("Erro ao mapear diretores:", e);
+                console.error("Erro ao mapear cargos globais:", e);
             }
 
             moduloIniciado = true;
             if (typeof renderizarCalendario === 'function') renderizarCalendario();
             carregarEventos();
-            carregarTarefas();
+            if (typeof carregarTarefas === 'function') carregarTarefas();
         } catch (err) {
             console.error("Erro na inicialização do módulo:", err);
         } finally {
@@ -166,30 +179,58 @@ async function carregarEventos() {
         var ehFiscal = (userRoleGlobal === 'Fiscal' || userRoleGlobal === 'fiscal' || 
                         roleLower.includes('fiscal') && roleLower.includes('postura'));
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var roleLowerNormFilter = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) || 
+                              (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
+
         var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw === 'administrativo' || 
                          roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
-                         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura'));
+                         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
+                         isCargoEspecial);
 
-        if (ehDiretor || ehFiscal) {
-            // Diretor e Fiscal veem todos os eventos
-            eventosMesCache = todosEventos;
-        } else if (ehGerente) {
-            // Gerentes veem apenas eventos onde:
-            // 1. São o responsável direto do evento, OU
-            // 2. São responsáveis por pelo menos uma tarefa vinculada
+        // Determinar IDs de interesse baseado no modo
+        var idsInteresse = [userIdGlobal];
+        var isModoEspecialSecretario = false;
+
+        if (roleLower.includes('secretario') || roleLower.includes('secretário')) {
+            if (window.secretarioModoVisualizacao === 'juridico') {
+                idsInteresse = (idsJuridicoGlobal && idsJuridicoGlobal.length > 0) ? idsJuridicoGlobal : [userIdGlobal];
+                isModoEspecialSecretario = true;
+            } else if (window.secretarioModoVisualizacao === 'recursos_humanos') {
+                idsInteresse = (idsRHGlobal && idsRHGlobal.length > 0) ? idsRHGlobal : [userIdGlobal];
+                isModoEspecialSecretario = true;
+            } else if (window.secretarioModoVisualizacao === 'cuidado_animal') {
+                idsInteresse = (idsCuidadoAnimalGlobal && idsCuidadoAnimalGlobal.length > 0) ? idsCuidadoAnimalGlobal : [userIdGlobal];
+                isModoEspecialSecretario = true;
+            } else if (window.secretarioModoVisualizacao === 'direcao' || !window.secretarioModoVisualizacao || window.secretarioModoVisualizacao === 'normal') {
+                // Modo Direção/Normal: Vê tudo
+                eventosMesCache = todosEventos;
+            } else {
+                // Outros modos do secretário (ex: gerencia_ambiental) - Vê tudo por padrão ou podemos filtrar se necessário
+                eventosMesCache = todosEventos;
+            }
+        }
+
+        if (ehDiretor || ehFiscal || (roleLower.includes('secretario') && !isModoEspecialSecretario)) {
+            // Diretor, Fiscal e Secretário (em modo normal) veem todos os eventos
+            if (!isModoEspecialSecretario) eventosMesCache = todosEventos;
+        } else if (ehGerente || isModoEspecialSecretario) {
+            // Gerentes e Secretário em modo especial veem apenas eventos onde:
+            // 1. Um dos IDs de interesse é o responsável direto do evento, OU
+            // 2. Um dos IDs de interesse é responsável por pelo menos uma tarefa vinculada
             eventosMesCache = todosEventos.filter(function (ev) {
-                // Verifica se é responsável direto do evento
-                if (ev.responsavel_id === userIdGlobal) {
+                // Verifica se algum ID de interesse é responsável direto do evento
+                if (idsInteresse.indexOf(ev.responsavel_id) !== -1) {
                     return true;
                 }
 
-                // Verifica se é responsável por alguma tarefa vinculada
+                // Verifica se algum ID de interesse é responsável por alguma tarefa vinculada
                 if (ev.tarefas && ev.tarefas.length > 0) {
                     for (var i = 0; i < ev.tarefas.length; i++) {
                         var tarefa = ev.tarefas[i];
                         if (tarefa.tarefa_responsaveis && tarefa.tarefa_responsaveis.length > 0) {
                             for (var j = 0; j < tarefa.tarefa_responsaveis.length; j++) {
-                                if (tarefa.tarefa_responsaveis[j].user_id === userIdGlobal) {
+                                if (idsInteresse.indexOf(tarefa.tarefa_responsaveis[j].user_id) !== -1) {
                                     return true;
                                 }
                             }
@@ -200,7 +241,7 @@ async function carregarEventos() {
                 return false;
             });
         } else {
-            // Outros perfis (Administrador de Posturas, etc.) - comportamento padrão
+            // Comportamento padrão: vê tudo
             eventosMesCache = todosEventos;
         }
         if (typeof renderizarCalendario === 'function') renderizarCalendario();
@@ -227,7 +268,11 @@ async function carregarEventos() {
 
         if (eventosParaExibir.length === 0) {
             var msg = window.dataFiltroSelecionada ? 'Nenhum evento neste dia.' : 'Nenhum evento futuro cadastrado.';
-            containerCards.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">' + msg + '</div>';
+            var emptyHtml = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">' + msg + '</div>';
+            if (containerCards) containerCards.innerHTML = emptyHtml;
+            
+            var homeContainerCards = document.getElementById('home-lista-eventos-container');
+            if (homeContainerCards) homeContainerCards.innerHTML = emptyHtml;
         } else {
             var htmlCards = '';
             eventosParaExibir.forEach(function (ev) {
@@ -303,7 +348,10 @@ async function carregarEventos() {
 
                 htmlCards += '</div>'; // Fecha Wrapper
             });
-            containerCards.innerHTML = htmlCards;
+            if (containerCards) containerCards.innerHTML = htmlCards;
+            
+            var homeContainerCards = document.getElementById('home-lista-eventos-container');
+            if (homeContainerCards) homeContainerCards.innerHTML = htmlCards;
         }
 
     } catch (err) {
@@ -630,8 +678,12 @@ async function carregarTarefas() {
 
         // Verifica se é gerente (mas NÃO é Gerente de Regularização Ambiental)
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var roleLowerNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
-        ehGerenteKanban = (roleLowerRaw.includes('gerente') && !ehGerenteAmbiental);
+        var isJuridico = roleLowerNorm.includes('gerente') && roleLowerNorm.includes('interface') && roleLowerNorm.includes('juridica');
+        var isAgenteAdmin = roleLowerNorm.includes('agente') && roleLowerNorm.includes('administracao');
+        
+        ehGerenteKanban = (roleLowerRaw.includes('gerente') && !ehGerenteAmbiental) || isJuridico || isAgenteAdmin;
 
         // Se for diretor no modo 'gerencia' ou 'gerencia_posturas', ele atua como gerente (vê tudo dos gerentes de posturas)
         if ((roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente') && 
@@ -694,22 +746,46 @@ async function carregarTarefas() {
                         return idsGerentesAmbientalGlobal.indexOf(uid) !== -1;
                     });
                     if (!ehGerenteRACriadorSec && !temEquipeRAResponsavelSec) return;
+                } else if (window.secretarioModoVisualizacao === 'cuidado_animal') {
+                    // Modo Cuidado Animal: Ver tarefas criadas pela equipe de CA OU onde são responsáveis
+                    var ehCACriador = idsCuidadoAnimalGlobal.indexOf(t.criado_por) !== -1;
+                    var temCAResponsavel = t._respUserIds.some(function (uid) {
+                        return idsCuidadoAnimalGlobal.indexOf(uid) !== -1;
+                    });
+                    if (!ehCACriador && !temCAResponsavel) return;
+                } else if (window.secretarioModoVisualizacao === 'juridico') {
+                    // Modo Jurídico: Ver tarefas criadas pelo Gerente Jurídico OU onde é responsável
+                    var ehJuridicoCriador = idsJuridicoGlobal.indexOf(t.criado_por) !== -1;
+                    var temJuridicoResponsavel = t._respUserIds.some(function (uid) {
+                        return idsJuridicoGlobal.indexOf(uid) !== -1;
+                    });
+                    if (!ehJuridicoCriador && !temJuridicoResponsavel) return;
+                } else if (window.secretarioModoVisualizacao === 'recursos_humanos') {
+                    // Modo RH: Ver tarefas criadas pelo Agente de Admin OU onde é responsável
+                    var ehRHCriador = idsRHGlobal.indexOf(t.criado_por) !== -1;
+                    var temRHResponsavel = t._respUserIds.some(function (uid) {
+                        return idsRHGlobal.indexOf(uid) !== -1;
+                    });
+                    if (!ehRHCriador && !temRHResponsavel) return;
                 } else {
                     // Modo normal: não aplica filtro especial (vê tudo ou conforme outras regras)
                     if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
                 }
             }
-            // FILTRO GERENTE DE POSTURAS - vê apenas o que criou ou onde é responsável
+            // FILTRO GERENTE DE POSTURAS E JURÍDICO - vê apenas o que criou ou onde é responsável
             else if (ehGerenteKanban) {
-                // Verifica se é Gerente de Posturas (não é Gerente de Regularização Ambiental)
                 var ehGerentePosturas = roleLowerRaw.includes('postur');
-                if (ehGerentePosturas) {
-                    // Gerente de Posturas: vê tarefas que criou OU onde é responsável
+                var roleLowerNormFilter = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                var isGerenteJuridico = roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica');
+                var isAgenteAdminSelf = roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao');
+
+                if (ehGerentePosturas || isGerenteJuridico || isAgenteAdminSelf) {
+                    // vê tarefas que criou OU onde é responsável
                     var ehResponsavel = t._respUserIds.indexOf(userIdGlobal) !== -1 || t._ehMinhaViaSub;
                     var ehCriador = t.criado_por === userIdGlobal;
                     if (!ehResponsavel && !ehCriador) return;
                 }
-                // Se for outro tipo de gerente (não Posturas, não Ambiental), vê tudo (comportamento anterior)
+                // Se for outro tipo de gerente (não Posturas, não Ambiental, não Jurídico), vê tudo
             }
             // FILTRO GERENTE DE REGULARIZAÇÃO AMBIENTAL
             else if ((userRoleGlobal || '').toLowerCase().includes('regularizacao') || 
@@ -863,14 +939,21 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
     // Verificação de segurança: Diretor, Gerente e Secretario podem criar tarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
+    
+    var roleLowerNormFilter = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) || 
+                          (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
+
     var ehGerente = (roleLowerRaw.includes('gerente') || 
                      roleLowerRaw === 'administrativo' || 
                      roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
-                     roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura'));
+                     roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
+                     isCargoEspecial);
+                     
     var ehSecretario = (userRoleGlobal === 'Secretário(a)');
     console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario);
     if (!ehDiretor && !ehGerente && !ehSecretario) {
-        Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Secretários podem criar tarefas.', 'error');
+        Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Cargos Especiais podem criar tarefas.', 'error');
         return;
     }
     
@@ -986,7 +1069,9 @@ async function carregarListaResponsaveis() {
                               roleLower.includes('administrativo') ||
                               roleLower.includes('diretor') ||
                               roleLower.includes('secretário') ||
-                              roleLower.includes('secretario');
+                              roleLower.includes('secretario') ||
+                              roleLower.includes('coordenador') ||
+                              roleLower.includes('agente');
             // Verifica se é da equipe do Gerente de Regularização Ambiental
             var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
                                     roleLower.includes('engenheiro') || 
@@ -2973,10 +3058,13 @@ function configurarModoTarefas(modo) {
     // Atualiza a aba que estiver visível
     var contMinhas = document.getElementById('minhas-tarefas-container');
     if (contMinhas && contMinhas.style.display === 'block') {
-        carregarMinhasTarefasModulo();
+        if (typeof carregarMinhasTarefasModulo === 'function') carregarMinhasTarefasModulo();
     } else {
-        carregarTarefas();
+        if (typeof carregarTarefas === 'function') carregarTarefas();
     }
+    
+    // Atualizar calendário também
+    if (typeof carregarEventos === 'function') carregarEventos();
 
     // Dispara evento para notificar painel.js que o modo mudou
     window.dispatchEvent(new CustomEvent('modoTarefasMudou', { detail: { modo: modo } }));

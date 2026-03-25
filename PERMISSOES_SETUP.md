@@ -5,9 +5,20 @@ Este guia explica como configurar as permissões para que Gerentes, Diretores e 
 ## 📋 Resumo da Hierarquia
 
 ```
-Secretário(a) → pode excluir: Diretor, Gerente, Fiscal
-Diretor(a) → pode excluir: Gerente, Fiscal
-Gerente → pode excluir: Fiscal
+Secretário(a) (nível 4)
+ ├── Diretor(a) de Meio Ambiente (nível 3)
+ │    ├── Gerente de Posturas (nível 2) → Fiscal (nível 1)
+ │    └── Gerente de Regularização Ambiental (nível 2) → Equipe Ambiental (nível 1)
+ ├── Diretor(a) do Cuidado Animal (nível 3)
+ │    └── Gerente do Cuidado Animal (nível 2)
+ │         └── Coordenador(a) do Cuidado Animal (nível 1)
+ ├── Gerente de Interface Jurídica (Cargo Especial)
+ └── Agente de Administração (Cargo Especial)
+
+Permissões de exclusão:
+Secretário(a) → pode excluir: Diretor, Gerente, Fiscal, Equipe Ambiental
+Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental
+Gerente → pode excluir: Fiscal, Equipe Ambiental
 ```
 
 ## 🚀 Opção 1: SQL Simples (Recomendado para começar)

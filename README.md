@@ -36,7 +36,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 
 ### Perfis de Usuário (Roles)
 
-O sistema possui **6 cargos distintos** com permissões específicas:
+O sistema possui **8+ cargos distintos** com permissões específicas:
 
 | Cargo | Permissões Principais |
 |-------|----------------------|
@@ -49,6 +49,8 @@ O sistema possui **6 cargos distintos** com permissões específicas:
 | **Administrativo de Posturas** | Acesso ao Histórico Geral (visor apenas) |
 | **Diretor de Meio Ambiente** | Acesso total com menus expansíveis "Gerência de Posturas" e "Gerência de Regularização Ambiental", alternância entre modos Direção e Gerência |
 | **Secretário(a)** | Acesso total com menu expansível "Direção de Meio Ambiente", gestão de Diretores, criação de tarefas para qualquer usuário |
+| **Gerente de Interface Jurídica** | Tarefas próprias (criar/ver apenas onde é responsável), visualização de projetos, **sem** gestão de equipe |
+| **Agente de Administração** | Tarefas próprias (criar/ver apenas onde é responsável), visualização de projetos, **sem** gestão de equipe |
 
 ### Aba de Configurações (Meu Perfil)
 - Fica disponível para qualquer um na navegação inferior esquerda.
@@ -131,6 +133,9 @@ Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projeto
 | Diretor | Todos os eventos | ✓ | ✓ |
 | Fiscal | Todos os eventos | ✗ | ✗ |
 | Gerente | Eventos onde é responsável ou tem tarefa vinculada | ✗ | ✗ |
+| Cargos Especiais* | Apenas onde é responsável | ✗ | ✗ |
+
+\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
 
 ---
 
@@ -229,21 +234,24 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 
 ### Permissões por Role
 
-| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) | Gerente RA |
-|------|--------|---------------|--------------------------|---------------|------------|
-| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas | Só da equipe RA |
-| Alterar status | Apenas das suas | Todas | Todas | Todas | Todas |
-| Criar tarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ |
-| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ |
-| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ |
-| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas |
-| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas |
-| Ver eventos | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ |
-| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ |
-| Gerenciar Equipe Ambiental | ✗ | ✗ | ✓ | ✓ | ✓ |
-| Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ |
-| Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ |
+| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) | Gerente RA | Cargos Especiais* |
+|------|--------|---------------|--------------------------|---------------|------------|-------------------|
+| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas | Só da equipe RA | Só onde é responsável |
+| Alterar status | Apenas das suas | Todas | Todas | Todas | Todas | Apenas das suas |
+| Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
+| Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
+| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
+| Ver eventos/projetos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (onde é responsável) |
+| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| Gerenciar Equipe Ambiental | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ |
+| Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+
+\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
 
 ### Ícones SVG
 - Todos os ícones do módulo utilizam **SVGs inline stroke-only** (estilo minimalista da sidebar), sem emojis.
@@ -333,11 +341,14 @@ O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveita
 #### Coluna Esquerda - Árvore Hierárquica:
 - **Visualização organizacional** completa da SEMAC em formato de árvore
 - **Cards transparentes** com bordas coloridas por cargo:
-  - Roxo (`#7c3aed`) para Diretores
+  - Roxo (`#7c3aed`) para Diretores de Meio Ambiente
   - Verde escuro (`#0c3e2b`) para Gerentes de Posturas
   - Azul (`#1e3a5f`) para Gerentes de Regularização Ambiental
   - Laranja (`#b45309`) para Fiscais
   - Verde (`#065f46`) para Equipe Ambiental
+  - Rosa (`#db2777`) para Diretor(a) do Cuidado Animal
+  - Rosa escuro (`#be185d`) para Gerente do Cuidado Animal
+  - Magenta (`#c026d3`) para Coordenador(a) do Cuidado Animal
 - **Botões "+ Novo"** em cada nível para cadastro rápido
 - **Ícone de lixeira** em cada card para desativação de funcionários
 - **Contadores discretos** embaixo de cada cargo (ex: "3 diretores", "5 fiscais")
@@ -362,12 +373,21 @@ O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveita
    - Clique em qualquer evento ou "Ver todos →" navega para a aba Projetos
 
 ### Hierarquia de Cargos:
+```text
+Secretário(a) (nível 4)
+ ├── Diretor(a) de Meio Ambiente (nível 3)
+ │    ├── Gerente de Posturas (nível 2) → Fiscal (nível 1)
+ │    └── Gerente de Regularização Ambiental (nível 2) → Equipe Ambiental (nível 1)
+ │
+ ├── Diretor(a) do Cuidado Animal (nível 3)
+ │    └── Gerente do Cuidado Animal (nível 2)
+ │         └── Coordenador(a) do Cuidado Animal (nível 1)
+ │
+ ├── Gerente de Interface Jurídica (Cargo Especial)
+ └── Agente de Administração (Cargo Especial)
 ```
-Secretário(a) → Diretor → Gerente de Posturas → Fiscal
-                    ↓
-              Gerente de Regularização Ambiental → Equipe Ambiental
-                    (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares)
-```
+
+> **Nota**: Cargos Especiais (Gerente de Interface Jurídica, Agente de Administração) **não fazem parte da hierarquia de gestão**. Eles têm acesso apenas às próprias tarefas e não gerenciam equipes.
 
 ### Funcionalidades de Gestão:
 - **Gestão Completa de Funcionários**: Cadastro e desativação de todos os cargos
@@ -461,6 +481,66 @@ O Gerente de Regularização Ambiental possui visão específica para gestão da
 ### Visibilidade de Tarefas:
 - **Modo Gerência RA**: Diretor visualiza tarefas onde a equipe RA é responsável (não apenas criadas por eles)
 - **Tarefas da Equipe**: Cards clicáveis mostram estatísticas detalhadas de produtividade
+
+---
+
+## ⚖️ Cargos Especiais (Interface Jurídica e Administração)
+
+Cargos com permissões específicas e restritas, **não tratados como Gerentes** no sistema.
+
+### Cargos Disponíveis:
+| Cargo | Descrição |
+|-------|-----------|
+| **Gerente de Interface Jurídica** | Responsável por demandas jurídicas e interface com o setor legal |
+| **Agente de Administração** | Responsável por tarefas administrativas internas |
+
+### Características dos Cargos Especiais:
+
+#### 🏠 Home Exclusiva
+- **Layout em duas colunas**:
+  - **Esquerda**: Minhas Tarefas (apenas onde é responsável)
+  - **Direita**: Calendário de Projetos/Eventos (próximos 30 dias)
+- **Sem acesso** às dashboards de gestão de fiscais ou equipes
+
+#### 📋 Permissões de Tarefas:
+| Ação | Permissão |
+|------|-----------|
+| Ver tarefas | Apenas onde é **responsável** ou **criador** |
+| Criar tarefa | ✓ (apenas para si mesmo) |
+| Atribuir responsável | Apenas **próprio usuário** (não pode atribuir a terceiros) |
+| Alterar status | Apenas das próprias tarefas |
+| Criar subtarefa | ✗ |
+| Excluir tarefa | ✗ |
+
+#### 📅 Permissões de Projetos/Eventos:
+| Ação | Permissão |
+|------|-----------|
+| Ver projetos/eventos | ✓ (onde é responsável) |
+| Criar projeto/evento | ✗ (apenas Diretor/Secretário) |
+| Editar projeto/evento | ✗ |
+| Excluir projeto/evento | ✗ |
+
+#### 🔧 Menu Sidebar:
+```
+🏠 Home
+📁 Projetos (visualização apenas)
+📋 Tarefas
+```
+
+#### ⚠️ Restrições Importantes:
+- **Não aparecem** no ranking de gerentes
+- **Não têm acesso** ao Histórico Geral de fiscais
+- **Não podem** gerenciar equipes ou fiscais
+- **Não podem** criar eventos/projetos (apenas visualizar)
+
+#### 🔧 Implementação Técnica:
+- **Detecção automática**: O sistema normaliza o texto do cargo para remover acentos antes da verificação:
+  ```javascript
+  var roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // "jurídica" → "juridica", "administração" → "administracao"
+  ```
+- **Detecção por prioridade**: Cargos especiais são verificados **antes** da detecção genérica de "gerente", evitando que sejam tratados como Gerentes de Posturas
+- **User ID**: A função `carregarCalendarioProjetosEspecial()` obtém o ID do usuário via `getAuthUser()` caso `userIdGlobal` não esteja disponível
 
 ---
 
@@ -619,3 +699,19 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal e Gerente RA/Equipe Ambiental
 - Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal), Verde (Equipe)
 - Modal combinado para Fiscais: Estatísticas de tarefas + relatório de produtividade lado a lado
+
+### Nova Hierarquia: Cuidado Animal
+- **Diretor(a) do Cuidado Animal**: Dashboard com gestão de Gerentes e Coordenadores de CA
+- **Gerente do Cuidado Animal**: Dashboard com gestão de Coordenadores de CA
+- **Coordenador(a) do Cuidado Animal**: Acesso às tarefas atribuídas
+- **Cores**: Rosa (`#db2777`) para Diretor, Rosa escuro (`#be185d`) para Gerente, Magenta (`#c026d3`) para Coordenador
+- Menu expansível "Cuidado Animal" no sidebar do Diretor e Secretário
+- Filtro de tarefas por modo `cuidado_animal`
+
+### Cargos Especiais: Interface Jurídica e Administração
+- **Novos Cargos**: "Gerente de Interface Jurídica" e "Agente de Administração"
+- **Home Exclusiva**: Layout em duas colunas (Minhas Tarefas + Calendário de Projetos)
+- **Permissões Restritas**: Apenas tarefas onde é responsável, atribuição somente para si mesmo
+- **Sem Acesso**: Não podem criar projetos/eventos, não gerenciam equipes, não aparecem no ranking
+- **Detecção por Normalização**: Sistema remove acentos automaticamente ("jurídica" → "juridica") para evitar conflitos de detecção
+- **Menu Específico**: Sidebar simplificado com Home, Projetos (visualização) e Tarefas
