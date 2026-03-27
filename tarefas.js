@@ -66,7 +66,7 @@ async function carregarModuloTarefas() {
             var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
             // Verificação flexível para Diretor (qualquer variação)
             var ehDiretor = roleLowerRaw.includes('diretor');
-            var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+            var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
             // Gerentes podem criar tarefas, mas não projetos/eventos
             var ehGerente = roleLowerRaw.includes('gerente');
 
@@ -445,7 +445,7 @@ function renderizarConteudoExpandidoEvento(ev) {
     // Controles Administrativos
     var roleLower = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLower.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     // Apenas Diretor e Secretário podem editar/excluir eventos e inserir tarefas em projetos
     var podeEditarEvento = ehDiretor || ehSecretario;
     
@@ -488,7 +488,7 @@ function abrirModalNovoEvento() {
     // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
@@ -515,7 +515,7 @@ async function salvarEvento() {
     // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
@@ -547,7 +547,7 @@ async function salvarEvento() {
 async function excluirEvento(id) {
     var roleLower = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLower.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     
     // Apenas Diretor e Secretário podem excluir eventos
     if (!ehDiretor && !ehSecretario) {
@@ -692,7 +692,8 @@ async function carregarTarefas() {
         }
 
         // Se for secretario no sub-modo 'gerencia', também atua como gerente
-        if (userRoleGlobal === 'Secretário(a)' && window.secretarioModoVisualizacao === 'direcao' && window.secretarioModoGerencia) {
+        var ehSecretarioReal = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
+        if (ehSecretarioReal && window.secretarioModoVisualizacao === 'direcao' && window.secretarioModoGerencia) {
             ehGerenteKanban = true;
         }
 
@@ -725,51 +726,56 @@ async function carregarTarefas() {
                 }
             }
             // FILTRO SECRETARIO
-            else if (userRoleGlobal === 'Secretário(a)') {
-                if (window.secretarioModoVisualizacao === 'direcao') {
-                    if (window.secretarioModoGerencia) {
-                        // Sub-modo Gerência: Ver tarefas dos GERENTES (igual Diretor)
-                        if (idsGerentesGlobal.indexOf(t.criado_por) === -1) return;
-                    } else {
-                        // Modo Direção: Ver apenas tarefas criadas por Diretores ou onde Diretor é responsável
-                        var ehDiretorCriador = idsDiretoresGlobal.indexOf(t.criado_por) !== -1;
-                        var temDiretorResponsavel = t._respUserIds.some(function (uid) {
-                            return idsDiretoresGlobal.indexOf(uid) !== -1;
+            else if (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)') {
+                // SEMPRE ver o que o próprio usuário criou (independente do modo)
+                var ehCriadorProprio = t.criado_por === userIdGlobal;
+                
+                if (!ehCriadorProprio) {
+                    if (window.secretarioModoVisualizacao === 'direcao') {
+                        if (window.secretarioModoGerencia) {
+                            // Sub-modo Gerência: Ver tarefas dos GERENTES (igual Diretor)
+                            if (idsGerentesGlobal.indexOf(t.criado_por) === -1) return;
+                        } else {
+                            // Modo Direção: Ver apenas tarefas criadas por Diretores ou onde Diretor é responsável
+                            var ehDiretorCriador = idsDiretoresGlobal.indexOf(t.criado_por) !== -1;
+                            var temDiretorResponsavel = t._respUserIds.some(function (uid) {
+                                return idsDiretoresGlobal.indexOf(uid) !== -1;
+                            });
+                            if (!ehDiretorCriador && !temDiretorResponsavel) return;
+                        }
+                    } else if (window.secretarioModoVisualizacao === 'gerencia_ambiental') {
+                        // Modo Gerência RA: Ver tarefas criadas por GERENTES DE REGULARIZAÇÃO AMBIENTAL 
+                        // OU onde algum membro da equipe RA é responsável
+                        var ehGerenteRACriadorSec = idsGerentesAmbientalGlobal.indexOf(t.criado_por) !== -1;
+                        var temEquipeRAResponsavelSec = t._respUserIds.some(function (uid) {
+                            return idsGerentesAmbientalGlobal.indexOf(uid) !== -1;
                         });
-                        if (!ehDiretorCriador && !temDiretorResponsavel) return;
+                        if (!ehGerenteRACriadorSec && !temEquipeRAResponsavelSec) return;
+                    } else if (window.secretarioModoVisualizacao === 'cuidado_animal') {
+                        // Modo Cuidado Animal: Ver tarefas criadas pela equipe de CA OU onde são responsáveis
+                        var ehCACriador = idsCuidadoAnimalGlobal.indexOf(t.criado_por) !== -1;
+                        var temCAResponsavel = t._respUserIds.some(function (uid) {
+                            return idsCuidadoAnimalGlobal.indexOf(uid) !== -1;
+                        });
+                        if (!ehCACriador && !temCAResponsavel) return;
+                    } else if (window.secretarioModoVisualizacao === 'juridico') {
+                        // Modo Jurídico: Ver tarefas criadas pelo Gerente Jurídico OU onde é responsável
+                        var ehJuridicoCriador = idsJuridicoGlobal.indexOf(t.criado_por) !== -1;
+                        var temJuridicoResponsavel = t._respUserIds.some(function (uid) {
+                            return idsJuridicoGlobal.indexOf(uid) !== -1;
+                        });
+                        if (!ehJuridicoCriador && !temJuridicoResponsavel) return;
+                    } else if (window.secretarioModoVisualizacao === 'recursos_humanos') {
+                        // Modo RH: Ver tarefas criadas pelo Agente de Admin OU onde é responsável
+                        var ehRHCriador = idsRHGlobal.indexOf(t.criado_por) !== -1;
+                        var temRHResponsavel = t._respUserIds.some(function (uid) {
+                            return idsRHGlobal.indexOf(uid) !== -1;
+                        });
+                        if (!ehRHCriador && !temRHResponsavel) return;
+                    } else {
+                        // Modo normal: não aplica filtro especial (vê tudo ou conforme outras regras)
+                        if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
                     }
-                } else if (window.secretarioModoVisualizacao === 'gerencia_ambiental') {
-                    // Modo Gerência RA: Ver tarefas criadas por GERENTES DE REGULARIZAÇÃO AMBIENTAL 
-                    // OU onde algum membro da equipe RA é responsável
-                    var ehGerenteRACriadorSec = idsGerentesAmbientalGlobal.indexOf(t.criado_por) !== -1;
-                    var temEquipeRAResponsavelSec = t._respUserIds.some(function (uid) {
-                        return idsGerentesAmbientalGlobal.indexOf(uid) !== -1;
-                    });
-                    if (!ehGerenteRACriadorSec && !temEquipeRAResponsavelSec) return;
-                } else if (window.secretarioModoVisualizacao === 'cuidado_animal') {
-                    // Modo Cuidado Animal: Ver tarefas criadas pela equipe de CA OU onde são responsáveis
-                    var ehCACriador = idsCuidadoAnimalGlobal.indexOf(t.criado_por) !== -1;
-                    var temCAResponsavel = t._respUserIds.some(function (uid) {
-                        return idsCuidadoAnimalGlobal.indexOf(uid) !== -1;
-                    });
-                    if (!ehCACriador && !temCAResponsavel) return;
-                } else if (window.secretarioModoVisualizacao === 'juridico') {
-                    // Modo Jurídico: Ver tarefas criadas pelo Gerente Jurídico OU onde é responsável
-                    var ehJuridicoCriador = idsJuridicoGlobal.indexOf(t.criado_por) !== -1;
-                    var temJuridicoResponsavel = t._respUserIds.some(function (uid) {
-                        return idsJuridicoGlobal.indexOf(uid) !== -1;
-                    });
-                    if (!ehJuridicoCriador && !temJuridicoResponsavel) return;
-                } else if (window.secretarioModoVisualizacao === 'recursos_humanos') {
-                    // Modo RH: Ver tarefas criadas pelo Agente de Admin OU onde é responsável
-                    var ehRHCriador = idsRHGlobal.indexOf(t.criado_por) !== -1;
-                    var temRHResponsavel = t._respUserIds.some(function (uid) {
-                        return idsRHGlobal.indexOf(uid) !== -1;
-                    });
-                    if (!ehRHCriador && !temRHResponsavel) return;
-                } else {
-                    // Modo normal: não aplica filtro especial (vê tudo ou conforme outras regras)
-                    if (!ehGerenteKanban && t._respUserIds.indexOf(userIdGlobal) === -1 && !t._ehMinhaViaSub) return;
                 }
             }
             // FILTRO GERENTE DE POSTURAS E JURÍDICO - vê apenas o que criou ou onde é responsável
@@ -950,7 +956,7 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
                      roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
                      isCargoEspecial);
                      
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario);
     if (!ehDiretor && !ehGerente && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Cargos Especiais podem criar tarefas.', 'error');
@@ -1016,7 +1022,7 @@ async function carregarListaResponsaveis() {
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
         var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
         // Cargos que podem ser atribuídos em tarefas
-        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
+        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'Secretário(a) do Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
         // Cargos da equipe do Gerente de Regularização Ambiental
         var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
@@ -1408,7 +1414,7 @@ async function abrirDetalheTarefa(id) {
         var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw.includes('diretor'));
         var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
         var ehDiretor = roleLowerRaw.includes('diretor');
-        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         var gerenteCriouTarefa = roleLowerRaw.includes('gerente') && tarefa.criado_por === userIdGlobal;
         var podeEditar = ehDiretor || ehSecretario || gerenteCriouTarefa || ehResponsavel;
 
@@ -1493,7 +1499,7 @@ async function abrirDetalheTarefa(id) {
         // Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
         var ehDiretorReal = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
-        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         var ehGerente = roleLowerRaw.includes('gerente');
         var gerenteCriouTarefa = ehGerente && tarefa.criado_por === userIdGlobal;
         if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
@@ -1599,7 +1605,7 @@ async function alterarStatusTarefa(id, novoStatus) {
         // Verificação de segurança: Diretor, Secretário ou Gerente que criou a tarefa podem alterar status
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
-        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
         if (!ehDiretor && !ehSecretario) {
             var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
@@ -1645,7 +1651,7 @@ async function alterarStatusTarefa(id, novoStatus) {
 async function excluirTarefa(id) {
     var roleLower = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLower.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     
     // Se não for Diretor ou Secretário, verificar se é Gerente que criou a tarefa
     if (!ehDiretor && !ehSecretario) {
@@ -1703,7 +1709,7 @@ async function carregarListaResponsaveisSubtarefa() {
         var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
         var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
-        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
+        var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'Secretário(a) do Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
         // Cargos da equipe do Gerente de Regularização Ambiental
         var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
@@ -1880,7 +1886,7 @@ async function confirmarSubtarefa(tarefaPaiId) {
     // Verificação de segurança: Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehGerente = roleLowerRaw.includes('gerente');
     
     // Se for Gerente, verificar se criou a tarefa pai
@@ -1973,7 +1979,7 @@ async function toggleSubtarefa(subId, checked) {
         var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
-        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
         // Só permite concluir se for responsável ou Diretor/Secretário
         if (!ehResponsavel && !ehDiretor && !ehSecretario) {
@@ -2022,7 +2028,7 @@ async function toggleSubtarefa(subId, checked) {
 async function excluirSubtarefa(subId, tarefaPaiId) {
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehGerente = roleLowerRaw.includes('gerente');
     
     // Se for Gerente, verificar se criou a tarefa pai
@@ -2067,7 +2073,7 @@ async function uploadAnexo(tarefaId, inputEl) {
         var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
-        var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+        var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
         // Só permite anexar se for responsável ou Diretor/Secretário
         if (!ehResponsavel && !ehDiretor && !ehSecretario) {
@@ -2100,7 +2106,7 @@ async function uploadAnexo(tarefaId, inputEl) {
 async function excluirAnexo(anexoId, tarefaId) {
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     
     // Se não for Diretor ou Secretário, verificar se é responsável pela tarefa
     if (!ehDiretor && !ehSecretario) {
@@ -2313,24 +2319,25 @@ async function carregarMinhasTarefasHome(containerId) {
         var user = authResult.data.user;
         if (!user) return;
 
-        // Buscar tarefas onde o usuário é responsável
+        // Buscar tarefas onde o usuário é responsável OU é o criador
         var { data: minhasResps, error: errR } = await supabaseClient
             .from('tarefa_responsaveis')
             .select('tarefa_id')
             .eq('user_id', user.id);
 
         if (errR) throw errR;
-        if (!minhasResps || minhasResps.length === 0) {
-            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px; font-size:15px;">Nenhuma tarefa atribuída a você.</div>';
-            return;
-        }
+        var idsResponsavel = (minhasResps || []).map(function (r) { return r.tarefa_id; });
 
-        var tarefaIds = minhasResps.map(function (r) { return r.tarefa_id; });
+        // Query dinâmica para incluir tarefas criadas por ele
+        var filterStr = 'criado_por.eq.' + user.id;
+        if (idsResponsavel.length > 0) {
+            filterStr = 'or(criado_por.eq.' + user.id + ',id.in.(' + idsResponsavel.join(',') + '))';
+        }
 
         var { data: tarefasDiretas, error: errT } = await supabaseClient
             .from('tarefas')
             .select('*')
-            .in('id', tarefaIds)
+            .or(filterStr)
             .neq('status', 'concluida')
             .order('prazo', { ascending: true });
 
@@ -2652,7 +2659,7 @@ function abrirModalNovoEventoAvancado() {
     // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
@@ -2799,7 +2806,7 @@ async function salvarEventoAvancado() {
     // Verificação de segurança: apenas Diretor e Secretário podem criar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
@@ -2915,7 +2922,7 @@ async function abrirModalEditarEvento(id) {
     // Verificação de segurança: apenas Diretor e Secretário podem editar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     
     // Apenas Diretor e Secretário podem editar eventos
     if (!ehDiretor && !ehSecretario) {
@@ -2990,7 +2997,7 @@ async function salvarEdicaoEvento(id) {
     // Verificação de segurança: apenas Diretor e Secretário podem editar eventos
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)');
+    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem editar eventos.', 'error');
         return;

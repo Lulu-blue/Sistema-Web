@@ -502,7 +502,8 @@ function mudarAba(idAba) {
     }
 
     // Se for Secretario, fechar submenu ao mudar para abas fora dele
-    if (window.userRoleGlobal === 'Secretário(a)') {
+    var isSecretarioGeral = window.userRoleGlobal === 'Secretário(a)' || window.userRoleGlobal === 'Secretário(a) do Secretário(a)';
+    if (isSecretarioGeral) {
         var submenu = document.getElementById('secretario-submenu-direcao');
         var submenuGerencia = document.getElementById('secretario-submenu-gerencia');
         var submenuGerenciaAmbiental = document.getElementById('secretario-submenu-gerencia-ambiental');
@@ -611,7 +612,8 @@ function mudarAba(idAba) {
             if (mtWrapper) mtWrapper.style.display = 'none';
         }
         // SECRETARIO: tem prioridade pois é nivel mais alto
-        if (window.userRoleGlobal === 'Secretário(a)') {
+        var isSecretarioGeral = window.userRoleGlobal === 'Secretário(a)' || window.userRoleGlobal === 'Secretário(a) do Secretário(a)';
+        if (isSecretarioGeral) {
             // Manter submenu aberto se estiver em modo direcao
             var submenuSec = document.getElementById('secretario-submenu-direcao');
             var btnSec = document.getElementById('btn-toggle-direcao');
@@ -942,7 +944,7 @@ window.addEventListener('modoTarefasMudou', function (e) {
     var isDiretorCuidadoAnimal = roleLower.includes('diretor') && roleLower.includes('cuidado') && roleLower.includes('animal');
     var isDiretor = (roleLower === 'diretor(a)' || roleLower === 'diretor(a) de meio ambiente' ||
         roleLower === 'diretor' || roleLower === 'diretor de meio ambiente') && !isDiretorCuidadoAnimal;
-    var isSecretario = window.userRoleGlobal === 'Secretário(a)';
+    var isSecretario = window.userRoleGlobal === 'Secretário(a)' || window.userRoleGlobal === 'Secretário(a) do Secretário(a)';
 
     var abaHome = document.getElementById('aba-home');
     var naHome = abaHome && abaHome.style.display === 'block';
@@ -1097,6 +1099,19 @@ window.addEventListener('modoTarefasMudou', function (e) {
                 }
                 if (mtWrapper) mtWrapper.style.display = 'none';
                 window.secretarioModoVisualizacao = 'direcao';
+                window.secretarioModoGerencia = false;
+            } else {
+                // Modo normal / padrao
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hdca) hdca.style.display = 'none';
+                if (hEsp) hEsp.style.display = 'none';
+                if (hsc) {
+                    hsc.style.display = 'block';
+                    if (typeof carregarDashboardSecretario === 'function') carregarDashboardSecretario();
+                }
+                window.secretarioModoVisualizacao = 'normal';
                 window.secretarioModoGerencia = false;
             }
         }
@@ -1536,6 +1551,7 @@ function fecharDirecaoSecretario() {
     }
     window.secretarioModoVisualizacao = 'normal';
     window.secretarioModoGerencia = false;
+    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
 }
 
 // Função para ir para Home respeitando o perfil do usuário
@@ -1549,7 +1565,8 @@ function irParaHome() {
     var isCargoEspecial = isGerenteInterfaceJuridica || isAgenteAdmin;
 
     // Secretário: vai para modo normal (dashboard de diretores)
-    if (role === 'Secretário(a)') {
+    var isSecretarioGeral = role === 'Secretário(a)' || role === 'Secretário(a) do Secretário(a)';
+    if (isSecretarioGeral) {
         fecharDirecaoSecretario();
         fecharCuidadoAnimalSecretario();
         mudarAba('home');
@@ -2276,7 +2293,7 @@ function toggleCuidadoAnimalSecretario() {
                 btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
             }
             window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
             mudarAba('home');
         }
     } catch (err) {
@@ -2323,7 +2340,7 @@ function toggleJuridicoSecretario() {
             submenu.style.display = 'none';
             if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
             window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
             mudarAba('home');
         }
     } catch (err) { console.error('Erro em toggleJuridicoSecretario:', err); }
@@ -2368,7 +2385,7 @@ function toggleRHSecretario() {
             submenu.style.display = 'none';
             if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
             window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
             mudarAba('home');
         }
     } catch (err) { console.error('Erro em toggleRHSecretario:', err); }
@@ -2384,7 +2401,7 @@ function fecharCuidadoAnimalSecretario() {
         }
     }
     window.secretarioModoVisualizacao = 'normal';
-    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
 }
 
 function fecharJuridicoSecretario() {
@@ -2397,7 +2414,7 @@ function fecharJuridicoSecretario() {
         }
     }
     window.secretarioModoVisualizacao = 'normal';
-    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+    if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
 }
 
 function fecharRHSecretario() {

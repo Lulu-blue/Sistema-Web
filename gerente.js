@@ -3236,6 +3236,7 @@ async function carregarHierarquiaCompletaSecretario() {
         var diretoresCA = [];
         var gerentesJuridico = [];
         var equipeRH = [];
+        var equipeSecDoSec = []; // NOVO CARGO
 
         var gerentesPosturas = [];
         var gerentesAmbiental = [];
@@ -3248,12 +3249,14 @@ async function carregarHierarquiaCompletaSecretario() {
             var roleRaw = (f.role || '').toLowerCase();
             var roleNorm = roleRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-            if (roleRaw.includes('secretario') || roleRaw.includes('secretário')) {
+            if (roleRaw === 'secretário(a)' || roleRaw === 'secretario(a)' || roleRaw === 'secretario') {
                 return; // Não mostrar secretário
             }
 
             // LÍDERES (Nível 1)
-            if (roleNorm.includes('diretor') && roleNorm.includes('cuidado') && roleNorm.includes('animal')) {
+            if (roleNorm.includes('secretario') && roleNorm.includes('do') && roleNorm.includes('secretario')) {
+                equipeSecDoSec.push(f);
+            } else if (roleNorm.includes('diretor') && roleNorm.includes('cuidado') && roleNorm.includes('animal')) {
                 diretoresCA.push(f);
             } else if (roleNorm.includes('diretor')) {
                 diretoresMA.push(f);
@@ -3402,11 +3405,11 @@ async function carregarHierarquiaCompletaSecretario() {
         
         html += '</div>'; // Fim nível 2 (apenas diretores e hierarquia)
         
-        // ===== CARGOS ESPECIAIS (RH/ADM e JURÍDICO) - EMBAIXO DE TUDO =====
-        html += '<div style="display: flex; justify-content: center; gap: 60px; width: 100%; margin-top: 25px; padding-top: 20px; border-top: 1px dashed #cbd5e1;">';
+        // ===== CARGOS ESPECIAIS (RH/ADM, JURÍDICO e SEC DO SEC) - EMBAIXO DE TUDO =====
+        html += '<div style="display: flex; justify-content: center; gap: 40px; width: 100%; margin-top: 25px; padding-top: 20px; border-top: 1px dashed #cbd5e1; flex-wrap: wrap;">';
         
         // === RH / ADM ===
-        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 180px;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 160px;">';
         html += '<span style="background: #0d9488; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">RH / ADM</span>';
         html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
         equipeRH.forEach(function (e) { html += renderizarCardArvore(e, '#0d9488', 'rh'); });
@@ -3416,13 +3419,23 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>';
         
         // === JURÍDICO ===
-        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 180px;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 160px;">';
         html += '<span style="background: #4f46e5; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">JURÍDICO</span>';
         html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
         gerentesJuridico.forEach(function (g) { html += renderizarCardArvore(g, '#4f46e5', 'juridico'); });
         if (gerentesJuridico.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Interface Jurídica\')" style="margin-top: 10px; background: #4f46e515; border: 1px dashed #4f46e5; color: #4f46e5; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
+        html += '</div>';
+
+        // === SECRETÁRIO(A) DO SECRETÁRIO(A) ===
+        html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 160px;">';
+        html += '<span style="background: #e11d48; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">SEC. DO SECRETÁRIO(A)</span>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+        equipeSecDoSec.forEach(function (e) { html += renderizarCardArvore(e, '#e11d48', 'sec_sec'); });
+        if (equipeSecDoSec.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
+        html += '</div>';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Secretário(a) do Secretário(a)\')" style="margin-top: 10px; background: #e11d4815; border: 1px dashed #e11d48; color: #e11d48; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
         html += '</div>';
         
         html += '</div>'; // Fim cargos especiais
