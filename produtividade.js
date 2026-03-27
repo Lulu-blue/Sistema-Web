@@ -61,7 +61,7 @@ const CATEGORIAS = [
     {
         id: '1.1',
         nome: 'Notificação Preliminar',
-        pontos: 20,
+        pontos: 5,
         destaque: true,
         campos: [
             { nome: 'n_notificacao', label: 'N° da Notificação', tipo: 'text', obrigatorio: true },
@@ -75,7 +75,7 @@ const CATEGORIAS = [
     {
         id: '1.2',
         nome: 'Auto de Infração',
-        pontos: 60,
+        pontos: 5,
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Contribuinte', tipo: 'text', obrigatorio: true },
@@ -109,7 +109,7 @@ const CATEGORIAS = [
     {
         id: '1.4',
         nome: 'Ofício',
-        pontos: 15,
+        pontos: 10,
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
@@ -119,7 +119,7 @@ const CATEGORIAS = [
     {
         id: '1.5',
         nome: 'Relatório de Vistoria',
-        pontos: 15,
+        pontos: 10,
         destaque: true,
         campos: [
             { nome: 'atendimento', label: 'Para o atendimento...', tipo: 'textarea', obrigatorio: true }
@@ -128,7 +128,7 @@ const CATEGORIAS = [
     {
         id: '1.6',
         nome: 'Protocolo',
-        pontos: 15,
+        pontos: 8,
         destaque: true,
         campos: [
             { nome: 'n_protocolo', label: 'N° do Protocolo', tipo: 'text', obrigatorio: true },
@@ -141,7 +141,7 @@ const CATEGORIAS = [
     {
         id: '1.7',
         nome: 'Réplica',
-        pontos: 15,
+        pontos: 50,
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
@@ -380,7 +380,7 @@ const CATEGORIAS = [
     {
         id: '24',
         nome: 'Expedição de Termo de Interdição de estabelecimentos',
-        pontos: 50,
+        pontos: 80,
         campos: [
             { nome: 'estabelecimento', label: 'Nome do Estabelecimento', tipo: 'text', obrigatorio: true },
             { nome: 'tipo', label: 'Tipo (Comercial / Industrial / Educacional / Público)', tipo: 'text', obrigatorio: true },
@@ -390,7 +390,7 @@ const CATEGORIAS = [
     {
         id: '25',
         nome: 'Cumprimento do Termo de Interdição de estabelecimentos',
-        pontos: 50,
+        pontos: 150,
         campos: [
             { nome: 'estabelecimento', label: 'Nome do Estabelecimento', tipo: 'text', obrigatorio: true },
             { nome: 'tipo', label: 'Tipo (Comercial / Industrial / Educacional / Público)', tipo: 'text', obrigatorio: true },
@@ -400,7 +400,7 @@ const CATEGORIAS = [
     {
         id: '26',
         nome: 'Cassação de Alvarás de Localização e funcionamento, devido a irregularidades',
-        pontos: 30,
+        pontos: 100,
         campos: [
             { nome: 'estabelecimento', label: 'Nome do Estabelecimento', tipo: 'text', obrigatorio: true },
             { nome: 'n_alvara', label: 'N° do Alvará', tipo: 'text', obrigatorio: true },
@@ -410,7 +410,7 @@ const CATEGORIAS = [
     {
         id: '27',
         nome: 'Cassação de Licenças (Bancas, Barracas, Panfletagem, Mesa e Cadeira, Propaganda Sonora)',
-        pontos: 30,
+        pontos: 40,
         campos: [
             { nome: 'tipo_licenca', label: 'Tipo de Licença', tipo: 'text', obrigatorio: true },
             { nome: 'n_licenca', label: 'N° da Licença', tipo: 'text', obrigatorio: true },
@@ -420,7 +420,7 @@ const CATEGORIAS = [
     {
         id: '28',
         nome: 'Plantão fiscal na repartição, por hora trabalhada',
-        pontos: 10,
+        pontos: 20,
         por_hora: true,
         campo_horas: 'duracao',
         campos: [
@@ -432,7 +432,7 @@ const CATEGORIAS = [
     {
         id: '29',
         nome: 'Treinamento e/ou aperfeiçoamento (cursos, seminários, reuniões), por hora',
-        pontos: 10,
+        pontos: 40,
         por_hora: true,
         campo_horas: 'duracao',
         campos: [
@@ -444,7 +444,7 @@ const CATEGORIAS = [
     {
         id: '30',
         nome: 'Operações diversas de fiscalização, por hora trabalhada',
-        pontos: 10,
+        pontos: 20,
         por_hora: true,
         campo_horas: 'duracao',
         campos: [
