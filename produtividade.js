@@ -586,6 +586,16 @@ function abrirFormulario(categoria) {
             `;
         } else if (campo.tipo === 'file') {
             inputHTML = `<input type="file" id="campo-${campo.nome}" accept="${campo.aceitar || '*'}" ${campo.obrigatorio ? 'required' : ''}>`;
+        } else if (campo.nome === 'n_licenca' && categoria.id === '19') {
+            // Caso especial: Categoria 19 com múltiplos campos de licença
+            inputHTML = `
+                <div id="container-licencas" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div class="licenca-item" style="display: flex; gap: 8px;">
+                        <input type="text" class="campo-licenca-multi" placeholder="N° da Licença" required style="flex: 1;">
+                        <button type="button" class="btn-add-licenca" onclick="adicionarCampoLicenca()" style="background: #2ecc71; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">+</button>
+                    </div>
+                </div>
+            `;
         } else {
             inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''}>`;
         }
@@ -662,6 +672,24 @@ function fecharModalProdutividade() {
     categoriaAtual = null;
 }
 
+// --- FUNÇÃO PARA ADICIONAR CAMPO DE LICENÇA (CATEGORIA 19) ---
+window.adicionarCampoLicenca = function() {
+    const container = document.getElementById('container-licencas');
+    if (!container) return;
+
+    const div = document.createElement('div');
+    div.className = 'licenca-item';
+    div.style.display = 'flex';
+    div.style.gap = '8px';
+    div.style.marginTop = '8px';
+    div.innerHTML = `
+        <input type="text" class="campo-licenca-multi" placeholder="N° da Licença" style="flex: 1;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">×</button>
+    `;
+    container.appendChild(div);
+    div.querySelector('input').focus();
+};
+
 // --- SALVAR REGISTRO ---
 let salvando = false;
 async function salvarRegistro(blobManual = null, nomeManual = null) {
@@ -718,6 +746,28 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 input.style.borderColor = '#e2e8f0';
             }
             return; // não salvar no campos — será salvo como URL após upload
+        }
+
+        // CASO ESPECIAL: Múltiplas licenças (Categoria 19)
+        if (categoriaAtual.id === '19' && campo.nome === 'n_licenca') {
+            const inputsMulti = document.querySelectorAll('.campo-licenca-multi');
+            const lista = [];
+            inputsMulti.forEach(inp => {
+                const val = inp.value.trim();
+                if (val) {
+                    lista.push(val);
+                    inp.style.borderColor = '#e2e8f0';
+                } else if (campo.obrigatorio && lista.length === 0) {
+                    inp.style.borderColor = '#ef4444';
+                }
+            });
+            
+            if (lista.length === 0 && campo.obrigatorio) {
+                todosPreenchidos = false;
+            } else {
+                campos['_lista_licencas'] = lista;
+            }
+            return;
         }
 
         let valor = input.value.trim();
@@ -822,16 +872,42 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     .select());
             } else {
                 // NÃO É CP (Registros Produtividade)
-                ({ data, error } = await supabaseClient
-                    .from('registros_produtividade')
-                    .insert({
-                        user_id: user.id,
-                        categoria_id: categoriaAtual.id,
-                        categoria_nome: categoriaAtual.nome,
-                        pontuacao: pontos,
-                        campos: campos
-                    })
-                    .select());
+                if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
+                    // MULTIPLOS INSERTS (Categoria 19)
+                    const registrosMulti = campos._lista_licencas.map(lic => {
+                        const camposIndiv = { ...campos };
+                        delete camposIndiv._lista_licencas;
+                        camposIndiv.n_licenca = lic;
+                        return {
+                            user_id: user.id,
+                            categoria_id: categoriaAtual.id,
+                            categoria_nome: categoriaAtual.nome,
+                            pontuacao: pontos,
+                            campos: camposIndiv
+                        };
+                    });
+                    ({ data, error } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert(registrosMulti)
+                        .select());
+                } else {
+                    // INSERT NORMAL
+                    const camposLimpos = { ...campos };
+                    if (camposLimpos._lista_licencas) {
+                        camposLimpos.n_licenca = camposLimpos._lista_licencas[0];
+                        delete camposLimpos._lista_licencas;
+                    }
+                    ({ data, error } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert({
+                            user_id: user.id,
+                            categoria_id: categoriaAtual.id,
+                            categoria_nome: categoriaAtual.nome,
+                            pontuacao: pontos,
+                            campos: camposLimpos
+                        })
+                        .select());
+                }
             }
 
             if (error) {
@@ -885,6 +961,8 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             } else if (categoriaAtual.id === '11' && data && data.length > 0) {
                 // Para Dívida Ativa, o usuário precisa ver o número gerado para anotar no processo físico
                 alert(`✅ Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
+            } else if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
+                alert(`✅ ${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
             } else {
                 alert('✅ Registro salvo com sucesso! (' + pontos + ' pontos)');
             }
