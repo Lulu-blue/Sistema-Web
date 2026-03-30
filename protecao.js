@@ -69,6 +69,8 @@ verificarAcesso();
 
         // Adicionar padding ao body para não cobrir conteúdo
         document.body.style.paddingTop = banner.offsetHeight + 'px';
+        
+        startMonitoring();
     }
 
     // Função para esconder o banner
@@ -79,6 +81,7 @@ verificarAcesso();
             document.body.style.paddingTop = '0';
         }, 300);
         isOffline = false;
+        startMonitoring();
     }
 
     // Verificar conexão com ping ao Supabase
@@ -86,7 +89,7 @@ verificarAcesso();
         try {
             const startTime = Date.now();
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000); // 5 segundos timeout
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos timeout
 
             // Tentar fazer uma requisição simples ao Supabase
             const response = await fetch(`${supabaseUrl}/rest/v1/`, {
@@ -99,8 +102,8 @@ verificarAcesso();
             const responseTime = Date.now() - startTime;
 
             if (response.ok || response.status === 401) { // 401 é OK, significa que o servidor está respondendo
-                if (responseTime > 3000) {
-                    // Conexão lenta (mais de 3 segundos)
+                if (responseTime > 10000) {
+                    // Conexão lenta (mais de 10 segundos)
                     showBanner('Sua conexão está muito lenta. Algumas funcionalidades podem não funcionar corretamente.', false);
                 } else if (isOffline) {
                     // Voltou a ficar online
@@ -141,7 +144,7 @@ verificarAcesso();
 
         checkInterval = setInterval(() => {
             checkConnection();
-        }, isOffline ? 5000 : 30000); // 5s se offline, 30s se online
+        }, isOffline ? 30000 : 120000); // 30s se offline, 120s se online
     }
 
     // Iniciar monitoramento quando a página carregar
