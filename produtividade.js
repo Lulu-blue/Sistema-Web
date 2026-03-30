@@ -1745,7 +1745,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
         const dataFormatada = obterDataReal(reg).toLocaleDateString('pt-BR');
         bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
 
-        if (isGerente) {
+        if (podeVerAnexos) {
             if (temAnexo) {
                 bodyHTML += `<td><button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📄 Ver</button></td>`;
             } else {
