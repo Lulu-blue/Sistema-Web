@@ -1206,6 +1206,14 @@ function abrirDetalhes(id) {
     const horaReg = new Date(reg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     html += `<div class="detalhe-item"><span class="detalhe-label">Registrado em</span><span class="detalhe-valor">${dataReg} às ${horaReg}</span></div>`;
 
+    // Número Sequencial (se houver, ex: 001/2026)
+    if (reg.numero_sequencial) {
+        html += `<div class="detalhe-item">
+            <span class="detalhe-label">Número Sequencial</span>
+            <span class="detalhe-valor" style="font-weight: bold; color: #1e293b;">${reg.numero_sequencial}</span>
+        </div>`;
+    }
+
     // Campos com labels descritivos
     Object.entries(campos).forEach(([chave, valor]) => {
         if (!valor) return;
@@ -1826,6 +1834,14 @@ async function abrirDetalhesAdminHist(id) {
     const dataReg = new Date(reg.created_at).toLocaleDateString('pt-BR');
     htmlCampos += `<div style="margin-bottom:8px;"><strong>Registrado em:</strong> ${dataReg}</div>`;
     htmlCampos += `<div style="margin-bottom:8px;"><strong>Fiscal:</strong> ${reg.fiscal_nome}</div>`;
+
+    // Número Sequencial (se houver, ex: 001/2026)
+    if (reg.numero_sequencial) {
+        htmlCampos += `<div style="margin-bottom:8px;">
+            <strong>Número Sequencial:</strong> 
+            <span style="font-weight: bold; color: #1e293b;">${reg.numero_sequencial}</span>
+        </div>`;
+    }
 
     Object.entries(campos).forEach(([chave, valor]) => {
         if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'historico_admin' || chave === 'resposta_fiscal') return;
