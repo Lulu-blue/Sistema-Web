@@ -2209,7 +2209,22 @@ async function abrirRelatorio() {
         .maybeSingle();
 
     const nomeFiscal = perfil?.full_name || 'Fiscal';
-    const anoAtual = new Date().getFullYear();
+    
+    const dataAtual = new Date();
+    let anoRelatorio = dataAtual.getFullYear();
+    let mesIndex = dataAtual.getMonth();
+
+    // Se for dia 1, 2 ou 3 do mês, o relatório é referente ao mês anterior
+    if (dataAtual.getDate() <= 3) {
+        mesIndex -= 1;
+        if (mesIndex < 0) {
+            mesIndex = 11;
+            anoRelatorio -= 1;
+        }
+    }
+
+    const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const mesRelatorio = nomesMeses[mesIndex];
 
     // Filtrar registros omitindo pontuação 0
     const registrosFiltrados = todosRegistros.filter(r => (r.pontuacao || 0) !== 0);
@@ -2268,10 +2283,10 @@ async function abrirRelatorio() {
     const modalHTML = `
             <div class="modal-overlay ativo" id="modal-relatorio" onclick="if(event.target===this)fecharRelatorio()">
                 <div class="relatorio-preview" id="relatorio-conteudo">
-                    <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
+                    <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${mesRelatorio}/${anoRelatorio}</h1>
                     <div class="relatorio-info">
                         <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
-                        <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
+                        <div><strong>Período:</strong> <span contenteditable="true">${mesRelatorio}/${anoRelatorio}</span></div>
                         <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
                         <div><strong>Total de Registros:</strong> ${registrosFiltrados.length}</div>
                     </div>
