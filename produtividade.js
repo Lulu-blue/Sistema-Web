@@ -1486,9 +1486,16 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     subAbaAtual = categoriaId;
     document.querySelectorAll('.sub-aba-btn').forEach(b => b.classList.remove('active'));
     if (btnEl) btnEl.classList.add('active');
-    // Limpar busca ao trocar sub-aba
+    // Limpar TODOS os filtros ao trocar sub-aba
     const buscaInput = document.getElementById('busca-historico-geral');
     if (buscaInput) buscaInput.value = '';
+    const inputFiscal = document.getElementById('busca-fiscal-geral');
+    if (inputFiscal) inputFiscal.value = '';
+    const selectBairro = document.getElementById('filtro-bairro-historico');
+    if (selectBairro) selectBairro.value = '';
+    const selectAno = document.getElementById('busca-ano-geral');
+    if (selectAno) selectAno.value = '';
+    atualizarIndicadorFiltro();
     carregarHistoricoGeral(categoriaId);
 }
 

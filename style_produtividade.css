@@ -1003,11 +1003,16 @@
         left: 0;
         top: 0;
         width: 100%;
+        height: auto !important;
+        overflow: visible !important;
     }
 
     .relatorio-preview {
         box-shadow: none;
         max-width: 100%;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
         padding: 20px;
     }
 
@@ -1017,5 +1022,23 @@
 
     .modal-overlay {
         background: white !important;
+        position: absolute !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Garantir que o body e html não limitem a altura */
+    html, body {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Permitir quebra de página entre seções */
+    .relatorio-secao {
+        page-break-inside: avoid;
+    }
+
+    .relatorio-assinaturas {
+        page-break-inside: avoid;
     }
 }
