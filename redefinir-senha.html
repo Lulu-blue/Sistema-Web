@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir Senha | SEMAC</title>
+    <style>
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: local('Inter Regular'), local('Inter-Regular'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: local('Inter SemiBold'), local('Inter-SemiBold'); }
+        @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: local('Inter Bold'), local('Inter-Bold'); }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #062117 0%, #0c3e2b 50%, #1a5c3a 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h1 { font-size: 1.5rem; color: #0f172a; margin-bottom: 8px; text-align: center; }
+        .card .subtitulo { color: #64748b; font-size: 0.9rem; text-align: center; margin-bottom: 28px; }
+
+        .campo { margin-bottom: 18px; }
+        .campo label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        .campo input {
+            width: 100%; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 12px;
+            font-size: 1rem; font-family: inherit; outline: none; transition: all 0.2s; background: #f8fafc;
+        }
+        .campo input:focus { border-color: #2ecc71; box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.15); background: white; }
+
+        .btn-redefinir {
+            width: 100%; padding: 14px; background: linear-gradient(135deg, #062117, #0c3e2b);
+            color: white; border: none; border-radius: 14px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: all 0.2s; margin-top: 8px;
+        }
+        .btn-redefinir:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(6, 33, 23, 0.4); }
+        .btn-redefinir:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .msg-erro { color: #dc2626; font-size: 0.85rem; margin-top: 8px; display: none; }
+
+        .resultado { text-align: center; }
+        .resultado .icone { font-size: 3.5rem; margin-bottom: 16px; }
+        .resultado h2 { font-size: 1.3rem; margin-bottom: 8px; }
+        .resultado p { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+
+        .btn-voltar {
+            display: inline-block; padding: 12px 28px; background: #f1f5f9; color: #475569;
+            border: 1px solid #e2e8f0; border-radius: 12px; font-size: 0.95rem; font-weight: 500;
+            cursor: pointer; font-family: inherit; text-decoration: none; transition: all 0.2s;
+        }
+        .btn-voltar:hover { background: #e2e8f0; color: #1e293b; }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <!-- Formulário de nova senha -->
+        <div id="form-container">
+            <h1>🔒 Nova Senha</h1>
+            <p class="subtitulo">Digite sua nova senha abaixo.</p>
+
+            <div class="campo">
+                <label for="nova-senha">Nova Senha</label>
+                <input type="password" id="nova-senha" placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div class="campo">
+                <label for="confirmar-senha">Confirmar Senha</label>
+                <input type="password" id="confirmar-senha" placeholder="Repita a senha" />
+            </div>
+
+            <p class="msg-erro" id="msg-erro"></p>
+            <button class="btn-redefinir" id="btn-redefinir" onclick="redefinirSenha()">Redefinir Senha</button>
+        </div>
+
+        <!-- Sucesso -->
+        <div class="resultado" id="sucesso-container" style="display:none;">
+            <div class="icone">✅</div>
+            <h2 style="color:#166534;">Senha alterada com sucesso!</h2>
+            <p>Você já pode fazer login com sua nova senha.</p>
+            <a href="index.html" class="btn-voltar">Ir para o Login</a>
+        </div>
+
+        <!-- Token inválido -->
+        <div class="resultado" id="erro-container" style="display:none;">
+            <div class="icone">⚠️</div>
+            <h2 style="color:#dc2626;">Link inválido ou expirado</h2>
+            <p>Este link de redefinição não é válido ou já foi utilizado. Solicite um novo link na tela de login.</p>
+            <a href="index.html" class="btn-voltar">Voltar ao Login</a>
+        </div>
+    </div>
+
+    <script src="lib/supabase.js"></script>
+    <script>
+        const supabaseUrl = 'https://marmpnusgmbjphffaynr.supabase.co';
+        const supabaseKey = 'sb_publishable_ZVtndwPOvY2dA4Qzlwkl2A_H0-TeUgu';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Extrair token da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        // Se não tem token, mostrar erro
+        if (!token) {
+            document.getElementById('form-container').style.display = 'none';
+            document.getElementById('erro-container').style.display = 'block';
+        }
+
+        async function redefinirSenha() {
+            const novaSenha = document.getElementById('nova-senha').value;
+            const confirmar = document.getElementById('confirmar-senha').value;
+            const msgErro = document.getElementById('msg-erro');
+            const btn = document.getElementById('btn-redefinir');
+
+            msgErro.style.display = 'none';
+
+            if (!novaSenha || novaSenha.length < 6) {
+                msgErro.textContent = 'A senha deve ter pelo menos 6 caracteres.';
+                msgErro.style.display = 'block';
+                return;
+            }
+
+            if (novaSenha !== confirmar) {
+                msgErro.textContent = 'As senhas não coincidem.';
+                msgErro.style.display = 'block';
+                return;
+            }
+
+            btn.textContent = 'Salvando...';
+            btn.disabled = true;
+
+            try {
+                const { data, error } = await supabaseClient.rpc('redefinir_senha_com_token', {
+                    p_token: token,
+                    p_nova_senha: novaSenha
+                });
+
+                if (error) throw error;
+
+                if (!data.sucesso) {
+                    // Token inválido ou expirado
+                    document.getElementById('form-container').style.display = 'none';
+                    document.getElementById('erro-container').style.display = 'block';
+                    return;
+                }
+
+                // Sucesso
+                document.getElementById('form-container').style.display = 'none';
+                document.getElementById('sucesso-container').style.display = 'block';
+
+            } catch (err) {
+                console.error('Erro ao redefinir senha:', err);
+                msgErro.textContent = 'Erro ao redefinir senha: ' + (err.message || 'Tente novamente.');
+                msgErro.style.display = 'block';
+                btn.textContent = 'Redefinir Senha';
+                btn.disabled = false;
+            }
+        }
+
+        // Enter para submeter
+        document.getElementById('confirmar-senha').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') redefinirSenha();
+        });
+    </script>
+</body>
+
+</html>

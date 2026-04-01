@@ -58,8 +58,12 @@ O sistema possui **8+ cargos distintos** com permissões específicas:
 - Fica disponível para qualquer um na navegação inferior esquerda.
 - Exibe o **Cargo**, **Nome**, **CPF**, **Matrícula** e **E-mail Real** (Carregados via tabela de perfis `profiles`).
 - **Upload de Avatar**: Clique na foto do perfil permite o envio de imagem local `.jpg/.png` dimensionada, que será carregada usando o *Storage (`avatars`)* do supabase com chave única por usuário, atualizando dinamicamente na Sidebar.
-- **Redefinição de Senha Segura**: Um modal central de redefinição garante a segurança exigindo que a **Senha Antiga** passe pelo `signInWithPassword()` atrás das cortinas, somado a uma **dupla verificação** da digitação da nova credencial, para só então ativar a trigger de alteração.
-
+- **Redefinição de Senha Interna**: Um modal central de redefinição de senha para usuários logados, que exige a **Senha Antiga** (validada via `signInWithPassword()`) e **dupla verificação** da nova senha.
+- **Recuperação de Senha (Esqueci minha senha)**:
+  - Fluxo customizado via RPC no Supabase validando **Nome + CPF**.
+  - Envio de token de segurança válido por 1 hora para o e-mail real do usuário.
+  - O e-mail é disparado via **Google Apps Script** (contornando a necessidade de SMTP direto no Supabase e possíveis bloqueios).
+  - Atualização da senha (criptografada) via `redefinir-senha.html`.
 ---
 
 ## 📊 Home / Visão Geral
