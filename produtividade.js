@@ -1663,6 +1663,87 @@ function renderizarTabelaGeral(registros, categoriaId) {
                           (window.userRoleGlobal || '').toLowerCase().includes('administrativo') ||
                           (window.userRoleGlobal || '').toLowerCase().includes('administrador');
 
+    const inputFiscal = document.getElementById('busca-fiscal-geral');
+    const termoFiscal = inputFiscal ? inputFiscal.value.trim() : '';
+    const aplicandoFiltroFiscal = typeof termoFiscal === 'string' && termoFiscal.length > 0;
+
+    let qtdVerde = 0;
+    let qtdVermelha = 0;
+    let qtdCinza = 0;
+
+    if (aplicandoFiltroFiscal) {
+        registros.forEach(reg => {
+            const vResposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+            const vHistoricoInfo = reg.campos && reg.campos.historico_admin ? reg.campos.historico_admin.trim() : '';
+            const vVencimento = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento : null;
+
+            let dtVencimentoVencida = false;
+            if (vVencimento) {
+                const hj = new Date();
+                hj.setHours(0,0,0,0);
+                const partes = vVencimento.split('-');
+                if (partes.length === 3) {
+                    const dVence = new Date(partes[0], partes[1] - 1, partes[2]);
+                    if (dVence < hj) dtVencimentoVencida = true;
+                }
+            }
+
+            if (vResposta !== '') {
+                qtdVerde++;
+            } else if (vHistoricoInfo !== '') {
+                qtdVermelha++;
+            } else if (dtVencimentoVencida) {
+                qtdCinza++;
+            }
+        });
+    }
+
+    let graficoHTML = '';
+    if (aplicandoFiltroFiscal) {
+        graficoHTML = `
+            <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h3 style="margin-top:0; margin-bottom:15px; color:#1e293b; font-size:16px;">Status das Pendências do Fiscal</h3>
+                <div style="height: 200px; position: relative;">
+                    <canvas id="grafico-status-fiscal"></canvas>
+                </div>
+            </div>
+        `;
+    }
+
+    const renderizarChart = () => {
+        if (aplicandoFiltroFiscal) {
+            setTimeout(() => {
+                const ctx = document.getElementById('grafico-status-fiscal');
+                if (ctx && typeof Chart !== 'undefined') {
+                    if (window.graficoStatusFiscalChart) {
+                        try { window.graficoStatusFiscalChart.destroy(); } catch(e){}
+                    }
+                    window.graficoStatusFiscalChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Atendidos (Verde)', 'Com Histórico (Vermelho)', 'Vencidos (Cinza)'],
+                            datasets: [{
+                                label: 'Registros',
+                                data: [qtdVerde, qtdVermelha, qtdCinza],
+                                backgroundColor: ['#86efac', '#fca5a5', '#cbd5e1'],
+                                borderColor: ['#4ade80', '#f87171', '#94a3b8'],
+                                borderWidth: 1,
+                                borderRadius: 4,
+                                maxBarThickness: 60
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
+            }, 50);
+        }
+    };
+
     if (categoriaId === 'todos') {
         let headerHTML = '<tr><th>Tipo de Documento</th><th>Identificador / Nome</th><th>Fiscal</th><th>Data</th><th>Pontos</th>';
         if (podeVerAnexos) headerHTML += '<th>Anexo</th>';
@@ -1691,9 +1772,43 @@ function renderizarTabelaGeral(registros, categoriaId) {
             const temAnexo = reg.campos && reg.campos.anexo_pdf;
             const dataFormatada = obterDataReal(reg).toLocaleDateString('pt-BR');
 
+            // --- Lógica de cor (Filtro Fiscal) ---
+            const vResposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+            const vHistoricoInfo = reg.campos && reg.campos.historico_admin ? reg.campos.historico_admin.trim() : '';
+            const vVencimento = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento : null;
+
+            let dtVencimentoVencida = false;
+            if (vVencimento) {
+                const hj = new Date();
+                hj.setHours(0,0,0,0);
+                const partes = vVencimento.split('-');
+                if (partes.length === 3) {
+                    const dVence = new Date(partes[0], partes[1] - 1, partes[2]);
+                    if (dVence < hj) dtVencimentoVencida = true;
+                }
+            }
+
+            let bgColor = 'transparent';
+            let hoverColor = '#f8fafc';
+
+            if (aplicandoFiltroFiscal) {
+                if (vResposta !== '') {
+                    bgColor = '#86efac'; 
+                    hoverColor = '#4ade80'; 
+                } else if (vHistoricoInfo !== '') {
+                    bgColor = '#fca5a5'; 
+                    hoverColor = '#f87171'; 
+                } else if (dtVencimentoVencida) {
+                    bgColor = '#cbd5e1'; 
+                    hoverColor = '#94a3b8'; 
+                }
+            }
+
             let rowAttributes = '';
             if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id)) {
-                rowAttributes = ` style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+                rowAttributes = ` style="background:${bgColor}; cursor:pointer; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+            } else {
+                rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
             }
 
             bodyHTML += `<tr${rowAttributes}>`;
@@ -1702,16 +1817,27 @@ function renderizarTabelaGeral(registros, categoriaId) {
             bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
 
             if (podeVerAnexos) {
+                const temAnexoAR = reg.campos && reg.campos.anexo_ar;
+                let anexoHTML = '';
+                
                 if (temAnexo) {
-                    bodyHTML += `<td><button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📄 Ver</button></td>`;
+                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
+                }
+                if (temAnexoAR) {
+                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                }
+
+                if (anexoHTML !== '') {
+                    bodyHTML += `<td style="vertical-align:middle; text-align:center;">${anexoHTML}</td>`;
                 } else {
-                    bodyHTML += `<td style="color:#94a3b8;font-size:12px;">—</td>`;
+                    bodyHTML += `<td style="color:#94a3b8;font-size:12px;vertical-align:middle;text-align:center;">—</td>`;
                 }
             }
             bodyHTML += '</tr>';
         });
 
         container.innerHTML = `
+            ${graficoHTML}
             <div style="overflow-x: auto;">
                 <table class="historico-tabela">
                     <thead>${headerHTML}</thead>
@@ -1722,6 +1848,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
                 Total: ${registros.length} registro(s)
             </p>
         `;
+        renderizarChart();
         return;
     }
 
@@ -1746,9 +1873,43 @@ function renderizarTabelaGeral(registros, categoriaId) {
     registros.forEach((reg, idx) => {
         const temAnexo = reg.campos && reg.campos.anexo_pdf;
 
+        // --- Lógica de cor (Filtro Fiscal) ---
+        const vResposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+        const vHistoricoInfo = reg.campos && reg.campos.historico_admin ? reg.campos.historico_admin.trim() : '';
+        const vVencimento = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento : null;
+
+        let dtVencimentoVencida = false;
+        if (vVencimento) {
+            const hj = new Date();
+            hj.setHours(0,0,0,0);
+            const partes = vVencimento.split('-');
+            if (partes.length === 3) {
+                const dVence = new Date(partes[0], partes[1] - 1, partes[2]);
+                if (dVence < hj) dtVencimentoVencida = true;
+            }
+        }
+
+        let bgColor = 'transparent';
+        let hoverColor = '#f8fafc';
+
+        if (aplicandoFiltroFiscal) {
+            if (vResposta !== '') {
+                bgColor = '#86efac'; 
+                hoverColor = '#4ade80'; 
+            } else if (vHistoricoInfo !== '') {
+                bgColor = '#fca5a5'; 
+                hoverColor = '#f87171'; 
+            } else if (dtVencimentoVencida) {
+                bgColor = '#cbd5e1'; 
+                hoverColor = '#94a3b8'; 
+            }
+        }
+
         let rowAttributes = '';
         if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoria.id)) {
-            rowAttributes = ` style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+            rowAttributes = ` style="background:${bgColor}; cursor:pointer; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
+        } else {
+            rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
         }
         bodyHTML += `<tr${rowAttributes}>`;
         if (temNumero) bodyHTML += `<td>${reg.numero_sequencial || '-'}</td>`;
@@ -1761,16 +1922,27 @@ function renderizarTabelaGeral(registros, categoriaId) {
         bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
 
         if (podeVerAnexos) {
+            const temAnexoAR = reg.campos && reg.campos.anexo_ar;
+            let anexoHTML = '';
+            
             if (temAnexo) {
-                bodyHTML += `<td><button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📄 Ver</button></td>`;
+                anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
+            }
+            if (temAnexoAR) {
+                anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+            }
+
+            if (anexoHTML !== '') {
+                bodyHTML += `<td style="vertical-align:middle; text-align:center;">${anexoHTML}</td>`;
             } else {
-                bodyHTML += `<td style="color:#94a3b8;font-size:12px;">—</td>`;
+                bodyHTML += `<td style="color:#94a3b8;font-size:12px;vertical-align:middle;text-align:center;">—</td>`;
             }
         }
         bodyHTML += '</tr>';
     });
 
     container.innerHTML = `
+        ${graficoHTML}
         <div style="overflow-x: auto;">
             <table class="historico-tabela">
                 <thead>${headerHTML}</thead>
@@ -1781,6 +1953,7 @@ function renderizarTabelaGeral(registros, categoriaId) {
             Total: ${registros.length} registro(s)
         </p>
     `;
+    renderizarChart();
 }
 
 // Modal para visualizar anexo do fiscal (apenas gerente)
@@ -1851,7 +2024,7 @@ async function abrirDetalhesAdminHist(id) {
     }
 
     Object.entries(campos).forEach(([chave, valor]) => {
-        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'historico_admin' || chave === 'resposta_fiscal') return;
+        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar') return;
         let label = chave;
         if (catDef) {
             const campoDef = catDef.campos.find(c => c.nome === chave);
@@ -1874,6 +2047,7 @@ async function abrirDetalhesAdminHist(id) {
 
     const vEntrada = campos.data_entrada || '';
     const vVencimento = campos.data_vencimento || '';
+    const vAR = campos.ar || '';
     const vHistorico = campos.historico_admin || '';
     const vResposta = campos.resposta_fiscal || '';
 
@@ -1890,12 +2064,31 @@ async function abrirDetalhesAdminHist(id) {
                 <input type="date" id="admin-data-vencimento" value="${vVencimento}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
             </div>`;
             htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">AR (Admin)</label>
+                <input type="text" id="admin-ar" value="${vAR}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
+            </div>`;
+            if (campos.anexo_ar) {
+                htmlCampos += `<div id="container-anexo-ar-atual" style="margin-bottom:12px; font-size:14px; display:flex; align-items:center; gap:8px;">
+                    <a href="${campos.anexo_ar}" target="_blank" style="color:#0ea5e9; text-decoration:underline; font-weight:600;">Ver anexo do AR atual</a>
+                    <button onclick="document.getElementById('container-anexo-ar-atual').style.display='none'; document.getElementById('admin-remover-anexo-ar').checked = true;" title="Remover anexo" style="background:#ef4444; color:white; border:none; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; font-size:12px; line-height:1; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">✕</button>
+                    <input type="checkbox" id="admin-remover-anexo-ar" style="display:none;">
+                </div>`;
+            }
+            htmlCampos += `<div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Anexar Arquivo do AR</label>
+                <input type="file" id="admin-anexo-ar" accept=".png,.jpg,.jpeg,.doc,.docx,.pdf" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; background:white;">
+            </div>`;
+            htmlCampos += `<div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Histórico (Admin)</label>
                 <textarea id="admin-historico-texto" rows="3" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${vHistorico}</textarea>
             </div>`;
         } else {
             htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Entrada:</strong> ${vEntrada ? vEntrada.split('-').reverse().join('/') : '—'}</div>`;
             htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento:</strong> ${vVencimento ? vVencimento.split('-').reverse().join('/') : '—'}</div>`;
+            htmlCampos += `<div style="margin-bottom:8px;"><strong>AR:</strong> ${vAR || '—'}</div>`;
+            if (campos.anexo_ar) {
+                htmlCampos += `<div style="margin-bottom:8px;"><strong>Anexo AR:</strong> <a href="${campos.anexo_ar}" target="_blank" style="color:#0ea5e9; text-decoration:underline;">Visualizar Arquivo</a></div>`;
+            }
             htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Histórico Administrativo:</strong> ${vHistorico || '—'}</div>`;
         }
 
@@ -1919,7 +2112,7 @@ async function abrirDetalhesAdminHist(id) {
         }
 
         if (isCargoGerencia || isDono) {
-            btnSalvar = `<button onclick="salvarDetalhesHist('${reg.id}')" style="flex:1; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
+            btnSalvar = `<button id="btn-salvar-detalhes" onclick="salvarDetalhesHist('${reg.id}')" style="flex:1; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
         }
     }
 
@@ -1968,13 +2161,57 @@ async function salvarDetalhesHist(id) {
 
     const inputEntrada = document.getElementById('admin-data-entrada');
     const inputVencimento = document.getElementById('admin-data-vencimento');
+    const inputAR = document.getElementById('admin-ar');
+    const inputAnexoAR = document.getElementById('admin-anexo-ar');
+    const checkboxRemoverAR = document.getElementById('admin-remover-anexo-ar');
     const inputHistorico = document.getElementById('admin-historico-texto');
     const selectResposta = document.getElementById('admin-resposta-select');
     const inputResposta = document.getElementById('admin-resposta-fiscal');
 
+    const btnSalvar = document.getElementById('btn-salvar-detalhes');
+    if (btnSalvar) {
+        btnSalvar.innerText = 'Salvando...';
+        btnSalvar.disabled = true;
+    }
+
     if (inputEntrada) novosCampos.data_entrada = inputEntrada.value;
     if (inputVencimento) novosCampos.data_vencimento = inputVencimento.value;
+    if (inputAR) novosCampos.ar = inputAR.value;
     if (inputHistorico) novosCampos.historico_admin = inputHistorico.value;
+
+    if (checkboxRemoverAR && checkboxRemoverAR.checked) {
+        delete novosCampos.anexo_ar;
+    }
+
+    if (inputAnexoAR && inputAnexoAR.files.length > 0) {
+        const arquivoAR = inputAnexoAR.files[0];
+        let nomeAnexoLimpo = arquivoAR.name
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, '_')
+            .replace(/[^a-zA-Z0-9_\-\.]/g, '');
+
+        const { data: { user } } = await getAuthUser();
+        const nomeArquivo = `AR_${id}_${nomeAnexoLimpo}`;
+        const caminho = `${user.id}/${nomeArquivo}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+            .from('anexos')
+            .upload(caminho, arquivoAR, { upsert: true });
+
+        if (uploadError) {
+            console.error('Erro no upload AR:', uploadError);
+            alert('Erro ao anexar arquivo AR: ' + uploadError.message);
+            if (btnSalvar) {
+                btnSalvar.innerText = 'Salvar Alterações';
+                btnSalvar.disabled = false;
+            }
+            return;
+        } else {
+            const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
+            novosCampos.anexo_ar = urlData.publicUrl;
+        }
+    }
 
     // Salvar 'Resposta' lendo o select ou o campo de texto
     if (selectResposta) {

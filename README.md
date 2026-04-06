@@ -21,9 +21,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
 | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
-| `PERMISSOES_SETUP.md` | Guia de configuração de permissões hierárquicas |
-| `setup_permissoes_secretario.sql` | SQL para permissões especiais do Secretário e Devs |
-| `setup_permissoes_simples.sql` | SQL básico para permissões de Gerente+ |
+| `PERMISSOES_SETUP.md` | Guia completo e definitivo de configuração de permissões hierárquicas, regras de RLS (Row Level Security) e criação de cargos e funções no Supabase, consolidando os antigos arquivos `.sql` soltos e `.csv`. |
 | `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
 
 ---

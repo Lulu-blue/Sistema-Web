@@ -366,3 +366,59 @@ SELECT * FROM public.log_exclusoes ORDER BY excluido_em DESC;
 - Sempre use Edge Functions para operações administrativas
 - Mantenha logs de todas as exclusões
 - Considere implementar um sistema de aprovação para exclusões
+
+---
+
+## 🏗️ Anexo A: Configuração de Novo Cargo - Secretário(a) do Secretário(a)
+*Consolidado do arquivo setup_secretario_do_secretario.sql*
+
+O sistema permite que o Secretário principal promova servidores para o cargo via SQL:
+```sql
+CREATE OR REPLACE FUNCTION public.transferir_para_secretario_do_secretario(
+    p_user_id UUID
+)
+RETURNS VOID AS $$
+BEGIN
+    IF NOT public.is_secretario_ou_dev(auth.uid()) THEN
+        RAISE EXCEPTION 'Permissão negada';
+    END IF;
+
+    UPDATE public.profiles
+    SET role = 'Secretário(a) do Secretário(a)', ativo = TRUE
+    WHERE id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+Uso: `SELECT public.transferir_para_secretario_do_secretario('UUID-AQUI');`
+
+## 🛡️ Anexo B: Resumo Definitivo de Políticas RLS do Controle Processual
+*Consolidação dos arquivos fix_rls_definitivo.sql e controle_processual.sql*
+
+Para corrigir problemas com `UUIDs` ou bloqueios no `INSERT` da tabela `controle_processual`, os seguintes scripts foram criados para garantir que todo usuário possa inserir o seu próprio registro e gerenciar seus anexos no storage (`anexos`):
+
+```sql
+-- Políticas Tabela (Controle Processual)
+DROP POLICY IF EXISTS "Permitir insert para o proprio usuario" ON public.controle_processual;
+CREATE POLICY "Permitir insert para o proprio usuario" ON public.controle_processual FOR INSERT TO authenticated WITH CHECK (user_id::uuid = auth.uid()::uuid);
+
+CREATE POLICY "Permitir update para o proprio usuario" ON public.controle_processual FOR UPDATE TO authenticated USING (user_id::uuid = auth.uid()::uuid) WITH CHECK (user_id::uuid = auth.uid()::uuid);
+
+CREATE POLICY "Fiscal deleta próprios registros CP" ON public.controle_processual FOR DELETE TO authenticated USING (user_id::uuid = auth.uid()::uuid);
+
+-- Políticas Storage (Anexos AR)
+DROP POLICY IF EXISTS "Permitir upload no bucket anexos para todos" ON storage.objects;
+CREATE POLICY "Permitir upload no bucket anexos para todos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'anexos');
+
+DROP POLICY IF EXISTS "Permitir update no bucket anexos para todos" ON storage.objects;
+CREATE POLICY "Permitir update no bucket anexos para todos" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'anexos');
+```
+
+## 🗃️ Anexo C: Tabela de Regras Supabase Resumidas
+*Consolidado de planilhas CSV*
+| Política | Comando | Restrição Principal |
+|---|---|---|
+| Todos veem registros CP | SELECT | N/A (Permissivo para `public`) |
+| Gerencia pode ver todos os registros CP | SELECT | `get_nivel_hierarquico() >= 1` ou dono do log |
+| Permitir update para o proprio usuario | UPDATE | `user_id = auth.uid()` |
+| Gerentes podem deletar CP | DELETE | Função de Perfil = `Gerente de Posturas` |
+| Admin_Update_Processual_Completa | UPDATE | Perfis `admin` ou `administrador` |

@@ -951,7 +951,10 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             }
         }
 
-        const anoAtual = new Date().getFullYear();
+        const mesesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        const dataObj = new Date();
+        const anoAtual = dataObj.getFullYear();
+        const mesAtual = mesesNome[dataObj.getMonth()];
         const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
 
         // 3. Preparar dados para gráfico de pizza (tipos de documentos)
@@ -1034,10 +1037,10 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                 <div style="display:flex;gap:20px;padding:20px;max-width:1400px;margin:0 auto;align-items:flex-start;">
                     <!-- COLUNA ESQUERDA: Relatório -->
                     <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5;max-height:90vh;overflow-y:auto;">
-                        <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${anoAtual}</h1>
+                        <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${mesAtual}/${anoAtual}</h1>
                         <div class="relatorio-info">
                             <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
-                            <div><strong>Ano:</strong> <span contenteditable="true">${anoAtual}</span></div>
+                            <div><strong>Período:</strong> <span contenteditable="true">${mesAtual}/${anoAtual}</span></div>
                             <div><strong>Pontuação Total:</strong> <span contenteditable="true">${pontuacaoTotal}</span></div>
                             <div><strong>Total de Registros:</strong> ${todosRegs.length}</div>
                         </div>
