@@ -1496,37 +1496,7 @@ async function desativarFuncionarioAmbiental(userId) {
 }
 window.desativarFuncionarioAmbiental = desativarFuncionarioAmbiental;
 
-// Função para abrir form de novo funcionário (placeholder)
-function abrirFormNovoFuncionarioAmbiental() {
-    Swal.fire({
-        title: 'Novo Funcionário',
-        html:
-            '<input id="swal-nome" class="swal2-input" placeholder="Nome completo">' +
-            '<select id="swal-cargo" class="swal2-select" style="width: 80%; margin-top: 10px; padding: 10px;">' +
-            '<option value="">Selecione o cargo...</option>' +
-            '<option value="Engenheiro(a) Agrônomo(a)">Engenheiro(a) Agrônomo(a)</option>' +
-            '<option value="Engenheiro(a) Civil">Engenheiro(a) Civil</option>' +
-            '<option value="Analista Ambiental">Analista Ambiental</option>' +
-            '<option value="Auxiliar de Serviços II">Auxiliar de Serviços II</option>' +
-            '</select>',
-        focusConfirm: false,
-        showCancelButton: true,
-        confirmButtonText: 'Adicionar',
-        cancelButtonText: 'Cancelar',
-        preConfirm: () => {
-            return {
-                nome: document.getElementById('swal-nome').value,
-                cargo: document.getElementById('swal-cargo').value
-            }
-        }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Aqui você implementaria a criação do usuário
-            Swal.fire('Info', 'Funcionalidade de criar usuário será implementada aqui.', 'info');
-        }
-    });
-}
-window.abrirFormNovoFuncionarioAmbiental = abrirFormNovoFuncionarioAmbiental;
+// O form e a logica do novo funcionario ambiental estao em gerente.js.
 window.carregarDashboardGerenteAmbiental = carregarDashboardGerenteAmbiental;
 
 // --- LÓGICA DE SECRETÁRIO: TOGGLE DIREÇÃO ---

@@ -2498,7 +2498,7 @@ async function carregarMinhasTarefasModulo() {
     var container = document.getElementById('minhas-tarefas-container');
     if (!container) return;
 
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">Processando projetos...</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">Processando eventos...</div>';
 
     try {
         var idsInteresse = [];
@@ -2541,11 +2541,11 @@ async function carregarMinhasTarefasModulo() {
         var filtradas = (tarefas || []).filter(t => respIdsSet.has(t.id));
 
         if (filtradas.length === 0) {
-            var msg = 'Você não possui tarefas de projetos.';
+            var msg = 'Você não possui tarefas de eventos.';
             if (diretorModoVisualizacao === 'gerencia' || diretorModoVisualizacao === 'gerencia_posturas') {
-                msg = 'Os gerentes de posturas não possuem tarefas de projetos.';
+                msg = 'Os gerentes de posturas não possuem tarefas de eventos.';
             } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
-                msg = 'Os gerentes de regularização ambiental não possuem tarefas de projetos.';
+                msg = 'Os gerentes de regularização ambiental não possuem tarefas de eventos.';
             }
             container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:15px;">' + msg + '</div>';
             return;
@@ -2580,7 +2580,7 @@ async function carregarMinhasTarefasModulo() {
 
     } catch (err) {
         console.error(err);
-        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px;">Erro ao carregar lista de projetos.</div>';
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:20px;">Erro ao carregar lista de eventos.</div>';
     }
 }
 

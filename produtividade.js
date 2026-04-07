@@ -69,7 +69,7 @@ const CATEGORIAS = [
             { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
             { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
             { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio', 'Reconstrução de Muro ou Passeio'] },
-            { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
+            { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: false, aceitar: '.pdf,.doc,.docx' }
         ]
     },
     {

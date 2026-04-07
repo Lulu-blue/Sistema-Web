@@ -5178,7 +5178,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     html += '<div style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:12px;padding:20px;text-align:center;color:white;">';
     html += '<div style="font-size:32px;font-weight:700;">' + stats.projetos + '</div>';
-    html += '<div style="font-size:13px;opacity:0.9;">Projetos</div>';
+    html += '<div style="font-size:13px;opacity:0.9;">Eventos</div>';
     html += '</div>';
 
     html += '</div>';
