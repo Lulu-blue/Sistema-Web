@@ -146,8 +146,8 @@
                 showBanner();
             });
 
-            // Verificar a cada 2 minutos em vez de 5 segundos para economizar recursos
-            setInterval(checkConnection, 120000);
+            // Verificar a cada 5 segundos
+            setInterval(checkConnection, 5000);
             
             // Verificar imediatamente
             checkConnection();

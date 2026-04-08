@@ -1515,12 +1515,7 @@ async function carregarHistoricoGeral(categoriaId) {
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
-    let query = supabaseClient
-        .from('controle_processual')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
+    let query = supabaseClient.from('controle_processual').select('*');
     if (categoriaId !== 'todos') {
         query = query.eq('categoria_id', categoriaId);
     }
