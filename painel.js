@@ -19,11 +19,34 @@ async function sair() {
 
 // Helper global para buscar o usuário de forma segura evitando erros de Lock do Supabase
 async function getAuthUser() {
-    if (!window.authUserPromise) {
-        window.authUserPromise = supabaseClient.auth.getUser();
+    // Se já temos a promessa em andamento, aguarde-a
+    if (window.authUserPromise) {
+        try {
+            const res = await window.authUserPromise;
+            if (!res.error && res.data.user) return res;
+            // Se falhou, limpa para tentar de novo abaixo
+            window.authUserPromise = null;
+        } catch (e) {
+            window.authUserPromise = null;
+        }
     }
+
+    // Tentar buscar o usuário
     try {
+        window.authUserPromise = supabaseClient.auth.getUser();
         const res = await window.authUserPromise;
+        
+        // Se der erro de autenticação, tenta dar um refresh na sessão explicitamente
+        if (res.error && (res.error.status === 401 || res.error.message.includes('session'))) {
+            console.warn("Falha no getUser por sessão. Tentando getSession para refresh interno...");
+            const sessionRes = await supabaseClient.auth.getSession();
+            if (sessionRes.data.session) {
+                // Refresh funcionou, tenta getUser de novo
+                window.authUserPromise = supabaseClient.auth.getUser();
+                return await window.authUserPromise;
+            }
+        }
+        
         if (res.error) window.authUserPromise = null;
         return res;
     } catch (err) {

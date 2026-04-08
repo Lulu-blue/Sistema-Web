@@ -9,16 +9,49 @@ const supabaseKey = 'sb_publishable_ZVtndwPOvY2dA4Qzlwkl2A_H0-TeUgu';
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
 async function verificarAcesso() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-
-    if (!session) {
-        alert("Acesso restrito! Identifique-se primeiro.");
-        window.location.href = "index.html";
+    try {
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        
+        if (error || !session) {
+            console.warn("Sessão inválida ou expirada:", error);
+            const msg = error ? "Sessão expirada. Por favor, logue novamente." : "Acesso restrito! Identifique-se primeiro.";
+            alert(msg);
+            window.location.href = "index.html";
+            return null;
+        }
+        return session;
+    } catch (err) {
+        console.error("Erro crítico na verificação de acesso:", err);
+        return null;
     }
 }
 
-// Executa a verificação imediatamente
+// 1. Verificação inicial imediata
 verificarAcesso();
+
+// 2. Monitoramento reativo em tempo real
+// Se o token expirar ou o usuário for deslogado em outra aba, redireciona aqui também.
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    console.log(`[Auth Event] ${event}`);
+    if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
+        console.warn("Sessão encerrada pelo sistema. Redirecionando...");
+        window.location.href = "index.html";
+    }
+});
+
+/**
+ * Função global para ser chamada antes de operações críticas (como salvar).
+ * Tenta garantir que o Supabase está com a sessão reconhecida.
+ */
+async function garantirSessaoAtiva() {
+    const { data: { user }, error } = await supabaseClient.auth.getUser();
+    if (error || !user) {
+        const sessionCheck = await verificarAcesso();
+        return !!sessionCheck;
+    }
+    return true;
+}
+window.garantirSessaoAtiva = garantirSessaoAtiva;
 
 // =============================================
 // MONITORAMENTO DE CONEXÃO COM A INTERNET

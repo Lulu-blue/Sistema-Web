@@ -644,6 +644,7 @@ var globalRegistrosCP = []; // Para armazenar todos os documentos e contar
 
 async function carregarGestaoBairrosAreas() {
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var listaAreasEl = document.getElementById('lista-areas-gerencia');
         var listaBairrosEl = document.getElementById('lista-bairros-gerencia');
 
@@ -819,6 +820,7 @@ async function abrirModalNovaArea() {
     if (!nomeArea || nomeArea.trim() === '') return;
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var { error } = await supabaseClient
             .from('areas')
             .insert([{ nome: nomeArea.trim() }]);
@@ -832,6 +834,8 @@ async function abrirModalNovaArea() {
 async function excluirArea(id, nome) {
     if (!confirm("Tem certeza que deseja excluir a área '" + nome + "'? Os bairros vinculados voltarão a ficar 'Sem Área'.")) return;
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
         var { error } = await supabaseClient.from('areas').delete().eq('id', id);
         if (error) throw error;
         carregarGestaoBairrosAreas();
@@ -845,6 +849,7 @@ async function abrirModalNovoBairro() {
     if (!nomeBairro || nomeBairro.trim() === '') return;
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var { error } = await supabaseClient
             .from('bairros')
             .insert([{ nome: nomeBairro.trim() }]);
@@ -858,6 +863,8 @@ async function abrirModalNovoBairro() {
 async function excluirBairro(id, nome) {
     if (!confirm("Excluir o bairro '" + nome + "'?")) return;
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
         var { error } = await supabaseClient.from('bairros').delete().eq('id', id);
         if (error) throw error;
         carregarGestaoBairrosAreas();
@@ -869,6 +876,8 @@ async function excluirBairro(id, nome) {
 async function vincularBairroArea(bairroId, novaAreaId) {
     var area_id = novaAreaId === "" ? null : novaAreaId;
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
         var { error } = await supabaseClient
             .from('bairros')
             .update({ area_id: area_id })
@@ -886,6 +895,7 @@ async function abrirModalAtribuirFiscal(areaId, areaNome, fiscalAtual) {
     if (novoFiscal === null) return; // Cancelou
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var { error } = await supabaseClient
             .from('areas')
             .update({ fiscal_nome: novoFiscal.trim() === '' ? null : novoFiscal.trim() })
@@ -2219,6 +2229,7 @@ async function atualizarRotacaoInteligente() {
     });
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         const { error } = await supabaseClient.from('bairros').upsert(updates, { onConflict: 'id' });
         if (error) throw error;
 
@@ -2240,6 +2251,7 @@ async function reverterRotacaoAntiga() {
     if (!confirm("Isso apagará a distribuição atual e restaurará a versão anterior exata. Confirma?")) return;
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         let backupData = JSON.parse(backupString);
         let updates = backupData.map(up => {
             let bn = globalBairros.find(gb => gb.id === up.id);
@@ -2413,6 +2425,7 @@ async function executarRotacaoAreas() {
 
     // 5. Salvar no Supabase
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var { error } = await supabaseClient.from('areas').upsert(updates, { onConflict: 'id' });
         if (error) throw error;
 
@@ -2434,6 +2447,7 @@ async function reverterRotacaoAreas() {
     if (!confirm('Isso restaurará a atribuição anterior dos fiscais nas áreas. Confirma?')) return;
 
     try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var backupData = JSON.parse(backupString);
         var updates = backupData.map(function (up) {
             var areaRef = globalAreas.find(function (a) { return a.id === up.id; });
