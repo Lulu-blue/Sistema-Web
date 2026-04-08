@@ -62,6 +62,18 @@ function isDiretorOuSuperior(role) {
 function isSecretario(role) {
     return getNivelHierarquico(role) >= 3;
 }
+// --- FUNÇÕES AUXILIARES GERAIS ---
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 // --- DEFINIÇÃO DAS CATEGORIAS ---
 // Cada categoria espelha uma aba da planilha original
@@ -1509,34 +1521,111 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     carregarHistoricoGeral(categoriaId);
 }
 
+let buscaIdGlobal = 0; // Para cancelar buscas sobrepostas
+
 async function carregarHistoricoGeral(categoriaId) {
     const container = document.getElementById('historico-geral-lista');
     if (!container) return;
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
-    let query = supabaseClient.from('controle_processual').select('*').order('created_at', { ascending: false }).limit(10000);
+    // 1. Coleta filtros da UI
+    const termo = (document.getElementById('busca-historico-geral')?.value || '').toLowerCase().trim();
+    const termoFiscal = (document.getElementById('busca-fiscal-geral')?.value || '').toLowerCase().trim();
+    const bairroSelecionado = document.getElementById('filtro-bairro-historico')?.value || '';
+    const anoSelecionado = document.getElementById('busca-ano-geral')?.value || '';
+
+    // 2. Constrói Query
+    let query = supabaseClient.from('controle_processual').select('*');
+
+    // Categoria
     if (categoriaId !== 'todos') {
         query = query.eq('categoria_id', categoriaId);
     }
-    const { data: registros, error } = await query;
 
-    if (error) {
-        container.innerHTML = '<div class="historico-vazio">Erro ao carregar.</div>';
+    // Filtro por Bairro (Remoto via JSON field)
+    if (bairroSelecionado) {
+        query = query.filter('campos->>bairro', 'eq', bairroSelecionado);
+    }
+
+    // Filtro por Fiscal
+    if (termoFiscal) {
+        query = query.ilike('fiscal_nome', `%${termoFiscal}%`);
+    }
+
+    // Filtro por Ano (via created_at para performance remota)
+    if (anoSelecionado) {
+        query = query.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
+                    .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
+    }
+
+    // Busca Livre em múltiplos campos JSON
+    if (termo) {
+        const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
+        const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`).join(',');
+        query = query.or(orConditions);
+    }
+
+    // 3. Execução em blocos (Batch Fetching) até o fim
+    buscaIdGlobal++;
+    const buscaIdLocal = buscaIdGlobal;
+    
+    let todosOsRegistros = [];
+    let contadorOffset = 0;
+    const tamanhoPagina = 1000;
+    let totalEncontrado = 0;
+    let erroOcorrido = false;
+
+    try {
+        // Primeiro bloco para pegar o total (count: exact)
+        let queryInicial = query.range(0, tamanhoPagina - 1);
+        const { data: primeiroBloco, error: erroInicial, count } = await queryInicial;
+        
+        if (erroInicial) throw erroInicial;
+        if (buscaIdLocal !== buscaIdGlobal) return; // Busca obsoleta
+
+        totalEncontrado = count || 0;
+        todosOsRegistros = primeiroBloco || [];
+
+        // Renderização parcial (Feedback rápido)
+        renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} / ${totalEncontrado})`);
+
+        // Busca o restante se houver
+        while (todosOsRegistros.length < totalEncontrado) {
+            contadorOffset += tamanhoPagina;
+            const { data: proximoBloco, error: proximoErro } = await query.range(contadorOffset, contadorOffset + tamanhoPagina - 1);
+            
+            if (proximoErro) throw proximoErro;
+            if (buscaIdLocal !== buscaIdGlobal) return; // Nova busca iniciada pelo usuário
+
+            if (!proximoBloco || proximoBloco.length === 0) break;
+            
+            todosOsRegistros = todosOsRegistros.concat(proximoBloco);
+            
+            // Atualiza progresso na tela a cada bloco
+            renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} / ${totalEncontrado})`);
+        }
+    } catch (err) {
+        console.error('Erro na busca limitless:', err);
+        container.innerHTML = '<div class="historico-vazio">Erro ao carregar do servidor.</div>';
         return;
     }
 
-    if (!registros || registros.length === 0) {
+    if (todosOsRegistros.length === 0) {
         registrosGeralAtual = [];
-        container.innerHTML = '<div class="historico-vazio">Nenhum registro encontrado.</div>';
+        container.innerHTML = '<div class="historico-vazio">Nenhum registro encontrado no banco de dados.</div>';
         return;
     }
 
-    // Ordenar pela data informada no formulário
-    const registrosOrdenados = registros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
-
+    // Ordenar final no JS
+    const registrosOrdenados = todosOsRegistros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
     registrosGeralAtual = registrosOrdenados;
-    popularFiltroBairros(registrosOrdenados); // Popula o dropdown
+    
+    // Atualiza dropdown de bairros apenas se não estiver pesquisando especificamente
+    if (!termo && !bairroSelecionado && !termoFiscal) {
+        popularFiltroBairros(registrosOrdenados);
+    }
+
     renderizarTabelaGeral(registrosOrdenados, categoriaId);
 }
 
@@ -1566,64 +1655,19 @@ function popularFiltroBairros(registros) {
     });
 }
 
-// Filtro de busca misto: Texto Livre + Dropdown de Bairro + Fiscal
-function filtrarHistoricoGeral() {
-    const termo = document.getElementById('busca-historico-geral').value.toLowerCase().trim();
-    const inputFiscal = document.getElementById('busca-fiscal-geral');
-    const termoFiscal = inputFiscal ? inputFiscal.value.toLowerCase().trim() : '';
-    const bairroSelecionado = document.getElementById('filtro-bairro-historico').value;
-
-    let filtrados = registrosGeralAtual;
-
-    // 1. Filtrar pelo Dropdown de Bairro (Exato)
-    if (bairroSelecionado) {
-        filtrados = filtrados.filter(reg =>
-            reg.campos && reg.campos.bairro && reg.campos.bairro.trim() === bairroSelecionado
-        );
-    }
-
-    // 2. Filtrar pelo Fiscal (Contém)
-    if (termoFiscal) {
-        filtrados = filtrados.filter(reg =>
-            reg.fiscal_nome && reg.fiscal_nome.toLowerCase().includes(termoFiscal)
-        );
-    }
-
-    // 3. Filtrar pelo Ano (Selecionado)
-    const anoSelecionado = document.getElementById('busca-ano-geral') ? document.getElementById('busca-ano-geral').value : '';
-    if (anoSelecionado) {
-        filtrados = filtrados.filter(reg => {
-            const dtReal = obterDataReal(reg);
-            if (!dtReal || isNaN(dtReal)) return false;
-            return dtReal.getFullYear().toString() === anoSelecionado;
-        });
-    }
-
-    // 4. Filtrar pelo Texto (Contém)
-    if (termo) {
-        const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
-
-        filtrados = filtrados.filter(reg => {
-            // Buscar no numero_sequencial
-            if (reg.numero_sequencial && reg.numero_sequencial.toLowerCase().includes(termo)) return true;
-            // Buscar nos campos do contribuinte (não fiscal)
-            for (const campo of camposBusca) {
-                if (reg.campos && reg.campos[campo] && reg.campos[campo].toString().toLowerCase().includes(termo)) return true;
-            }
-            return false;
-        });
-    }
-
-    // Renderizar
-    if (filtrados.length === 0) {
-        document.getElementById('historico-geral-lista').innerHTML = '<div class="historico-vazio">Nenhum resultado para a busca.</div>';
-    } else {
-        renderizarTabelaGeral(filtrados, subAbaAtual);
-    }
-
+// Filtro de busca misto: Real-time no Supabase
+const filtrarHistoricoGeral = debounce(() => {
+    // subAbaAtual é uma variável global que deve estar definida em produtividade.js ou painel.js
+    let aba = typeof subAbaAtual !== 'undefined' ? subAbaAtual : '1.1';
+    
+    carregarHistoricoGeral(aba);
+    
     // Atualizar bolinha indicadora no botão Filtro instantaneamente
     atualizarIndicadorFiltro();
-}
+}, 400);
+
+// Expõe para o HTML
+window.filtrarHistoricoGeral = filtrarHistoricoGeral;
 
 // Abre/Fecha o painel de filtros
 function togglePainelFiltro() {
@@ -1666,7 +1710,7 @@ function atualizarIndicadorFiltro() {
         : 'Filtro';
 }
 
-function renderizarTabelaGeral(registros, categoriaId) {
+function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     const container = document.getElementById('historico-geral-lista');
     // Usar nova hierarquia de permissões: Gerente, Diretor e Secretário podem ver anexos
     const podeVerAnexos = isGerenteOuSuperior(window.userRoleGlobal) ||
@@ -1854,9 +1898,12 @@ function renderizarTabelaGeral(registros, categoriaId) {
                     <tbody>${bodyHTML}</tbody>
                 </table>
             </div>
-            <p style="margin-top: 12px; font-size: 0.85rem; color: #64748b;">
-                Total: ${registros.length} registro(s)
-            </p>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <p style="font-size: 0.85rem; color: #64748b;">
+                    Total: ${registros.length} registro(s)
+                </p>
+                ${statusExtra ? `<p style="font-size: 0.85rem; color: #10b981; font-weight: 600;">${statusExtra}</p>` : ''}
+            </div>
         `;
         renderizarChart();
         return;
@@ -1959,9 +2006,12 @@ function renderizarTabelaGeral(registros, categoriaId) {
                 <tbody>${bodyHTML}</tbody>
             </table>
         </div>
-        <p style="margin-top: 12px; font-size: 0.85rem; color: #64748b;">
-            Total: ${registros.length} registro(s)
-        </p>
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <p style="font-size: 0.85rem; color: #64748b;">
+                Total: ${registros.length} registro(s)
+            </p>
+            ${statusExtra ? `<p style="font-size: 0.85rem; color: #10b981; font-weight: 600;">${statusExtra}</p>` : ''}
+        </div>
     `;
     renderizarChart();
 }
