@@ -1515,7 +1515,7 @@ async function carregarHistoricoGeral(categoriaId) {
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
-    let query = supabaseClient.from('controle_processual').select('*');
+    let query = supabaseClient.from('controle_processual').select('*').order('created_at', { ascending: false }).limit(10000);
     if (categoriaId !== 'todos') {
         query = query.eq('categoria_id', categoriaId);
     }
@@ -1578,7 +1578,7 @@ function filtrarHistoricoGeral() {
     // 1. Filtrar pelo Dropdown de Bairro (Exato)
     if (bairroSelecionado) {
         filtrados = filtrados.filter(reg =>
-            reg.campos && reg.campos.bairro === bairroSelecionado
+            reg.campos && reg.campos.bairro && reg.campos.bairro.trim() === bairroSelecionado
         );
     }
 

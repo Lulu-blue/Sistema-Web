@@ -13,7 +13,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `script.js` | Lógica de autenticação via Supabase e geração do fundo da tela de login |
 | `painel.html` | Dashboard principal (Home, sidebar + abas Produtividade/Históricos/Tarefas) |
 | `style_painel.css` | Estilos comuns do painel e sidebar |
-| `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento do módulo de Tarefas na Home |
+| `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento das Tarefas de Eventos na Home |
 | `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
 | `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
 | `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
@@ -99,8 +99,8 @@ O sistema possui **8+ cargos distintos** com permissões específicas:
 - **Envio via Google Apps Script**: Disparo direto para o e-mail cadastrado, contornando bloqueios de rede.
 - **Limpeza Agendada**: Após confirmação de recebimento, limpeza automática dos dados do ano fechado.
 
-### Tabela "Minhas Tarefas" na Home
-- Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos.
+### Tabela "Tarefas de Eventos" na Home
+- Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos como "Tarefas de Eventos".
 - Mostra somente tarefas onde o usuário é **responsável direto** + subtarefas dessas tarefas.
 - **Ordenação**: atrasadas primeiro (fundo vermelho com badge `ATRASADA`), depois por prazo mais próximo.
 - **Colunas**: Tarefa (com nome da tarefa-pai se for subtarefa, prefixo `↳`), Prazo, Status (badge colorido), Progresso (barra visual de subtarefas).
@@ -137,7 +137,7 @@ Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projeto
 | Diretor | Todos os eventos | ✓ | ✓ |
 | Fiscal | Todos os eventos | ✗ | ✗ |
 | Gerente | Eventos onde é responsável ou tem tarefa vinculada | ✗ | ✗ |
-| Cargos Especiais* | Apenas onde é responsável | ✗ | ✗ |
+| Cargos Especiais* | Apenas onde é responsável (Tarefas de Eventos) | ✗ | ✗ |
 
 \* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
 
@@ -537,7 +537,7 @@ Cargos com permissões específicas e restritas, **não tratados como Gerentes**
 
 #### 🏠 Home Exclusiva
 - **Layout em duas colunas**:
-  - **Esquerda**: Minhas Tarefas (apenas onde é responsável)
+  - **Esquerda**: Tarefas de Eventos (apenas onde é responsável)
   - **Direita**: Calendário de Projetos/Eventos (próximos 30 dias)
 - **Sem acesso** às dashboards de gestão de fiscais ou equipes
 
@@ -764,7 +764,7 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 
 ### Cargos Especiais: Interface Jurídica e Administração
 - **Novos Cargos**: "Gerente de Interface Jurídica" e "Agente de Administração"
-- **Home Exclusiva**: Layout em duas colunas (Minhas Tarefas + Calendário de Projetos)
+- **Home Exclusiva**: Layout em duas colunas (Tarefas de Eventos + Calendário de Projetos)
 - **Permissões Restritas**: Apenas tarefas onde é responsável, atribuição somente para si mesmo
 - **Sem Acesso**: Não podem criar projetos/eventos, não gerenciam equipes, não aparecem no ranking
 - **Detecção por Normalização**: Sistema remove acentos automaticamente ("jurídica" → "juridica") para evitar conflitos de detecção

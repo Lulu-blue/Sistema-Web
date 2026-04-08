@@ -2307,7 +2307,7 @@ function filtrarHistoricoTarefas() {
 }
 
 // ==========================================
-// MINHAS TAREFAS — HOME
+// TAREFAS DE EVENTOS — HOME
 // ==========================================
 async function carregarMinhasTarefasHome(containerId) {
     var containerId = containerId || 'home-minhas-tarefas';
@@ -2487,7 +2487,7 @@ async function carregarMinhasTarefasHome(containerId) {
 }
 
 // ==========================================
-// PROJETOS (MINHAS TAREFAS NO MODULO)
+// PROJETOS (TAREFAS DE EVENTOS NO MODULO)
 // ==========================================
 async function carregarMinhasTarefasModulo() {
     // Se ainda estiver iniciando o módulo, espera
