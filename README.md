@@ -99,10 +99,9 @@ O sistema possui **8+ cargos distintos** com permissões específicas:
 - **Envio via Google Apps Script**: Disparo direto para o e-mail cadastrado, contornando bloqueios de rede.
 - **Limpeza Agendada**: Após confirmação de recebimento, limpeza automática dos dados do ano fechado.
 
-### Tabela "tarefas de eventos" na Home
-- Aparece para **todos os usuários** (fiscais e gerentes) na dashboard.
+### Tabela "Minhas Tarefas" na Home
+- Aparece para **todos os usuários** (fiscais e gerentes) logo abaixo dos gráficos.
 - Mostra somente tarefas onde o usuário é **responsável direto** + subtarefas dessas tarefas.
-- **Visualização**: Renomeada de "Minhas Tarefas" para "tarefas de eventos" para maior clareza organizacional.
 - **Ordenação**: atrasadas primeiro (fundo vermelho com badge `ATRASADA`), depois por prazo mais próximo.
 - **Colunas**: Tarefa (com nome da tarefa-pai se for subtarefa, prefixo `↳`), Prazo, Status (badge colorido), Progresso (barra visual de subtarefas).
 - **Clique** em qualquer linha navega direto para a aba Tarefas.
@@ -179,7 +178,7 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 - **Tabelas Distintas no Supabase**: 
   - *Registros comuns* vão para a tabela `registros_produtividade`.
   - *Controle Processual* vai para a tabela separada `controle_processual`.
-- **Anexo Automático em PDF e Editor WYSIWYG**: Toda categoria oficial "Geradora de Documento" (Auto de Infração, Ofício, Relatório e Réplica) exibe o botão **Gerar Documento** ao invés do upload manual padrão. O preenchimento da modal não vai ao banco de dados imadiatamente; invoca-se um Mini-Editor (Modal editável) que mostra de antemão um formato A4 timbrado preenchido automaticamente com nome, matrícula do fiscal, numeração, dados e datas. **Padronização Visual**: Todos esses documentos agora utilizam dinamicamente a imagem `Cabeçalho.png` localizada na raiz do projeto, facilitando trocas de marca sem edição de código.
+- **Anexo Automático em PDF e Editor WYSIWYG**: Toda categoria oficial "Geradora de Documento" (Auto de Infração, Ofício, Relatório e Réplica) exibe o botão **Gerar Documento** ao invés do upload manual padrão. O preenchimento da modal não vai ao banco de dados imadiatamente; invoca-se um Mini-Editor (Modal editável) que mostra de antemão um formato A4 timbrado preenchido automaticamente com nome, matrícula do fiscal, numeração, dados e datas. O sistema aciona o `html2pdf.js` forçando um download local `.doc/.pdf` e, em segundo plano, acopla silenciosamente esse formulário digital PDF e envia ao Storage em nuvem.
 - **Segurança de Documentos no Histórico**: Por tratar-se de peças geradoras de PDF físico baseadas em dados doWYSIWYG, a aba de **Histórico** inibe a edição de Registros dessas naturezas ("Auto de Infracao", "Ofício", "Relatório", "Réplica") protegendo o dado bruto imutável. Caso o usuário cometa um erro de envio, precisará apagar o item por completo e regerar, mantendo a integridade perante o espelho em PDF oficial.
 - **Auto-Preenchimento por Leitura IA de Word**: As categorias (ex. Notificação Preliminar e Protocolo) não necessitam preenchimento braçal graças à função inovadora "*Preenchimento Automático (Word)*". Utilizando o plugin local `mammoth.js`, o sistema varre o arquivo original DOCX submetido pelo fiscal instigando uma Extrator de Regex em busca de blocos cruciais no texto emulando NLP (buscando N° de Notificação/Protocolo, Contribuinte, Bairro, Inscrição etc) e repassa os dados instantaneamente para os inputs visuais da UI (e automaticamente preenche o arquivo DOCX original como anexo) em 1 segundo, reduzindo atritos de digitação manual de forma monstruosa.
 - **Campo de Dropdown Persistente Avançado**: A categoria permite dropdowns selecionáveis onde "Outro..." abre criação de motivos customizados, salvos localmente num array próprio, limpáveis pela Lixeira "🗑" e selecionáveis sem interrupção através de manipulação de DOM para impedir perda de focus no input de texto.
@@ -735,10 +734,6 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Estatísticas de Funcionários**: Cards da equipe GRA são clicáveis e abrem modal com estatísticas de tarefas (total, concluídas, pendentes, atrasadas).
 - **Permissões SQL de Gestão**: Script `setup_permissoes_diretor_gerenciar.sql` permite que Diretor e Secretário cadastrem e desativem funcionários via funções RPC.
 - **Remoção de Botão Duplicado**: Botão "Nova Tarefa" removido do container de home do GRA (já existe na aba Tarefas).
-- **Padronização de Cabeçalhos (Abril/2026)**: Substituição de strings Base64 estáticas em `produtividade.js` pela referência dinâmica à imagem `Cabeçalho.png` na raiz do projeto para todos os documentos gerados.
-- **Estabilização de Sessão (Abril/2026)**: Implementação de `garantirSessaoAtiva()` em todas as operações de escrita em `gerente.js` para evitar falhas por expiração de token do Supabase.
-- **Gestão Multi-Cargo (Abril/2026)**: Habilitação de permissões para Diretores e Secretários gerenciarem Bairros e Áreas (requer script SQL de RLS).
-- **Renomeação de Interface (Abril/2026)**: Alteração de "Minhas Tarefas" para "tarefas de eventos" para melhor semântica no uso do sistema.
 
 ## 🆕 Atualizações Recentes (Março/2026)
 

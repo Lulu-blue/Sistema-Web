@@ -19,10 +19,6 @@ Permissões de exclusão:
 Secretário(a) → pode excluir: Diretor, Gerente, Fiscal, Equipe Ambiental
 Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental
 Gerente → pode excluir: Fiscal, Equipe Ambiental
-
-Permissões de Gestão de Bairros e Áreas:
-Secretário(a), Diretor(a) e Gerente podem gerenciar (criar, editar e excluir) bairros e áreas.
-(Requer aplicação do script SQL de RLS para Direção e Secretaria).
 ```
 
 ## 🚀 Opção 1: SQL Simples (Recomendado para começar)
@@ -426,22 +422,3 @@ CREATE POLICY "Permitir update no bucket anexos para todos" ON storage.objects F
 | Permitir update para o proprio usuario | UPDATE | `user_id = auth.uid()` |
 | Gerentes podem deletar CP | DELETE | Função de Perfil = `Gerente de Posturas` |
 | Admin_Update_Processual_Completa | UPDATE | Perfis `admin` ou `administrador` |
-| Bairros e Áreas (Direção/Secretaria) | ALL | Ver Anexo D |
-
----
-
-## 🗺️ Anexo D: Permissões de Bairros e Áreas (Direção e Secretaria)
-*Adicionado em Abril/2026*
-
-Para habilitar que Diretores e Secretários gerenciem as tabelas de bairros e áreas, execute o script abaixo:
-
-```sql
--- Atualiza permissões de Bairros e Áreas para cargos graduados
-DROP POLICY IF EXISTS "Gerencia altera bairros" ON public.bairros;
-CREATE POLICY "Gerencia altera bairros" ON public.bairros FOR ALL TO authenticated
-USING (auth.uid() IN (SELECT id FROM profiles WHERE role = ANY (ARRAY['gerente fiscal','gerente','Gerente de Posturas','admin','Diretor(a) de Meio Ambiente','Secretário(a)','Secretário(a) do Secretário(a)'])));
-
-DROP POLICY IF EXISTS "Gerencia altera areas" ON public.areas;
-CREATE POLICY "Gerencia altera areas" ON public.areas FOR ALL TO authenticated
-USING (auth.uid() IN (SELECT id FROM profiles WHERE role = ANY (ARRAY['gerente fiscal','gerente','Gerente de Posturas','admin','Diretor(a) de Meio Ambiente','Secretário(a)','Secretário(a) do Secretário(a)'])));
-```

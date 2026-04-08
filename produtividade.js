@@ -2911,8 +2911,8 @@ async function abrirEditorAutoInfracao() {
         const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
 
         const htmlTemplate = `
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px; width: 100%;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="width: 100%; max-width: 100%; height: auto;">
+            <div style="border: 1px solid #999; padding: 2px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
+            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="max-height: 10px; width: auto; max-width: 100%;">
         </div>
         
         <div style="text-align: center; margin-bottom: 25px;">
