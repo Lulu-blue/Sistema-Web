@@ -2331,13 +2331,14 @@ async function carregarMinhasTarefasHome(containerId) {
         // Query dinâmica para incluir tarefas criadas por ele
         var filterStr = 'criado_por.eq.' + user.id;
         if (idsResponsavel.length > 0) {
-            filterStr = 'or(criado_por.eq.' + user.id + ',id.in.(' + idsResponsavel.join(',') + '))';
+            filterStr = 'criado_por.eq.' + user.id + ',id.in.(' + idsResponsavel.join(',') + ')';
         }
 
         var { data: tarefasDiretas, error: errT } = await supabaseClient
             .from('tarefas')
             .select('*')
             .or(filterStr)
+            .is('tarefa_pai_id', null)
             .neq('status', 'concluida')
             .order('prazo', { ascending: true });
 

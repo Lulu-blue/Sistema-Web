@@ -41,15 +41,29 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 
 /**
  * Função global para ser chamada antes de operações críticas (como salvar).
- * Tenta garantir que o Supabase está com a sessão reconhecida.
+ * Tenta garantir que o Supabase está com a sessão reconhecida de forma rápida.
  */
 async function garantirSessaoAtiva() {
-    const { data: { user }, error } = await supabaseClient.auth.getUser();
-    if (error || !user) {
+    try {
+        // 1. Tentar obter a sessão local (muito rápido)
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+        
+        // Se temos uma sessão válida e não está prestes a expirar (margem de 10s), já retornamos true
+        if (session && !sessionError) {
+            const expiresAt = session.expires_at; // unix timestamp
+            const now = Math.floor(Date.now() / 1000);
+            if (expiresAt > now + 10) {
+                return true;
+            }
+        }
+
+        // 2. Se não tem sessão ou está expirando, tenta verificar acesso completo (requisita servidor se necessário)
         const sessionCheck = await verificarAcesso();
         return !!sessionCheck;
+    } catch (err) {
+        console.error("Erro ao garantir sessão:", err);
+        return false;
     }
-    return true;
 }
 window.garantirSessaoAtiva = garantirSessaoAtiva;
 
@@ -58,7 +72,8 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
 // =============================================
 
 (function () {
-    // Criar o elemento de aviso
+    // ... cache de elementos omitido para brevidade no replace_file_content se possível, 
+    // mas vou manter a estrutura completa para precisão
     const banner = document.createElement('div');
     banner.id = 'offline-banner';
     banner.style.cssText = `
@@ -87,26 +102,19 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
     let isOffline = false;
     let checkInterval = null;
 
-    // Função para mostrar o banner
     function showBanner(message, isError = true) {
         const textEl = document.getElementById('offline-text');
         const iconEl = document.getElementById('offline-icon');
-
         if (textEl) textEl.textContent = message;
         if (iconEl) iconEl.textContent = isError ? '📡' : '⚠️';
-
         banner.style.background = isError ? '#ef4444' : '#f59e0b';
         banner.style.display = 'block';
         banner.style.transform = 'translateY(0)';
         isOffline = true;
-
-        // Adicionar padding ao body para não cobrir conteúdo
         document.body.style.paddingTop = banner.offsetHeight + 'px';
-        
         startMonitoring();
     }
 
-    // Função para esconder o banner
     function hideBanner() {
         banner.style.transform = 'translateY(-100%)';
         setTimeout(() => {
@@ -117,14 +125,13 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
         startMonitoring();
     }
 
-    // Verificar conexão com ping ao Supabase
     async function checkConnection() {
         try {
             const startTime = Date.now();
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos timeout
+            // Timeout reduzido para 5s para não prender a fila de conexões do browser
+            const timeoutId = setTimeout(() => controller.abort(), 5000); 
 
-            // Tentar fazer uma requisição simples ao Supabase
             const response = await fetch(`${supabaseUrl}/rest/v1/`, {
                 method: 'HEAD',
                 signal: controller.signal,
@@ -134,50 +141,38 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
             clearTimeout(timeoutId);
             const responseTime = Date.now() - startTime;
 
-            if (response.ok || response.status === 401) { // 401 é OK, significa que o servidor está respondendo
-                if (responseTime > 10000) {
-                    // Conexão lenta (mais de 10 segundos)
-                    showBanner('Sua conexão está muito lenta. Algumas funcionalidades podem não funcionar corretamente.', false);
+            if (response.ok || response.status === 401) {
+                if (responseTime > 5000) {
+                    showBanner('Sua conexão está lenta. Algumas funcionalidades podem demorar.', false);
                 } else if (isOffline) {
-                    // Voltou a ficar online
                     hideBanner();
                 }
                 return true;
             } else {
-                showBanner('Problemas de conexão com o servidor. Verifique sua internet.');
+                showBanner('Problemas de conexão com o servidor.');
                 return false;
             }
         } catch (error) {
             if (error.name === 'AbortError') {
-                showBanner('A conexão está muito lenta ou instável. Tentando reconectar...');
+                showBanner('A conexão está muito lenta. Tentando reconectar...', false);
             } else if (!navigator.onLine) {
-                showBanner('Você está offline. Verifique sua conexão com a internet.');
+                showBanner('Você está offline. Verifique sua conexão.');
             } else {
-                showBanner('Não foi possível conectar ao servidor. Verifique sua internet.');
+                // Se der erro mas o fetch não abortou e navigator.onLine é true, 
+                // pode ser CORS ou erro de DNS no Supabase.
+                console.warn("[Conexão] Erro no fetch:", error);
             }
             return false;
         }
     }
 
-    // Eventos nativos do navegador
-    window.addEventListener('online', () => {
-        console.log('[Conexão] Voltou a ficar online');
-        checkConnection();
-    });
+    window.addEventListener('online', checkConnection);
+    window.addEventListener('offline', () => showBanner('Você está offline. Verifique sua conexão.'));
 
-    window.addEventListener('offline', () => {
-        console.log('[Conexão] Ficou offline');
-        showBanner('Você está offline. Verifique sua conexão com a internet.');
-    });
-
-    // Verificar conexão a cada 10 segundos se estiver offline
-    // ou a cada 30 segundos se estiver online
     function startMonitoring() {
         if (checkInterval) clearInterval(checkInterval);
-
-        checkInterval = setInterval(() => {
-            checkConnection();
-        }, isOffline ? 30000 : 120000); // 30s se offline, 120s se online
+        // Intervalo aumentado p/ diminuir overhead: 1min se offline, 5min se online
+        checkInterval = setInterval(checkConnection, isOffline ? 60000 : 300000); 
     }
 
     // Iniciar monitoramento quando a página carregar

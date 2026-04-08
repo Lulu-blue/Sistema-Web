@@ -1515,7 +1515,12 @@ async function carregarHistoricoGeral(categoriaId) {
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
-    let query = supabaseClient.from('controle_processual').select('*');
+    let query = supabaseClient
+        .from('controle_processual')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500);
+
     if (categoriaId !== 'todos') {
         query = query.eq('categoria_id', categoriaId);
     }
@@ -2911,8 +2916,8 @@ async function abrirEditorAutoInfracao() {
         const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
 
         const htmlTemplate = `
-            <div style="border: 1px solid #999; padding: 20px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="max-height: 90px; width: auto; max-width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px; width: 100%;">
+            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="width: 100%; max-width: 100%; height: auto;">
         </div>
         
         <div style="text-align: center; margin-bottom: 25px;">
