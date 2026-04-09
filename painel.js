@@ -922,7 +922,17 @@ function mudarAba(idAba) {
                 if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
             }
         } else {
-            console.log('DEBUG - Cargo nao reconhecido. userRoleGlobal:', window.userRoleGlobal);
+            console.log('DEBUG - Cargo padrão ou fiscal. Exibindo minhas tarefas. userRoleGlobal:', window.userRoleGlobal);
+            if (mtWrapper) mtWrapper.style.display = 'block';
+            
+            // Se for fiscal, garante que os containers de produtividade estejam visiveis
+            var roleLow = (window.userRoleGlobal || '').toLowerCase();
+            if (roleLow.includes('fiscal')) {
+                var hpc = document.getElementById('home-produtividade-container');
+                if (hpc) hpc.style.display = 'block';
+                var npai = document.getElementById('home-npai-container');
+                if (npai) npai.style.display = 'block';
+            }
         }
     }
 

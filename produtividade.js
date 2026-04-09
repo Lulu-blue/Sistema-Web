@@ -75,6 +75,15 @@ function debounce(func, wait) {
     };
 }
 
+// Converte imagem para Base64 para garantir visualização em downloads do Word
+async function obterBase64Cabecalho() {
+    if (typeof CABECALHO_BASE64 !== 'undefined') {
+        return CABECALHO_BASE64;
+    }
+    // Fallback caso o arquivo cabecalho_img.js fale por algum motivo
+    return 'Cabeçalho.png';
+}
+
 // --- DEFINIÇÃO DAS CATEGORIAS ---
 // Cada categoria espelha uma aba da planilha original
 // Começando com 1 categoria de teste (2°)
@@ -2951,19 +2960,23 @@ async function abrirEditorAutoInfracao() {
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
         }
 
+        const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
+        const imgBase64 = await obterBase64Cabecalho();
+
         const hoje = new Date();
         const diaHoje = String(hoje.getDate()).padStart(2, '0');
         const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
         const anoHoje = hoje.getFullYear();
         const dataAssinatura = `${diaHoje}/${mesHoje}/${anoHoje}`;
 
-
-        const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
-
         const htmlTemplate = `
-            <div style="border: 1px solid #999; padding: 2px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="max-height: 10px; width: auto; max-width: 100%;">
-        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
         
         <div style="text-align: center; margin-bottom: 25px;">
             <p style="font-weight: bold; font-size: 14pt; margin: 10px 0;">FISCALIZAÇÃO DE POSTURAS AMBIENTAL</p>
@@ -3090,10 +3103,15 @@ async function abrirEditorOficio() {
 
 
         // 2. Prepara HTML do Documento
+        const imgBase64 = await obterBase64Cabecalho();
         const htmlTemplate = `
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 25px; width: 100%;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="width: 100%; max-width: 100%; height: auto;">
-        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
 
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px;">
             <p style="font-weight: bold; margin: 0;">OFÍCIO SEMAC- DMA Nº ${numSequencial}</p>
@@ -3206,10 +3224,15 @@ async function abrirEditorRelatorio() {
         const dataPorExtenso = `Divinópolis, ${diaHoje} de ${mesHoje} de ${anoHoje}.`;
         const dataFormatada = `${String(diaHoje).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${anoHoje}`;
 
+        const imgBase64 = await obterBase64Cabecalho();
         const htmlTemplate = `
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 25px; width: 100%;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="width: 100%; max-width: 100%; height: auto;">
-        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
 
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 40px;">
             <p style="font-weight: bold; margin: 0;">RELATÓRIO FISCAL Nº ${numSequencial}</p>
@@ -3321,10 +3344,15 @@ async function abrirEditorReplica() {
         const anoHoje = hoje.getFullYear();
         const dataPorExtenso = `Divinópolis, ${diaHoje} de ${mesHoje} de ${anoHoje}.`;
 
+        const imgBase64 = await obterBase64Cabecalho();
         const htmlTemplate = `
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 25px; width: 100%;">
-            <img src="Cabeçalho.png" alt="Prefeitura Municipal de Divinópolis" style="width: 100%; max-width: 100%; height: auto;">
-        </div>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
 
         <div style="text-align: right; margin-bottom: 20px;">
             <p style="margin: 0;">${dataPorExtenso}</p>
@@ -3433,7 +3461,7 @@ async function baixarDocumentoWord() {
         let nomeArquivo = `${tipoNome}_${numSeqDownload.replace('/', '-')}`;
 
         // Tratamento para caracteres UTF-8 no Blob MS-WORD
-        const blobDoc = new Blob(['\ufeff', sourceHTML], { type: 'application/msword;charset=utf-8' });
+        const blobDoc = new Blob(['\ufeff', sourceHTML], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blobDoc);
         const fileDownload = document.createElement("a");
         document.body.appendChild(fileDownload);
