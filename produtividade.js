@@ -100,7 +100,7 @@ const CATEGORIAS = [
             { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
             { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
             { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio', 'Reconstrução de Muro ou Passeio'] },
-            { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: false, aceitar: '.pdf,.doc,.docx' }
+            { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
         ]
     },
     {
@@ -110,6 +110,7 @@ const CATEGORIAS = [
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Contribuinte', tipo: 'text', obrigatorio: true },
+            { nome: 'cpf_contribuinte', label: 'CPF do Contribuinte', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_infrator', label: 'Endereço do Infrator', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_imovel', label: 'Endereço do Imóvel Autuado', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'bairro', label: 'Bairro do Imóvel Autuado', tipo: 'text', obrigatorio: true },
@@ -1152,6 +1153,7 @@ function filtrarHistorico() {
         filtrados = filtrados.filter(r => {
             const campos = r.campos || {};
             const textoCompleto = [
+                r.numero_sequencial || '',
                 r.categoria_nome,
                 r.categoria_id,
                 ...Object.values(campos)
@@ -1565,20 +1567,21 @@ async function carregarHistoricoGeral(categoriaId) {
     // Filtro por Ano (via created_at para performance remota)
     if (anoSelecionado) {
         query = query.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
-                    .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
+            .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
     }
 
-    // Busca Livre em múltiplos campos JSON
+    // Busca Livre em múltiplos campos JSON + número sequencial nativo
     if (termo) {
         const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
-        const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`).join(',');
-        query = query.or(orConditions);
+        const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`);
+        orConditions.push(`numero_sequencial.ilike.%${termo}%`);
+        query = query.or(orConditions.join(','));
     }
 
     // 3. Execução em blocos (Batch Fetching) até o fim
     buscaIdGlobal++;
     const buscaIdLocal = buscaIdGlobal;
-    
+
     let todosOsRegistros = [];
     let contadorOffset = 0;
     const tamanhoPagina = 1000;
@@ -1589,7 +1592,7 @@ async function carregarHistoricoGeral(categoriaId) {
         // Primeiro bloco para pegar o total (count: exact)
         let queryInicial = query.range(0, tamanhoPagina - 1);
         const { data: primeiroBloco, error: erroInicial, count } = await queryInicial;
-        
+
         if (erroInicial) throw erroInicial;
         if (buscaIdLocal !== buscaIdGlobal) return; // Busca obsoleta
 
@@ -1603,14 +1606,14 @@ async function carregarHistoricoGeral(categoriaId) {
         while (todosOsRegistros.length < totalEncontrado) {
             contadorOffset += tamanhoPagina;
             const { data: proximoBloco, error: proximoErro } = await query.range(contadorOffset, contadorOffset + tamanhoPagina - 1);
-            
+
             if (proximoErro) throw proximoErro;
             if (buscaIdLocal !== buscaIdGlobal) return; // Nova busca iniciada pelo usuário
 
             if (!proximoBloco || proximoBloco.length === 0) break;
-            
+
             todosOsRegistros = todosOsRegistros.concat(proximoBloco);
-            
+
             // Atualiza progresso na tela a cada bloco
             renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} / ${totalEncontrado})`);
         }
@@ -1629,7 +1632,7 @@ async function carregarHistoricoGeral(categoriaId) {
     // Ordenar final no JS
     const registrosOrdenados = todosOsRegistros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
     registrosGeralAtual = registrosOrdenados;
-    
+
     // Atualiza dropdown de bairros apenas se não estiver pesquisando especificamente
     if (!termo && !bairroSelecionado && !termoFiscal) {
         popularFiltroBairros(registrosOrdenados);
@@ -1668,9 +1671,9 @@ function popularFiltroBairros(registros) {
 const filtrarHistoricoGeral = debounce(() => {
     // subAbaAtual é uma variável global que deve estar definida em produtividade.js ou painel.js
     let aba = typeof subAbaAtual !== 'undefined' ? subAbaAtual : '1.1';
-    
+
     carregarHistoricoGeral(aba);
-    
+
     // Atualizar bolinha indicadora no botão Filtro instantaneamente
     atualizarIndicadorFiltro();
 }, 400);
@@ -2180,15 +2183,58 @@ async function abrirDetalhesAdminHist(id) {
             htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Resposta do Fiscal:</strong> ${vResposta || '—'}</div>`;
         }
 
+        if (isDono) {
+            htmlCampos += `<div style="margin-top:20px; border-top:1px dashed #cbd5e1; padding-top:16px;">
+                <h4 style="margin-bottom:12px; color:#1e293b; font-size:15px;">Gerenciar Documentos</h4>`;
+
+            // Anexo Principal
+            htmlCampos += `<div style="margin-bottom:12px; padding:10px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
+                <strong style="display:block; font-size:13px; color:#475569; margin-bottom:6px;">Documento Principal:</strong>`;
+            if (campos.anexo_pdf) {
+                htmlCampos += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <a href="${campos.anexo_pdf}" target="_blank" style="color:#2563eb; font-size:14px; font-weight:500; text-decoration:underline;">Ver anexo atual</a>
+                    <span style="font-size:11px; color:#94a3b8;">(Para substituir, envie um novo abaixo)</span>
+                </div>`;
+                htmlCampos += `<input type="file" id="dono-substituir-doc" accept=".pdf,.doc,.docx" style="width:100%; font-size:13px;">`;
+            } else {
+                htmlCampos += `<p style="font-size:12px; color:#ef4444; margin:0 0 6px 0;">Nenhum documento principal anexado.</p>`;
+                htmlCampos += `<input type="file" id="dono-novo-doc" accept=".pdf,.doc,.docx" style="width:100%; font-size:13px;">`;
+            }
+            htmlCampos += `</div>`;
+
+            // Anexos Extras
+            let anexosExtras = campos.anexos_extras || [];
+            htmlCampos += `<div style="margin-bottom:12px; padding:10px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
+                <strong style="display:block; font-size:13px; color:#475569; margin-bottom:6px;">Documentos Adicionais:</strong>`;
+            if (anexosExtras.length > 0) {
+                anexosExtras.forEach((urlExtra, i) => {
+                    htmlCampos += `<div id="cont-extra-${i}" style="display:flex; align-items:center; gap:8px; margin-bottom:6px; background:white; padding:6px; border-radius:4px; border:1px solid #cbd5e1;">
+                        <a href="${urlExtra}" target="_blank" style="color:#2563eb; font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Anexo Extra ${i + 1}</a>
+                        <button onclick="document.getElementById('remover-extra-${i}').checked=true; document.getElementById('cont-extra-${i}').style.display='none';" style="background:#fef2f2; color:#ef4444; border:1px solid #fca5a5; border-radius:4px; padding:4px 8px; font-size:11px; cursor:pointer;" title="Marcar para remoção ao salvar">Remover</button>
+                        <input type="checkbox" id="remover-extra-${i}" value="${urlExtra}" style="display:none;">
+                    </div>`;
+                });
+            }
+            htmlCampos += `<label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Enviar novos extras (pode selecionar vários):</label>
+                <input type="file" id="dono-novos-extras" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style="width:100%; font-size:13px;">`;
+            htmlCampos += `</div></div>`;
+        }
+
         if (isCargoGerencia || isDono) {
             btnSalvar = `<button id="btn-salvar-detalhes" onclick="salvarDetalhesHist('${reg.id}')" style="flex:1; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Salvar Alterações</button>`;
         }
     }
 
-    // Botão de excluir apenas para o dono do registro
-    let btnExcluir = '';
+    // Botões extras para o dono (Excluir e Editar Dados)
+    let btsDono = '';
     if (isDono) {
-        btnExcluir = `<button onclick="excluirRegistroHistGeral('${reg.id}', '${reg.categoria_id}')" style="flex:1; padding:12px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">Excluir</button>`;
+        btsDono += `<button onclick="excluirRegistroHistGeral('${reg.id}', '${reg.categoria_id}')" style="padding:12px 16px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'" title="Excluir Registro Permanente">🗑</button>`;
+
+        // Só exibe editar se a categoria permitir edição de dados brutos
+        const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7'];
+        if (!categoriasBloqueadas.includes(reg.categoria_id)) {
+            btsDono += `<button onclick="editarRegistroHistoricoGeral('${reg.id}')" style="flex:1; padding:12px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">✏️ Editar Dados</button>`;
+        }
     }
 
     const modal = document.createElement('div');
@@ -2204,7 +2250,7 @@ async function abrirDetalhesAdminHist(id) {
             </div>
             <div style="display:flex; gap:10px; margin-top:20px;">
                 ${btnSalvar}
-                ${btnExcluir}
+                ${btsDono}
             </div>
         </div>
     `;
@@ -2288,6 +2334,63 @@ async function salvarDetalhesHist(id) {
             novosCampos.resposta_fiscal = selectResposta.value;
         } else if (selectResposta.value === 'Outro' && inputResposta) {
             novosCampos.resposta_fiscal = inputResposta.value;
+        }
+    }
+
+    // Gerenciador de Anexos do Dono
+    const { data: { user } } = await getAuthUser();
+    const isDono = reg.user_id === user.id;
+
+    if (isDono) {
+        // Documento Principal
+        const inputNovoPrinc = document.getElementById('dono-novo-doc');
+        const inputSubstPrinc = document.getElementById('dono-substituir-doc');
+        let filePrinc = null;
+        if (inputNovoPrinc && inputNovoPrinc.files.length > 0) filePrinc = inputNovoPrinc.files[0];
+        if (inputSubstPrinc && inputSubstPrinc.files.length > 0) filePrinc = inputSubstPrinc.files[0];
+
+        if (filePrinc) {
+            let nomeAnexoLimpo = filePrinc.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-\.]/g, '');
+            const caminho = `${user.id}/DOC_${id}_${Date.now()}_${nomeAnexoLimpo}`;
+            const { error: uploadError } = await supabaseClient.storage.from('anexos').upload(caminho, filePrinc, { upsert: true });
+            if (!uploadError) {
+                const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
+                novosCampos.anexo_pdf = urlData.publicUrl;
+            } else {
+                alert('Erro ao salvar documento principal: ' + uploadError.message);
+            }
+        }
+
+        // Remover Anexos Extras
+        let anexosExtrasAtual = novosCampos.anexos_extras || [];
+        const removidos = [];
+        for (let i = 0; i < 50; i++) {
+            const chk = document.getElementById(`remover-extra-${i}`);
+            if (chk && chk.checked) removidos.push(chk.value);
+        }
+        if (removidos.length > 0) {
+            anexosExtrasAtual = anexosExtrasAtual.filter(u => !removidos.includes(u));
+        }
+
+        // Adicionar novos Anexos Extras
+        const inputExtras = document.getElementById('dono-novos-extras');
+        if (inputExtras && inputExtras.files.length > 0) {
+            for (let i = 0; i < inputExtras.files.length; i++) {
+                const fileExt = inputExtras.files[i];
+                let nomeAnexoLimpo = fileExt.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-\.]/g, '');
+                const caminho = `${user.id}/EXTRA_${id}_${Date.now()}_${i}_${nomeAnexoLimpo}`;
+                const { error: upErr } = await supabaseClient.storage.from('anexos').upload(caminho, fileExt, { upsert: true });
+                if (!upErr) {
+                    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
+                    anexosExtrasAtual.push(urlData.publicUrl);
+                }
+            }
+        }
+
+        if (anexosExtrasAtual.length > 0) {
+            novosCampos.anexos_extras = anexosExtrasAtual;
+        } else {
+            delete novosCampos.anexos_extras;
         }
     }
 
@@ -2387,6 +2490,22 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         console.error('Erro ao excluir registro:', err);
         alert('Erro ao excluir. Tente novamente.');
     }
+}
+
+// --- EDITAR REGISTRO PELO HISTÓRICO GERAL ---
+function editarRegistroHistoricoGeral(id) {
+    const reg = registrosGeralAtual.find(r => r.id === id);
+    if (!reg) return;
+
+    // Configura o registroSelecionado para a função unificada
+    registroSelecionado = reg;
+
+    // Fecha o modal atual sem re-renderizar o painel atrás
+    const modal = document.getElementById('modal-detalhes-admin-hist');
+    if (modal) modal.remove();
+
+    // Chama o formulário padrão de edição
+    editarRegistro();
 }
 
 // --- GRÁFICO DE PRODUTIVIDADE POR DIA ---
@@ -2983,8 +3102,9 @@ async function abrirEditorAutoInfracao() {
             <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">${tituloDoc}: ${numSequencial}</p>
         </div>
         
-        <p style="margin-top: 20px;">
-            <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}
+        <p style="margin-top: 20px; line-height: 1.5;">
+            <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}<br>
+            <strong>CPF:</strong> ${campos.cpf_contribuinte || '_________________'}
         </p>
         <p>
             <strong>Endereço:</strong> ${campos.endereco_infrator || '---'}
