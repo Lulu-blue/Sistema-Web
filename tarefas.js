@@ -116,7 +116,7 @@ async function carregarModuloTarefas() {
                     // Posturas
                     idsGerentesGlobal = profiles.filter(p => {
                         var n = normalizeStr(p.role);
-                        if (n.includes('regularizacao') || n.includes('regularização') || n.includes('cuidado animal')) return false;
+                        if (n.includes('regularizacao') || n.includes('regularização') || n.includes('cuidado animal') || n.includes('juridica') || n.includes('administracao')) return false;
                         return n.includes('gerente') || n.includes('administrativo') || n.includes('administrador');
                     }).map(p => p.id);
 
@@ -733,76 +733,84 @@ async function carregarTarefas() {
             t._ehMinhaViaSub = !!ehMinhaViaSubMap[t.id];
             t._minhasSubIds = minhasSubIds;
 
+            // 1. DADOS BÁSICOS DA TAREFA
             var ehCriador = t.criado_por === userIdGlobal;
             var ehResponsavel = t._respUserIds.indexOf(userIdGlobal) !== -1 || t._ehMinhaViaSub;
+            
+            var roleFiltro = (userRoleGlobal || '').toLowerCase();
+            var isDiretor = roleFiltro.includes('diretor');
+            var isSecretario = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
 
-            // 1. REGRA BÁSICA: Se o usuário logado é Criador ou Responsável, SEMPRE vê.
-            if (ehCriador || ehResponsavel) {
-                // Permitir
-            } else {
-                // 2. REGRAS HIERÁRQUICAS E DE MODO (Para quem NÃO é dono/responsável)
-                var roleLowerFiltro = (userRoleGlobal || '').toLowerCase();
+            // Função helper interna para verificar se a tarefa pertence a um conjunto de IDs (criador ou responsável)
+            var vinculadaAoGrupo = function(task, idSet) {
+                if (!idSet || idSet.length === 0) return false;
+                if (idSet.indexOf(task.criado_por) !== -1) return true;
+                return task._respUserIds.some(function(uid) { return idSet.indexOf(uid) !== -1; });
+            };
 
-                // FILTRO DIRETOR
-                if (roleLowerFiltro.includes('diretor')) {
-                    if (diretorModoVisualizacao === 'direcao') {
-                        return; // Modo Direção: Ver apenas o que EU criei ou sou responsável
-                    } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
-                        if (!vinculadaAoGrupo(t, idsEquipeAmbientalGlobal)) return;
-                    } else if (diretorModoVisualizacao === 'cuidado_animal') {
-                        if (!vinculadaAoGrupo(t, idsEquipeCAGlobal)) return;
+            var exibirTarefa = false;
+
+            // 2. REGRAS DE VISIBILIDADE
+            if (isSecretario) {
+                var secMode = window.secretarioModoVisualizacao || 'normal';
+                
+                if (secMode === 'normal') {
+                    // Modo dashboard geral: Só vê o que criou ou é responsável
+                    if (ehCriador || ehResponsavel) exibirTarefa = true;
+                } else if (secMode === 'direcao') {
+                    if (window.secretarioModoGerencia) {
+                        var idsPosturasSec = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+                        // Para o superior ver a tarefa que ele mesmo criou neste setor, ela DEVE ter alguém do setor como responsável
+                        // Ou ser criada por alguém do setor
+                        if (vinculadaAoGrupo(t, idsPosturasSec) || (ehCriador && t._respUserIds.some(uid => idsPosturasSec.includes(uid)))) exibirTarefa = true;
                     } else {
-                        // Modo Gerência Posturas (padrão)
-                        var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                        if (!vinculadaAoGrupo(t, idsPosturas)) return;
+                        if (vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(uid => idsDiretoresGlobal.includes(uid)))) exibirTarefa = true;
                     }
+                } else if (secMode === 'gerencia_ambiental') {
+                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeAmbientalGlobal.includes(uid)))) exibirTarefa = true;
+                } else if (secMode === 'cuidado_animal') {
+                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeCAGlobal.includes(uid)))) exibirTarefa = true;
+                } else if (secMode === 'juridico') {
+                    if (vinculadaAoGrupo(t, idsJuridicoGlobal) || (ehCriador && t._respUserIds.some(uid => idsJuridicoGlobal.includes(uid)))) exibirTarefa = true;
+                } else if (secMode === 'recursos_humanos') {
+                    if (vinculadaAoGrupo(t, idsRHGlobal) || (ehCriador && t._respUserIds.some(uid => idsRHGlobal.includes(uid)))) exibirTarefa = true;
                 }
-                // FILTRO SECRETÁRIO
-                else if (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)') {
-                    if (window.secretarioModoVisualizacao === 'direcao') {
-                        if (window.secretarioModoGerencia) {
-                            var idsPosturasSec = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                            if (!vinculadaAoGrupo(t, idsPosturasSec)) return;
-                        } else {
-                            if (!vinculadaAoGrupo(t, idsDiretoresGlobal)) return;
-                        }
-                    } else if (window.secretarioModoVisualizacao === 'gerencia_ambiental') {
-                        if (!vinculadaAoGrupo(t, idsEquipeAmbientalGlobal)) return;
-                    } else if (window.secretarioModoVisualizacao === 'cuidado_animal') {
-                        if (!vinculadaAoGrupo(t, idsEquipeCAGlobal)) return;
-                    } else if (window.secretarioModoVisualizacao === 'juridico') {
-                        if (!vinculadaAoGrupo(t, idsJuridicoGlobal)) return;
-                    } else if (window.secretarioModoVisualizacao === 'recursos_humanos') {
-                        if (!vinculadaAoGrupo(t, idsRHGlobal)) return;
-                    } else {
-                        // Modo normal: vê tudo (não filtra)
-                    }
+            } 
+            else if (isDiretor) {
+                if (diretorModoVisualizacao === 'direcao' || !diretorModoVisualizacao) {
+                    if (ehCriador || ehResponsavel) exibirTarefa = true;
+                } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
+                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeAmbientalGlobal.includes(uid)))) exibirTarefa = true;
+                } else if (diretorModoVisualizacao === 'cuidado_animal') {
+                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeCAGlobal.includes(uid)))) exibirTarefa = true;
+                } else {
+                    var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+                    if (vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(uid => idsPosturas.includes(uid)))) exibirTarefa = true;
                 }
-                // FILTRO GERENTES (Cargos de gestão de equipe)
-                else if (roleLowerFiltro.includes('gerente')) {
-                    var roleNorm = roleLowerFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    var isRA = roleNorm.includes('regularizacao');
-                    var isCA = roleNorm.includes('cuidado') && roleNorm.includes('animal');
-                    var isJuridicoAuto = roleNorm.includes('interface') && roleNorm.includes('juridica');
-                    
-                    if (isJuridicoAuto) {
-                        // Cargo Especial Jurídico: Vê apenas o que é dono/responsável (já coberto pelo "if !ehCriador..." acima, então return)
-                        return;
-                    } else if (isRA) {
-                        if (!vinculadaAoGrupo(t, idsEquipeAmbientalGlobal)) return;
-                    } else if (isCA) {
-                        if (!vinculadaAoGrupo(t, idsEquipeCAGlobal)) return;
-                    } else {
-                        // Gerente de Posturas / Administrativo
-                        var idsPosturasGer = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                        if (!vinculadaAoGrupo(t, idsPosturasGer)) return;
-                    }
-                }
-                else {
-                    // Outros perfis (Fiscais, Agente Admin): Se não é dono nem responsável, não vê
-                    return;
+            } 
+            else if (roleFiltro.includes('gerente')) {
+                var roleNorm = roleFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                var isRA = roleNorm.includes('regularizacao');
+                var isCA = roleNorm.includes('cuidado') && roleNorm.includes('animal');
+                var isJuridicoAuto = roleNorm.includes('interface') && roleNorm.includes('juridica');
+
+                if (isJuridicoAuto) {
+                    if (ehCriador || ehResponsavel) exibirTarefa = true;
+                } else if (isRA) {
+                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal)) exibirTarefa = true;
+                } else if (isCA) {
+                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal)) exibirTarefa = true;
+                } else {
+                    var idsPosturasGer = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+                    if (vinculadaAoGrupo(t, idsPosturasGer)) exibirTarefa = true;
                 }
             }
+            else {
+                // Fiscais, Agente Admin, etc.
+                if (ehCriador || ehResponsavel) exibirTarefa = true;
+            }
+
+            if (!exibirTarefa) return;
 
             // Filtrar do Kanban tarefas concluídas há mais de 30 dias
             if (t.status === 'concluida') {
@@ -1351,9 +1359,26 @@ async function abrirDetalheTarefa(id) {
     if (_abrindoDetalhe) return;
     _abrindoDetalhe = true;
 
+    var loadingId = 'loading-detalhe-' + id;
     try {
+        var loadingHtml = '<div id="' + loadingId + '" class="modal-overlay ativo" style="z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);"><div style="background:white;padding:24px 32px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 10px 25px rgba(0,0,0,0.1);"><div style="width:36px;height:36px;border:4px solid #e2e8f0;border-top:4px solid #10b981;border-radius:50%;animation:spinLoading 1s linear infinite;"></div><div style="color:#334155;font-weight:600;font-size:15px;">Carregando tarefa...</div></div></div>';
+        if (!document.getElementById('spin-style-loading')) {
+            document.head.insertAdjacentHTML('beforeend', '<style id="spin-style-loading">@keyframes spinLoading { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>');
+        }
+        document.body.insertAdjacentHTML('beforeend', loadingHtml);
+
         var tarefa = tarefasCache.find(function (t) { return t.id === id; });
-        if (!tarefa) { _abrindoDetalhe = false; return; }
+        if (!tarefa) {
+            // Se a tarefa não estiver no cache (ex: abrindo direto da Home), busca do banco
+            var { data: tData } = await supabaseClient.from('tarefas').select('*').eq('id', id).maybeSingle();
+            if (!tData) {
+                var loadingElErr = document.getElementById(loadingId);
+                if (loadingElErr) loadingElErr.remove();
+                _abrindoDetalhe = false;
+                return;
+            }
+            tarefa = tData;
+        }
 
         // Buscar subtarefas atualizadas
         var { data: subtarefas } = await supabaseClient
@@ -1589,10 +1614,15 @@ async function abrirDetalheTarefa(id) {
 
         html += '</div></div></div>';
 
+        var loadingEl = document.getElementById(loadingId);
+        if (loadingEl) loadingEl.remove();
+
         document.body.insertAdjacentHTML('beforeend', html);
     } catch (err) {
         console.error('Erro ao abrir detalhe:', err);
     } finally {
+        var loadingElFinal = document.getElementById('loading-detalhe-' + id);
+        if (loadingElFinal) loadingElFinal.remove();
         _abrindoDetalhe = false;
     }
 }

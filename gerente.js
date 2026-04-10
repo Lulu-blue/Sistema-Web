@@ -3664,11 +3664,16 @@ async function carregarResumoTarefasSecretario() {
     var container = document.getElementById('secretario-resumo-tarefas');
     if (!container) return;
 
+    // Garantir que as variáveis globais de hierarquia estejam carregadas para resolver o getTaskPath
+    if (typeof carregarModuloTarefas === 'function') {
+        try { await carregarModuloTarefas(); } catch(e) { console.error('Erro ao inicializar módulos de tarefas em background:', e); }
+    }
+
     try {
         // Buscar todas as tarefas não concluídas
         var { data: tarefas, error } = await supabaseClient
             .from('tarefas')
-            .select('*, tarefa_responsaveis(user_id, user_name)')
+            .select('*, tarefa_responsaveis(user_id, user_name), criador:profiles!criado_por(full_name)')
             .neq('status', 'concluida')
             .order('prazo', { ascending: true });
 
@@ -3694,19 +3699,48 @@ async function carregarResumoTarefasSecretario() {
         html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 12px; font-size: 14px;">Próximas Tarefas:</div>';
         html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
 
+        var getTaskPath = function(task) {
+            var c = task.criado_por;
+            if (typeof idsEquipeAmbientalGlobal !== 'undefined' && idsEquipeAmbientalGlobal.includes(c)) return 'Tarefas > Reg. Ambiental';
+            if (typeof idsEquipeCAGlobal !== 'undefined' && idsEquipeCAGlobal.includes(c)) return 'Tarefas > Cuidado Animal';
+            if (typeof idsFiscaisPosturasGlobal !== 'undefined' && idsFiscaisPosturasGlobal.includes(c)) return 'Tarefas > Gerência de Posturas';
+            if (typeof idsGerentesGlobal !== 'undefined' && idsGerentesGlobal.includes(c)) return 'Tarefas > Gerência de Posturas';
+            if (typeof idsJuridicoGlobal !== 'undefined' && idsJuridicoGlobal.includes(c)) return 'Tarefas > Interface Jurídica';
+            if (typeof idsRHGlobal !== 'undefined' && idsRHGlobal.includes(c)) return 'Tarefas > Recursos Humanos';
+            if (typeof idsDiretoresGlobal !== 'undefined' && idsDiretoresGlobal.includes(c)) return 'Tarefas > Direção';
+            
+            var reps = task.tarefa_responsaveis || [];
+            for (var i = 0; i < reps.length; i++) {
+                var r = reps[i].user_id;
+                if (typeof idsEquipeAmbientalGlobal !== 'undefined' && idsEquipeAmbientalGlobal.includes(r)) return 'Tarefas > Reg. Ambiental';
+                if (typeof idsEquipeCAGlobal !== 'undefined' && idsEquipeCAGlobal.includes(r)) return 'Tarefas > Cuidado Animal';
+                if (typeof idsFiscaisPosturasGlobal !== 'undefined' && idsFiscaisPosturasGlobal.includes(r)) return 'Tarefas > Gerência de Posturas';
+                if (typeof idsGerentesGlobal !== 'undefined' && idsGerentesGlobal.includes(r)) return 'Tarefas > Gerência de Posturas';
+                if (typeof idsJuridicoGlobal !== 'undefined' && idsJuridicoGlobal.includes(r)) return 'Tarefas > Interface Jurídica';
+                if (typeof idsRHGlobal !== 'undefined' && idsRHGlobal.includes(r)) return 'Tarefas > Recursos Humanos';
+            }
+            return 'Tarefas > Resumo Geral';
+        };
+
         tarefas.slice(0, 5).forEach(function (t) {
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b';
             var statusLabel = t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente';
             var atrasada = t.prazo && new Date(t.prazo) < new Date();
 
-            html += '<div style="padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid ' + statusColor + '; display: flex; justify-content: space-between; align-items: center;">';
+            var criadorNome = (t.criador && t.criador.full_name) ? t.criador.full_name : 'Desconhecido';
+            var taskPath = getTaskPath(t);
+
+            html += '<div onclick="if(typeof abrirDetalheTarefa === \'function\') abrirDetalheTarefa(\'' + t.id + '\');" style="padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid ' + statusColor + '; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'">';
             html += '<div>';
-            html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px;">' + (t.titulo || 'Sem título') + '</div>';
+            html += '<div style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">📍 ' + taskPath + '</div>';
+            html += '<div style="font-weight: 600; color: #1e293b; font-size: 14px; margin-bottom: 4px;">' + (t.titulo || 'Sem título') + '</div>';
             if (t.prazo) {
-                html += '<div style="font-size: 12px; color: ' + (atrasada ? '#dc2626' : '#64748b') + ';">' + new Date(t.prazo).toLocaleDateString('pt-BR') + (atrasada ? ' (ATRASADA)' : '') + '</div>';
+                html += '<div style="font-size: 11px; color: ' + (atrasada ? '#dc2626' : '#64748b') + ';">Prazo: ' + new Date(t.prazo).toLocaleDateString('pt-BR') + (atrasada ? ' (ATRASADA)' : '') + ' • Criador: <strong style="color:#475569;">' + criadorNome.split(' ')[0] + '</strong></div>';
+            } else {
+                html += '<div style="font-size: 11px; color: #64748b;">Criador: <strong style="color:#475569;">' + criadorNome.split(' ')[0] + '</strong></div>';
             }
             html += '</div>';
-            html += '<span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: ' + statusColor + '20; color: ' + statusColor + ';">' + statusLabel + '</span>';
+            html += '<span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: ' + statusColor + '20; color: ' + statusColor + '; white-space: nowrap;">' + statusLabel + '</span>';
             html += '</div>';
         });
 
