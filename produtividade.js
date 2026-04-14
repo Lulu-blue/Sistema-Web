@@ -2166,17 +2166,46 @@ async function abrirDetalhesAdminHist(id) {
 
         if (isDono) {
             // Prepara visualização de toggle para a resposta
-            const isOpcaoPadrao = vResposta === 'ATENDIDO' || vResposta === '';
+            let dataAtendimento = '';
+            let isAtendidoComData = false;
+            if (vResposta && vResposta.startsWith('ATENDIDO - ')) {
+                isAtendidoComData = true;
+                dataAtendimento = vResposta.substring('ATENDIDO - '.length);
+            }
+            const isOpcaoPadrao = vResposta === 'ATENDIDO' || vResposta === '' || isAtendidoComData;
+            const hojeStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
             htmlCampos += `<div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#10b981;">Sua Resposta</label>
-                <select id="admin-resposta-select" onchange="const t = document.getElementById('admin-resposta-text-container'); if(this.value === 'Outro') { t.style.display = 'block'; } else { t.style.display = 'none'; document.getElementById('admin-resposta-fiscal').value = ''; }" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; margin-bottom:8px; background:white;">
+                <select id="admin-resposta-select" onchange="
+                    const t = document.getElementById('admin-resposta-text-container');
+                    const d = document.getElementById('admin-resposta-data-container');
+                    if(this.value === 'Outro') {
+                        t.style.display = 'block';
+                        d.style.display = 'none';
+                        document.getElementById('admin-resposta-fiscal').value = '';
+                    } else if(this.value === 'ATENDIDO') {
+                        t.style.display = 'none';
+                        d.style.display = 'block';
+                        const dataInput = document.getElementById('admin-resposta-data');
+                        if(!dataInput.value) dataInput.value = '${hojeStr}';
+                    } else {
+                        t.style.display = 'none';
+                        d.style.display = 'none';
+                        document.getElementById('admin-resposta-fiscal').value = '';
+                        document.getElementById('admin-resposta-data').value = '';
+                    }
+                " style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; margin-bottom:8px; background:white;">
                     <option value="">Selecione...</option>
-                    <option value="ATENDIDO" ${vResposta === 'ATENDIDO' ? 'selected' : ''}>ATENDIDO</option>
-                    <option value="Outro" ${!isOpcaoPadrao ? 'selected' : ''}>Outro (Escrever manual...)</option>
+                    <option value="ATENDIDO" ${(vResposta === 'ATENDIDO' || isAtendidoComData) ? 'selected' : ''}>ATENDIDO</option>
+                    <option value="Outro" ${(!isOpcaoPadrao) ? 'selected' : ''}>Outro (Escrever manual...)</option>
                 </select>
+                <div id="admin-resposta-data-container" style="display:${(vResposta === 'ATENDIDO' || isAtendidoComData) ? 'block' : 'none'};">
+                    <label style="display:block; font-size:13px; color:#64748b; margin-bottom:3px;">Data do atendimento</label>
+                    <input type="text" id="admin-resposta-data" value="${dataAtendimento || hojeStr}" placeholder="dd/mm/aa" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">
+                </div>
                 <div id="admin-resposta-text-container" style="display:${!isOpcaoPadrao ? 'block' : 'none'};">
-                    <textarea id="admin-resposta-fiscal" rows="3" placeholder="Digite sua resposta personalizada..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${!isOpcaoPadrao ? vResposta : ''}</textarea>
+                    <textarea id="admin-resposta-fiscal" rows="3" placeholder="Digite sua resposta personalizada..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${(!isOpcaoPadrao) ? vResposta : ''}</textarea>
                 </div>
             </div>`;
         } else {
@@ -2330,8 +2359,12 @@ async function salvarDetalhesHist(id) {
 
     // Salvar 'Resposta' lendo o select ou o campo de texto
     if (selectResposta) {
-        if (selectResposta.value === 'ATENDIDO' || selectResposta.value === '') {
-            novosCampos.resposta_fiscal = selectResposta.value;
+        if (selectResposta.value === 'ATENDIDO') {
+            const dataInput = document.getElementById('admin-resposta-data');
+            const dataStr = dataInput && dataInput.value ? dataInput.value.trim() : '';
+            novosCampos.resposta_fiscal = dataStr ? `ATENDIDO - ${dataStr}` : 'ATENDIDO';
+        } else if (selectResposta.value === '') {
+            novosCampos.resposta_fiscal = '';
         } else if (selectResposta.value === 'Outro' && inputResposta) {
             novosCampos.resposta_fiscal = inputResposta.value;
         }

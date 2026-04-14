@@ -1720,8 +1720,8 @@ async function abrirDetalheTarefa(id) {
         // Verificar se todas as subtarefas estão concluídas
         var todasSubConcluidas = subs.length === 0 || subs.every(function (s) { return s.status === 'concluida'; });
 
-        // Status — Diretor, Secretário ou Gerente que criou a tarefa podem alterar
-        if (ehDiretor || ehSecretario || gerenteCriouTarefa) {
+        // Status — Diretor, Secretário, Gerente que criou a tarefa ou responsáveis podem alterar
+        if (ehDiretor || ehSecretario || gerenteCriouTarefa || ehResponsavel) {
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
             var statusOpts = [
                 { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
@@ -1833,6 +1833,7 @@ async function abrirDetalheTarefa(id) {
                 html += '<div style="flex:1;">';
                 html += '<span style="font-size:15px; color:' + (s.status === 'concluida' ? '#94a3b8' : '#334155') + '; ' + (s.status === 'concluida' ? 'text-decoration:line-through;' : '') + '">' + s.titulo + '</span>';
                 if (subResp) html += '<div style="font-size:15px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + subResp + '</div>';
+                if (s.descricao) html += '<div style="font-size:13px; color:#64748b; margin-top:3px; background:#f8fafc; padding:4px 6px; border-radius:4px;">' + escapeHtmlTarefa(s.descricao).replace(/\n/g, '<br>') + '</div>';
                 html += '</div>';
                 if (podeConcluirSub) {
                     html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar arquivo"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
@@ -1903,15 +1904,18 @@ async function abrirDetalheTarefa(id) {
 
 async function alterarStatusTarefa(id, novoStatus) {
     try {
-        // Verificação de segurança: Diretor, Secretário ou Gerente que criou a tarefa podem alterar status
+        // Verificação de segurança: Diretor, Secretário, Gerente que criou a tarefa ou responsáveis podem alterar status
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
         if (!ehDiretor && !ehSecretario) {
-            var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
-            if (!tarefa || tarefa.criado_por !== userIdGlobal) {
-                Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem alterar o status.', 'error');
+            var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, tarefa_responsaveis(user_id)').eq('id', id).maybeSingle();
+            var ehCriador = tarefa && tarefa.criado_por === userIdGlobal;
+            var responsaveis = tarefa && tarefa.tarefa_responsaveis ? tarefa.tarefa_responsaveis : [];
+            var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
+            if (!ehCriador && !ehResponsavel) {
+                Swal.fire('Acesso Negado', 'Apenas o criador, um responsável, Diretor ou Secretário(a) podem alterar o status.', 'error');
                 return;
             }
         }
@@ -1974,6 +1978,8 @@ function abrirCriarSubtarefa(tarefaPaiId) {
     html += '<button class="modal-close" onclick="fecharModal(\'modal-nova-subtarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Subtarefa</label><input type="text" id="subtarefa-titulo" placeholder="Ex: Verificar documentos"></div>';
+    html += '<div class="campo-grupo"><label>Descrição (opcional)</label><textarea id="subtarefa-descricao" rows="3" placeholder="Detalhes da subtarefa..."></textarea></div>';
+    html += '<div class="campo-grupo"><label>Anexo da descrição (opcional)</label><input type="file" id="subtarefa-anexo-descricao" style="font-size:14px;"></div>';
     html += '<div class="campo-grupo"><label>Responsáveis</label><div id="subtarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer">';
     html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-nova-subtarefa\')">Cancelar</button>';
@@ -2198,6 +2204,10 @@ async function confirmarSubtarefa(tarefaPaiId) {
     var titulo = document.getElementById('subtarefa-titulo').value.trim();
     if (!titulo) { alert('Preencha o título da subtarefa.'); return; }
 
+    var descricao = document.getElementById('subtarefa-descricao').value.trim();
+    var anexoInput = document.getElementById('subtarefa-anexo-descricao');
+    var anexoFile = anexoInput && anexoInput.files[0] ? anexoInput.files[0] : null;
+
     var responsaveisCBs = document.querySelectorAll('.cb-resp-sub:checked');
     var responsaveis = [];
     responsaveisCBs.forEach(function (cb) {
@@ -2207,32 +2217,43 @@ async function confirmarSubtarefa(tarefaPaiId) {
     fecharModal('modal-nova-subtarefa');
 
     try {
-        if (responsaveis.length === 0) {
-            // Sem responsável: cria uma única subtarefa
-            var { error } = await supabaseClient.from('tarefas').insert({
+        async function criarSubtarefaComAnexo(r) {
+            var { data: nova, error: errSub } = await supabaseClient.from('tarefas').insert({
                 titulo: titulo,
+                descricao: descricao || null,
                 status: 'pendente',
                 tarefa_pai_id: tarefaPaiId,
                 criado_por: userIdGlobal
-            });
-            if (error) throw error;
-        } else {
-            // Cria uma subtarefa para cada responsável selecionado
-            for (var i = 0; i < responsaveis.length; i++) {
-                var r = responsaveis[i];
-                var { data: nova, error: errSub } = await supabaseClient.from('tarefas').insert({
-                    titulo: titulo,
-                    status: 'pendente',
-                    tarefa_pai_id: tarefaPaiId,
-                    criado_por: userIdGlobal
-                }).select().maybeSingle();
-                if (errSub) throw errSub;
+            }).select().maybeSingle();
+            if (errSub) throw errSub;
 
+            if (r) {
                 await supabaseClient.from('tarefa_responsaveis').insert({
                     tarefa_id: nova.id,
                     user_id: r.user_id,
                     user_name: r.user_name
                 });
+            }
+
+            if (anexoFile) {
+                var filePath = nova.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(anexoFile.name);
+                var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, anexoFile);
+                if (!uploadErr) {
+                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+                    await supabaseClient.from('tarefa_anexos').insert({
+                        tarefa_id: nova.id,
+                        nome_arquivo: anexoFile.name,
+                        url: publicUrl
+                    });
+                }
+            }
+        }
+
+        if (responsaveis.length === 0) {
+            await criarSubtarefaComAnexo(null);
+        } else {
+            for (var i = 0; i < responsaveis.length; i++) {
+                await criarSubtarefaComAnexo(responsaveis[i]);
             }
         }
 
@@ -2400,6 +2421,14 @@ async function uploadAnexo(tarefaId, inputEl) {
             console.error('Erro ao salvar registro do anexo:', insertErr);
             Swal.fire('Erro no Banco', 'Arquivo enviado, mas não foi possível salvar o registro: ' + insertErr.message, 'error');
             return;
+        }
+
+        // Se for tarefa normal (não subtarefa) e estiver pendente, mudar para em_progresso automaticamente
+        if (!tarefaInfo.tarefa_pai_id) {
+            var { data: tarefaAtual } = await supabaseClient.from('tarefas').select('status').eq('id', tarefaId).maybeSingle();
+            if (tarefaAtual && tarefaAtual.status === 'pendente') {
+                await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaId);
+            }
         }
 
         // Detectar se é subtarefa para reabrir o modal correto
