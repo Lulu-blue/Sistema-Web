@@ -1083,6 +1083,18 @@ function escapeHtmlTarefa(text) {
         .replace(/'/g, '&#039;');
 }
 
+function sanitizarNomeArquivo(nome) {
+    if (!nome) return 'arquivo';
+    // Remove acentos
+    var semAcentos = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Substitui espaços por underscore
+    var semEspacos = semAcentos.replace(/\s+/g, '_');
+    // Remove caracteres que não sejam letras, números, underscore, hífen e ponto
+    var limpo = semEspacos.replace(/[^a-zA-Z0-9_\-.]/g, '');
+    // Evita nome vazio
+    return limpo || 'arquivo';
+}
+
 function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
     var container = document.getElementById(containerId);
     if (!container) return;
@@ -1567,7 +1579,7 @@ async function salvarTarefa() {
             var uploadPromises = [];
             for (var i = 0; i < arquivos.length; i++) {
                 var file = arquivos[i];
-                var filePath = novaTarefa.id + '/' + Date.now() + '_' + file.name;
+                var filePath = novaTarefa.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
                 uploadPromises.push((async function (f, fPath) {
                     var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(fPath, f);
                     if (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
@@ -1649,8 +1661,9 @@ async function abrirDetalheTarefa(id) {
                 .select('*')
                 .in('tarefa_id', subIds);
             (subResps || []).forEach(function (r) {
-                subRespMap[r.tarefa_id] = r.user_name || 'Fiscal';
-                subRespUserIdMap[r.tarefa_id] = r.user_id;
+                if (!subRespMap[r.tarefa_id]) subRespMap[r.tarefa_id] = r.user_name || 'Fiscal';
+                if (!subRespUserIdMap[r.tarefa_id]) subRespUserIdMap[r.tarefa_id] = [];
+                subRespUserIdMap[r.tarefa_id].push(r.user_id);
             });
         }
 
@@ -1805,8 +1818,8 @@ async function abrirDetalheTarefa(id) {
 
                 html += '<div style="padding:8px 0; border-bottom:1px solid #f1f5f9;">';
                 html += '<div style="display:flex; align-items:center; gap:8px;">';
-                var subRespUserId = subRespUserIdMap[s.id] || '';
-                var podeConcluirSub = ehGerente || (subRespUserId === userIdGlobal);
+                var subRespUserIds = subRespUserIdMap[s.id] || [];
+                var podeConcluirSub = ehGerente || (subRespUserIds.indexOf(userIdGlobal) !== -1);
                 var subTemAnexo = subAnx.length > 0;
                 var subJaConcluida = s.status === 'concluida';
                 if (podeConcluirSub && (subTemAnexo || subJaConcluida)) {
@@ -1838,7 +1851,7 @@ async function abrirDetalheTarefa(id) {
                         html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
                         html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
                         html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
-                        if (ehDiretorReal || ehSecretario || subRespUserId === userIdGlobal) {
+                        if (ehDiretorReal || ehSecretario || subRespUserIds.indexOf(userIdGlobal) !== -1) {
                             html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + s.id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px;">✕</button>';
                         }
                         html += '</div>';
@@ -2363,7 +2376,7 @@ async function uploadAnexo(tarefaId, inputEl) {
             return;
         }
         
-        var filePath = tarefaId + '/' + Date.now() + '_' + file.name;
+        var filePath = tarefaId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
         var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
         if (uploadErr) {
             console.error('Erro no upload do storage:', uploadErr);
@@ -3246,7 +3259,7 @@ async function salvarEventoAvancado() {
                 // Aqui poderíamos chamar uma função de upload específica para tarefas
                 // Por simplicidade, vamos usar o mesmo bucket
                 for (var f of t.arquivos) {
-                    var path = 'tarefas/' + tData.id + '/' + Date.now() + '_' + f.name;
+                    var path = 'tarefas/' + tData.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(f.name);
                     var { error: upErr } = await supabaseClient.storage.from('tarefa_anexos').upload(path, f);
                     if (upErr) continue;
                     var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(path);
@@ -3279,7 +3292,7 @@ async function salvarEventoAvancado() {
 async function uploadArquivosEvento(eventoId, files) {
     for (var i = 0; i < files.length; i++) {
         var file = files[i];
-        var path = eventoId + '/' + Date.now() + '_' + file.name;
+        var path = eventoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
         var { data, error } = await supabaseClient.storage.from('tarefa_anexos').upload(path, file);
         if (error) continue;
 
