@@ -147,7 +147,11 @@ async function carregarDadosIniciais() {
 
             var userRole = perfil ? perfil.role : '';
             window.userRoleGlobal = userRole;
+            window.userIdGlobal = user.id;
             console.log("DEBUG - window.userRoleGlobal:", window.userRoleGlobal);
+
+            // Carregar notificações
+            carregarNotificacoes();
 
             if (userRole === 'administrativo de posturas') {
                 document.getElementById('admin-options').style.display = 'block';
@@ -2940,6 +2944,106 @@ function configurarCargoEspecial() {
     if (btnTarefa) btnTarefa.style.display = 'inline-block';
 }
 
+// ==========================================
+// NOTIFICAÇÕES
+// ==========================================
+function toggleNotificacoes() {
+    var dropdown = document.getElementById('notificacoes-dropdown');
+    if (!dropdown) return;
+    var estaVisivel = dropdown.style.display === 'block';
+    dropdown.style.display = estaVisivel ? 'none' : 'block';
+    if (!estaVisivel) carregarNotificacoes();
+}
+
+async function carregarNotificacoes() {
+    var lista = document.getElementById('notificacoes-lista');
+    var badge = document.getElementById('notificacoes-badge');
+    var wrapper = document.getElementById('notificacoes-wrapper');
+    var dropdown = document.getElementById('notificacoes-dropdown');
+    if (!lista) return;
+
+    try {
+        var { data: notificacoes, error } = await supabaseClient
+            .from('notificacoes')
+            .select('*')
+            .eq('lida', false)
+            .eq('user_id', window.userIdGlobal)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        var naoLidas = notificacoes || [];
+
+        if (wrapper) {
+            wrapper.style.display = naoLidas.length > 0 ? 'block' : 'none';
+        }
+
+        if (badge) {
+            badge.textContent = naoLidas.length;
+            badge.style.display = naoLidas.length > 0 ? 'flex' : 'none';
+        }
+
+        if (naoLidas.length === 0) {
+            lista.innerHTML = '<div style="padding:16px; font-size:13px; color:#94a3b8; text-align:center;">Nenhuma notificação nova 🎉</div>';
+            if (dropdown) dropdown.style.display = 'none';
+            return;
+        }
+
+        var html = '';
+        naoLidas.forEach(function(n) {
+            var dataHora = n.created_at ? new Date(n.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+            html += '<div id="notif-item-' + n.id + '" onclick="marcarNotificacaoLida(\'' + n.id + '\', \'' + (n.tarefa_id || '') + '\', \'' + (n.tipo || '') + '\')" style="padding:10px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; transition:0.15s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'white\'">';
+            html += '<div style="font-weight:600; font-size:13px; color:#1e293b; margin-bottom:2px;">' + (n.titulo || 'Notificação') + '</div>';
+            html += '<div style="font-size:12px; color:#64748b; line-height:1.4;">' + (n.mensagem || '') + '</div>';
+            html += '<div style="font-size:11px; color:#94a3b8; margin-top:3px;">' + dataHora + '</div>';
+            html += '</div>';
+        });
+        lista.innerHTML = html;
+    } catch (err) {
+        console.error('Erro ao carregar notificações:', err);
+        lista.innerHTML = '<div style="padding:16px; font-size:13px; color:#94a3b8; text-align:center;">Erro ao carregar notificações</div>';
+    }
+}
+
+async function marcarNotificacaoLida(notificacaoId, tarefaId, tipo) {
+    try {
+        await supabaseClient.from('notificacoes').update({ lida: true }).eq('id', notificacaoId);
+        
+        // Remover visualmente do dropdown
+        var item = document.getElementById('notif-item-' + notificacaoId);
+        if (item) item.remove();
+
+        // Recarregar contadores e verificar se ainda há notificações
+        await carregarNotificacoes();
+
+        var wrapper = document.getElementById('notificacoes-wrapper');
+        var dropdown = document.getElementById('notificacoes-dropdown');
+        var aindaTem = wrapper && wrapper.style.display !== 'none';
+
+        if (!aindaTem) {
+            if (dropdown) dropdown.style.display = 'none';
+        }
+
+        // Redirecionar para tarefa se houver tarefa_id
+        if (tarefaId) {
+            mudarAba('tarefas');
+            setTimeout(function() {
+                if (typeof abrirDetalheTarefa === 'function') abrirDetalheTarefa(tarefaId);
+            }, 300);
+        }
+    } catch (err) {
+        console.error('Erro ao marcar notificação como lida:', err);
+    }
+}
+
+// Listener para nova notificação em tempo real
+window.addEventListener('novaNotificacao', function() {
+    carregarNotificacoes();
+});
+
+window.toggleNotificacoes = toggleNotificacoes;
+window.marcarNotificacaoLida = marcarNotificacaoLida;
+window.carregarNotificacoes = carregarNotificacoes;
 window.configurarCargoEspecial = configurarCargoEspecial;
 window.carregarHomeEspecial = carregarHomeEspecial;
 window.fecharCuidadoAnimalDiretor = fecharCuidadoAnimalDiretor;

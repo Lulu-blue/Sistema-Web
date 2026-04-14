@@ -207,7 +207,7 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 
 ---
 
-## ✅ Módulo de Tarefas(`tarefas.js`)
+## ✅ Módulo de Tarefas (`tarefas.js`)
 
 Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos os usuários). Layout em duas colunas:
 - **Coluna Esquerda**: Calendário mensal + lista de eventos.
@@ -221,6 +221,7 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 - **Destaque pessoal**: tarefas onde o usuário logado é responsável têm borda roxa com glow e badge `VOCÊ`.
 - **Card da tarefa** exibe:
   - Título (com badge `VOCÊ` se aplicável).
+  - **Criador da tarefa** (`Por [Nome]`) visível no card e no modal.
   - Avatares circulares + nomes dos responsáveis (foto do perfil ou ícone SVG placeholder).
   - Prazo com cor dinâmica (vermelho=atrasada, amarelo=próxima, cinza=normal).
   - Barra de progresso de subtarefas com porcentagem.
@@ -228,21 +229,35 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 - **Criar tarefa** (gerente): modal com título, descrição, prazo, responsáveis (checkboxes com lista de fiscais/gerentes).
 
 ### Modal de Detalhe da Tarefa
-- **Botões de status**: Pendente / Em Progresso / Concluída — visíveis apenas para responsáveis ou gerentes.
+- **Botões de status**: Pendente / Em Progresso / Concluída — visíveis para responsáveis, criador ou gerentes.
 - **Descrição**: exibida em bloco estilizado se existir.
 - **Responsáveis**: chips com foto de perfil circular + nome.
 - **Prazo**: data formatada em pt-BR.
 - **Subtarefas**: lista com checkboxes, nome do responsável designado, botão de anexar PDF e link para anexos já enviados.
 - **Anexos**: seção para upload de PDF + listagem com link clicável e botão de excluir.
-- **Excluir tarefa**: botão exclusivo para gerente.
+- **Comentários**: chat interno na tarefa. Qualquer responsável ou criador pode comentar, com suporte a **múltiplos anexos por comentário**.
+- **Visualizações**: indicador "✓ Visualizou [dd/mm/aaaa, hh:mm]" mostra quando cada responsável abriu a tarefa ou subtarefa.
+- **Excluir tarefa**: botão visível **apenas para o criador** e **somente dentro de 24h** após a criação. Após esse prazo, o botão não aparece mais.
 
 ### Subtarefas
-- **Criar subtarefa** (gerente): mini-modal com título e seletor de responsável (dropdown com lista de fiscais/gerentes).
+- **Criar subtarefa** (gerente): mini-modal com título, seletor de responsável, descrição opcional e anexo opcional.
 - Cada subtarefa pode ter:
-  - **Responsável designado** (exibido com ícone SVG).
+  - **Múltiplos responsáveis** (exibido com ícone SVG).
   - **Anexo PDF** (botão de upload direto na subtarefa).
 - **Checkbox** para marcar como concluída (apenas se o usuário é responsável da tarefa-pai ou gerente).
+- **Reversão automática**: excluir o último anexo de uma subtarefa concluída reverte seu status automaticamente para **pendente**.
 - **Barra de progresso**: porcentagem de subtarefas concluídas visível nos cards e no modal.
+
+### Sistema de Notificações (`painel.js`)
+- **Notificações em tempo real**: sininho na sidebar só aparece quando há notificações não lidas.
+- **Eventos que geram notificação**:
+  - Novo comentário em tarefa onde o usuário é responsável ou criador.
+- **Clique na notificação**: marca como lida e abre o modal da tarefa correspondente.
+- **Auto-hide**: o sininho some automaticamente quando o count chega a zero.
+
+### Upload de Anexos e Sanitização
+- **Sanitização automática**: nomes de arquivo com acentos ou espaços são normalizados antes do upload para o Supabase Storage (`tarefa_anexos`), evitando erros de `Invalid key`.
+- **Status automático**: anexar um arquivo a uma tarefa com status **pendente** muda seu status automaticamente para **em_progresso**.
 
 ### Permissões por Role
 
@@ -253,9 +268,10 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 | Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
 | Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
 | Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
-| Excluir tarefa/subtarefa/evento | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Excluir tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
 | Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
 | Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
+| Comentar em tarefa | Só nas suas | Todas | Todas | Todas | Todas | Só nas suas |
 | Ver eventos/projetos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (onde é responsável) |
 | Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
 | Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
@@ -294,13 +310,25 @@ A seguridade ocorre camada a camada no BD:
 Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_inicio`, `data_fim`, `cor` (hex), `criado_por` (FK → auth.users), `responsavel_id`.
 
 ### `tarefas` (Módulo de Tarefas)
-Tabela de tarefas e subtarefas. Campos: `titulo`, `descricao`, `status` (pendente/em_progresso/concluida), `prazo` (date), `criado_por`, `tarefa_pai_id` (FK → tarefas, para subtarefas), `evento_id` (FK → eventos). RLS permite leitura para todos autenticados.
+Tabela de tarefas e subtarefas. Campos: `titulo`, `descricao`, `status` (pendente/em_progresso/concluida), `prazo` (date), `criado_por`, `tarefa_pai_id` (FK → tarefas, para subtarefas), `evento_id` (FK → eventos). RLS permite leitura para todos autenticados. Todas as foreign keys possuem `ON DELETE CASCADE`.
 
 ### `tarefa_responsaveis` (Módulo de Tarefas)
 Relação N:N entre tarefas e usuários. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name` (texto desnormalizado para display rápido).
 
 ### `tarefa_anexos` (Módulo de Tarefas)
-Anexos PDF vinculados a tarefas/subtarefas. Campos: `tarefa_id` (FK → tarefas), `nome_arquivo`, `url` (public URL do Storage).
+Anexos PDF vinculados a tarefas/subtarefas. Campos: `tarefa_id` (FK → tarefas), `nome_arquivo`, `url` (public URL do Storage), `uploaded_by` (FK → auth.users).
+
+### `tarefa_comentarios` (Módulo de Tarefas)
+Comentários em tarefas. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name`, `texto`, `created_at`.
+
+### `tarefa_comentario_anexos` (Módulo de Tarefas)
+Anexos vinculados a comentários (suporte a múltiplos arquivos por comentário). Campos: `comentario_id` (FK → tarefa_comentarios), `nome_arquivo`, `url`, `uploaded_by`.
+
+### `tarefa_visualizacoes` (Módulo de Tarefas)
+Registro de quando cada responsável visualizou uma tarefa ou subtarefa. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `visualizado_at`. Chave composta (`tarefa_id`, `user_id`).
+
+### `notificacoes`
+Sistema de notificações internas. Campos: `user_id` (FK → auth.users), `tipo` (ex: `comentario_tarefa`), `titulo`, `mensagem`, `tarefa_id` (FK → tarefas, opcional), `lida` (boolean), `created_at`.
 
 ### `areas_atuacao` (Módulo de Bairros)
 Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → auth.users), `created_at`.
@@ -777,3 +805,27 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Sem Acesso**: Não podem criar projetos/eventos, não gerenciam equipes, não aparecem no ranking
 - **Detecção por Normalização**: Sistema remove acentos automaticamente ("jurídica" → "juridica") para evitar conflitos de detecção
 - **Menu Específico**: Sidebar simplificado com Home, Projetos (visualização) e Tarefas
+
+## 🆕 Atualizações Recentes (Abril/2026)
+
+### Módulo de Tarefas — Comentários, Notificações e Visualizações
+- **Comentários em tarefas**: chat interno com suporte a múltiplos anexos por mensagem.
+- **Notificações automáticas**: todos os responsáveis e o criador são notificados quando há novo comentário.
+- **Visualizações**: indicador de "✓ Visualizou" com data/hora para tarefas e subtarefas.
+- **Criador visível**: nome de quem criou a tarefa aparece no card do Kanban e no modal de detalhes.
+
+### Regras de Exclusão e Anexos
+- **Exclusão dentro de 24h**: apenas o criador pode excluir sua própria tarefa, e somente dentro de 24h após a criação. Após esse prazo, o botão de excluir some automaticamente.
+- **Sanitização de nomes de arquivo**: acentos e espaços são removidos/normalizados antes do upload para o Supabase Storage, corrigindo erros de `Invalid key`.
+- **Status automático**: anexar um arquivo a uma tarefa pendente muda seu status automaticamente para **em_progresso**.
+- **Reversão de subtarefa**: excluir o último anexo de uma subtarefa concluída reverte o status para **pendente**.
+
+### Subtarefas e Permissões
+- **Múltiplos responsáveis por subtarefa**: corrigido bug que limitava a um único responsável.
+- **Descrição e anexo opcional**: ao criar uma subtarefa, é possível adicionar descrição e anexo já na criação.
+- **Responsáveis alteram status**: quem é responsável pela tarefa pode alterar seu status (não só gerentes).
+
+### Controle Processual e UI
+- **Resposta NP/AI com data**: ao selecionar "ATENDIDO" em Notificação Preliminar ou Auto de Infração, um campo de data aparece pré-preenchido com o dia de hoje e é salvo como `ATENDIDO - dd/mm/aa`.
+- **Filtro de tarefas no calendário**: o calendário de tarefas respeita os modos de visualização por cargo (Secretário/Diretor/Gerente) e exclui tarefas concluídas da visualização.
+- **Cache GitHub Pages**: após atualizações no `tarefas.js` ou `painel.js`, usuários devem pressionar `Ctrl+F5` para carregar a versão mais recente.

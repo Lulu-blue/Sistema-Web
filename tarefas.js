@@ -1592,6 +1592,7 @@ async function salvarTarefa() {
             var anexosValidos = resultadosUploads.filter(function (r) { return r !== null; });
 
             if (anexosValidos.length > 0) {
+                anexosValidos.forEach(function(a) { a.uploaded_by = userIdGlobal; });
                 await supabaseClient.from('tarefa_anexos').insert(anexosValidos);
             }
         }
@@ -1667,6 +1668,17 @@ async function abrirDetalheTarefa(id) {
             });
         }
 
+        // Buscar nomes dos criadores das subtarefas
+        var subCriadorIds = [];
+        (subtarefas || []).forEach(function(s) {
+            if (s.criado_por && subCriadorIds.indexOf(s.criado_por) === -1) subCriadorIds.push(s.criado_por);
+        });
+        var subCriadorMap = {};
+        if (subCriadorIds.length > 0) {
+            var { data: perfisSubCriadores } = await supabaseClient.from('profiles').select('id, full_name').in('id', subCriadorIds);
+            (perfisSubCriadores || []).forEach(function(p) { subCriadorMap[p.id] = p.full_name || ''; });
+        }
+
         // Buscar anexos das subtarefas
         var subAnexoMap = {};
         if (subIds.length > 0) {
@@ -1687,15 +1699,108 @@ async function abrirDetalheTarefa(id) {
             .eq('tarefa_id', id)
             .order('uploaded_at', { ascending: true });
 
+        // Buscar nomes de quem anexou
+        var anexosTodos = (anexos || []).concat([]);
+        Object.keys(subAnexoMap).forEach(function(paiId) {
+            (subAnexoMap[paiId] || []).forEach(function(a) { anexosTodos.push(a); });
+        });
+        var uploaderIds = [];
+        anexosTodos.forEach(function(a) {
+            if (a.uploaded_by && uploaderIds.indexOf(a.uploaded_by) === -1) uploaderIds.push(a.uploaded_by);
+        });
+        var uploaderMap = {};
+        if (uploaderIds.length > 0) {
+            var { data: perfisUploaders } = await supabaseClient.from('profiles').select('id, full_name').in('id', uploaderIds);
+            (perfisUploaders || []).forEach(function(p) { uploaderMap[p.id] = p.full_name || ''; });
+        }
+        anexosTodos.forEach(function(a) { a._nomeUploader = uploaderMap[a.uploaded_by] || ''; });
+
         // Buscar responsáveis
         var { data: responsaveis } = await supabaseClient
             .from('tarefa_responsaveis')
             .select('*')
             .eq('tarefa_id', id);
+        var resps = responsaveis || [];
+
+        // Buscar visualizações da tarefa
+        var { data: visualizacoes } = await supabaseClient
+            .from('tarefa_visualizacoes')
+            .select('*')
+            .eq('tarefa_id', id);
+
+        // Buscar visualizações das subtarefas
+        var subVisualizacoesMap = {};
+        if (subIds.length > 0) {
+            var { data: subVisualizacoes } = await supabaseClient
+                .from('tarefa_visualizacoes')
+                .select('*')
+                .in('tarefa_id', subIds);
+            (subVisualizacoes || []).forEach(function(v) {
+                if (!subVisualizacoesMap[v.tarefa_id]) subVisualizacoesMap[v.tarefa_id] = [];
+                subVisualizacoesMap[v.tarefa_id].push(v);
+            });
+        }
+
+        // Registrar visualização do usuário atual se for responsável (e não criador)
+        if (tarefa.criado_por !== userIdGlobal) {
+            var ehRespTarefa = resps.some(function(r) { return r.user_id === userIdGlobal; });
+            var ehRespSub = false;
+            Object.keys(subRespUserIdMap).forEach(function(sid) {
+                if (subRespUserIdMap[sid].indexOf(userIdGlobal) !== -1) ehRespSub = true;
+            });
+
+            if (ehRespTarefa) {
+                await supabaseClient.from('tarefa_visualizacoes').upsert({
+                    tarefa_id: id,
+                    user_id: userIdGlobal
+                }, { onConflict: 'tarefa_id, user_id' });
+                var agora = new Date().toISOString();
+                var jaExiste = (visualizacoes || []).some(function(v) { return v.user_id === userIdGlobal; });
+                if (!jaExiste) visualizacoes.push({ tarefa_id: id, user_id: userIdGlobal, visualizado_at: agora });
+            }
+
+            for (var si = 0; si < subIds.length; si++) {
+                var sid = subIds[si];
+                if (subRespUserIdMap[sid] && subRespUserIdMap[sid].indexOf(userIdGlobal) !== -1) {
+                    await supabaseClient.from('tarefa_visualizacoes').upsert({
+                        tarefa_id: sid,
+                        user_id: userIdGlobal
+                    }, { onConflict: 'tarefa_id, user_id' });
+                    var agoraSub = new Date().toISOString();
+                    var jaExisteSub = (subVisualizacoesMap[sid] || []).some(function(v) { return v.user_id === userIdGlobal; });
+                    if (!jaExisteSub) {
+                        if (!subVisualizacoesMap[sid]) subVisualizacoesMap[sid] = [];
+                        subVisualizacoesMap[sid].push({ tarefa_id: sid, user_id: userIdGlobal, visualizado_at: agoraSub });
+                    }
+                }
+            }
+        }
+
+        // Buscar comentários da tarefa
+        var { data: comentarios } = await supabaseClient
+            .from('tarefa_comentarios')
+            .select('*')
+            .eq('tarefa_id', id)
+            .order('created_at', { ascending: true });
+
+        // Buscar anexos dos comentários
+        var comentarioIds = (comentarios || []).map(function(c) { return c.id; });
+        var comentarioAnexosMap = {};
+        if (comentarioIds.length > 0) {
+            var { data: comentarioAnexos } = await supabaseClient
+                .from('tarefa_comentario_anexos')
+                .select('*')
+                .in('comentario_id', comentarioIds);
+            (comentarioAnexos || []).forEach(function(a) {
+                if (!comentarioAnexosMap[a.comentario_id]) comentarioAnexosMap[a.comentario_id] = [];
+                comentarioAnexosMap[a.comentario_id].push(a);
+            });
+        }
 
         var subs = subtarefas || [];
         var anx = anexos || [];
         var resps = responsaveis || [];
+        var coments = comentarios || [];
 
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
         var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw.includes('diretor'));
@@ -1766,6 +1871,9 @@ async function abrirDetalheTarefa(id) {
             html += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
             resps.forEach(function (r) {
+                var visResp = (visualizacoes || []).find(function(v) { return v.user_id === r.user_id; });
+                var visData = visResp && visResp.visualizado_at ? new Date(visResp.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+                html += '<div style="display:flex; flex-direction:column; gap:1px;">';
                 html += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
                 var av = avMap[r.user_id] || '';
                 if (av) {
@@ -1774,6 +1882,10 @@ async function abrirDetalheTarefa(id) {
                     html += '<svg width="22" height="22" viewBox="0 0 24 24" fill="#cbd5e1" stroke="none"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>';
                 }
                 html += '<span style="font-size:14px;">' + r.user_name + '</span>';
+                html += '</div>';
+                if (visData) {
+                    html += '<div style="font-size:11px; color:#10b981; font-weight:500; margin-left:6px;">✓ Visualizou ' + visData + '</div>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -1832,7 +1944,25 @@ async function abrirDetalheTarefa(id) {
                 }
                 html += '<div style="flex:1;">';
                 html += '<span style="font-size:15px; color:' + (s.status === 'concluida' ? '#94a3b8' : '#334155') + '; ' + (s.status === 'concluida' ? 'text-decoration:line-through;' : '') + '">' + s.titulo + '</span>';
-                if (subResp) html += '<div style="font-size:15px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + subResp + '</div>';
+                var nomeSubCriador = subCriadorMap[s.criado_por] || '';
+                if (nomeSubCriador) {
+                    html += '<div style="font-size:12px; color:#94a3b8;">Por ' + escapeHtmlTarefa(nomeSubCriador) + '</div>';
+                }
+                // Mostrar responsáveis da subtarefa com visualização
+                var subRespIds = subRespUserIdMap[s.id] || [];
+                var subRespsNomes = {};
+                (subResps || []).forEach(function(r) { if (r.tarefa_id === s.id) subRespsNomes[r.user_id] = r.user_name; });
+                subRespIds.forEach(function(uid) {
+                    var nomeR = subRespsNomes[uid] || '';
+                    if (nomeR) {
+                        html += '<div style="font-size:14px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + nomeR + '</div>';
+                        var visSub = (subVisualizacoesMap[s.id] || []).find(function(v) { return v.user_id === uid; });
+                        if (visSub && visSub.visualizado_at) {
+                            var visSubData = new Date(visSub.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                            html += '<div style="font-size:11px; color:#10b981; font-weight:500; margin-left:14px;">✓ Visualizou ' + visSubData + '</div>';
+                        }
+                    }
+                });
                 if (s.descricao) html += '<div style="font-size:13px; color:#64748b; margin-top:3px; background:#f8fafc; padding:4px 6px; border-radius:4px;">' + escapeHtmlTarefa(s.descricao).replace(/\n/g, '<br>') + '</div>';
                 html += '</div>';
                 if (podeConcluirSub) {
@@ -1849,10 +1979,15 @@ async function abrirDetalheTarefa(id) {
                 // Mostrar anexos da subtarefa
                 if (subAnx.length > 0) {
                     subAnx.forEach(function (a) {
+                        var dataUploadSub = a.uploaded_at ? formatarDataBRTarefa(a.uploaded_at.substring(0, 10)) : '';
+                        var infoUploaderSub = (a._nomeUploader ? 'Por ' + a._nomeUploader : '') + (dataUploadSub ? ' em ' + dataUploadSub : '');
                         html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
                         html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
-                        if (ehDiretorReal || ehSecretario || subRespUserIds.indexOf(userIdGlobal) !== -1) {
+                        html += '<div style="flex:1; min-width:0;">';
+                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + a.nome_arquivo + '</a>';
+                        if (infoUploaderSub) html += '<div style="font-size:12px; color:#475569; font-weight:500;">' + escapeHtmlTarefa(infoUploaderSub) + '</div>';
+                        html += '</div>';
+                        if (a.uploaded_by === userIdGlobal) {
                             html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + s.id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px;">✕</button>';
                         }
                         html += '</div>';
@@ -1871,19 +2006,68 @@ async function abrirDetalheTarefa(id) {
         html += '</div>';
 
         anx.forEach(function (a) {
+            var dataUpload = a.uploaded_at ? formatarDataBRTarefa(a.uploaded_at.substring(0, 10)) : '';
+            var infoUploader = (a._nomeUploader ? 'Por ' + a._nomeUploader : '') + (dataUpload ? ' em ' + dataUpload : '');
             html += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
             html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-            html += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
-            // Diretor, Secretário ou responsável podem excluir anexos
-            if (ehDiretorReal || ehSecretario || ehResponsavel) {
+            html += '<div style="flex:1; min-width:0;">';
+            html += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + a.nome_arquivo + '</a>';
+            if (infoUploader) html += '<div style="font-size:12px; color:#475569; font-weight:500;">' + escapeHtmlTarefa(infoUploader) + '</div>';
+            html += '</div>';
+            // Apenas quem anexou pode excluir
+            if (a.uploaded_by === userIdGlobal) {
                 html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
             }
             html += '</div>';
         });
         html += '</div>';
 
-        // Botão excluir tarefa — apenas quem criou pode excluir
-        if (tarefa.criado_por === userIdGlobal) {
+        // Comentários
+        html += '<div style="border-top:1px solid #e2e8f0; padding-top:12px; margin-top:8px;">';
+        html += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Comentários (' + coments.length + ')</strong>';
+        html += '<div id="tarefa-comentarios-lista" style="display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; margin-bottom:12px;">';
+        if (coments.length === 0) {
+            html += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhum comentário ainda.</div>';
+        } else {
+            coments.forEach(function(c) {
+                var dataHora = c.created_at ? new Date(c.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+                var anexosC = comentarioAnexosMap[c.id] || [];
+                html += '<div style="background:#f8fafc; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">';
+                html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">';
+                html += '<span style="font-weight:600; font-size:13px; color:#1e293b;">' + escapeHtmlTarefa(c.user_name || 'Usuário') + '</span>';
+                html += '<span style="font-size:11px; color:#94a3b8;">' + dataHora + '</span>';
+                html += '</div>';
+                html += '<div style="font-size:14px; color:#475569; white-space:pre-wrap;">' + escapeHtmlTarefa(c.texto) + '</div>';
+                if (anexosC.length > 0) {
+                    html += '<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">';
+                    anexosC.forEach(function(a) {
+                        html += '<a href="' + a.url + '" target="_blank" style="display:inline-flex; align-items:center; gap:4px; font-size:13px; color:#3b82f6; text-decoration:none; background:white; padding:4px 8px; border-radius:4px; border:1px solid #e2e8f0;">';
+                        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+                        html += escapeHtmlTarefa(a.nome_arquivo || 'Anexo') + '</a>';
+                    });
+                    html += '</div>';
+                }
+                html += '</div>';
+            });
+        }
+        html += '</div>';
+
+        // Formulário de novo comentário
+        html += '<div style="background:white; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">';
+        html += '<textarea id="tarefa-novo-comentario" rows="2" placeholder="Digite seu comentário..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit; font-size:14px; resize:vertical;"></textarea>';
+        html += '<div id="tarefa-comentario-anexos-preview" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;"></div>';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">';
+        html += '<label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#64748b; cursor:pointer;">';
+        html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+        html += 'Anexar<input type="file" id="tarefa-comentario-anexo" multiple style="display:none;"></label>';
+        html += '<button onclick="enviarComentarioTarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:600; cursor:pointer;">Enviar</button>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+
+        // Botão excluir tarefa — apenas quem criou pode excluir, e só dentro de 24h
+        var horasCriacao = tarefa.created_at ? ((new Date() - new Date(tarefa.created_at)) / (1000 * 60 * 60)) : 999;
+        if (tarefa.criado_por === userIdGlobal && horasCriacao < 24) {
             html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
         }
 
@@ -1893,6 +2077,42 @@ async function abrirDetalheTarefa(id) {
         if (loadingEl) loadingEl.remove();
 
         document.body.insertAdjacentHTML('beforeend', html);
+
+        // Lista temporária de arquivos do comentário
+        window._comentarioAnexosTemp = [];
+
+        function atualizarPreviewAnexosComentario() {
+            var preview = document.getElementById('tarefa-comentario-anexos-preview');
+            if (!preview) return;
+            var html = '';
+            window._comentarioAnexosTemp.forEach(function(f, idx) {
+                html += '<div style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; padding:3px 8px; border-radius:4px; font-size:12px; color:#334155;">';
+                html += escapeHtmlTarefa(f.name);
+                html += '<button onclick="window.removerAnexoComentario(' + idx + ')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px; padding:0; line-height:1;">✕</button>';
+                html += '</div>';
+            });
+            preview.innerHTML = html;
+        }
+
+        window.removerAnexoComentario = function(idx) {
+            window._comentarioAnexosTemp.splice(idx, 1);
+            atualizarPreviewAnexosComentario();
+            var input = document.getElementById('tarefa-comentario-anexo');
+            if (input) input.value = '';
+        };
+
+        var inputAnexoComentario = document.getElementById('tarefa-comentario-anexo');
+        if (inputAnexoComentario) {
+            inputAnexoComentario.addEventListener('change', function(e) {
+                if (e.target.files) {
+                    for (var i = 0; i < e.target.files.length; i++) {
+                        window._comentarioAnexosTemp.push(e.target.files[i]);
+                    }
+                    atualizarPreviewAnexosComentario();
+                }
+                e.target.value = '';
+            });
+        }
     } catch (err) {
         console.error('Erro ao abrir detalhe:', err);
     } finally {
@@ -1954,18 +2174,46 @@ async function alterarStatusTarefa(id, novoStatus) {
 }
 
 async function excluirTarefa(id) {
-    var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
+    var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, titulo, created_at').eq('id', id).maybeSingle();
     if (!tarefa || tarefa.criado_por !== userIdGlobal) {
         Swal.fire('Acesso Negado', 'Apenas quem criou a tarefa pode excluí-la.', 'error'); 
         return; 
     }
 
-    if (!confirm('Excluir esta tarefa e todas as subtarefas?')) return;
+    var criacao = new Date(tarefa.created_at);
+    var agora = new Date();
+    var diffHoras = (agora - criacao) / (1000 * 60 * 60);
+
+    if (diffHoras >= 24) {
+        Swal.fire('Prazo expirado', 'Você só pode excluir uma tarefa dentro de 24 horas após a criação.', 'info');
+        return;
+    }
+
+    if (!confirm('Excluir esta tarefa permanentemente?\n\nIsso também removerá todas as subtarefas, anexos e comentários vinculados.')) return;
+
     try {
+        // Buscar subtarefas
+        var { data: subs } = await supabaseClient.from('tarefas').select('id').eq('tarefa_pai_id', id);
+        var subIds = (subs || []).map(function(s) { return s.id; });
+        var todosIds = [id].concat(subIds);
+
+        // Anexos da tarefa e subtarefas
+        var { data: anexosDel } = await supabaseClient.from('tarefa_anexos').select('url').in('tarefa_id', todosIds);
+        // Anexos dos comentários
+        var { data: comentariosDel } = await supabaseClient.from('tarefa_comentarios').select('id').eq('tarefa_id', id);
+        var { data: anexosComDel } = await supabaseClient.from('tarefa_comentario_anexos').select('url').in('comentario_id', (comentariosDel || []).map(function(c){ return c.id; }));
+
+        var todosAnexos = (anexosDel || []).concat(anexosComDel || []);
+        var paths = [];
+        todosAnexos.forEach(function(a) { if (a.url) { var p = a.url.split('/tarefa_anexos/'); if (p.length > 1) paths.push(p[1]); } });
+        if (paths.length > 0) await supabaseClient.storage.from('tarefa_anexos').remove(paths);
+
         await supabaseClient.from('tarefas').delete().eq('id', id);
         fecharModal('modal-detalhe-tarefa');
         carregarTarefas();
-    } catch (err) { alert('Erro: ' + err.message); }
+    } catch (err) {
+        alert('Erro: ' + err.message);
+    }
 }
 
 // ==========================================
@@ -2243,7 +2491,8 @@ async function confirmarSubtarefa(tarefaPaiId) {
                     await supabaseClient.from('tarefa_anexos').insert({
                         tarefa_id: nova.id,
                         nome_arquivo: anexoFile.name,
-                        url: publicUrl
+                        url: publicUrl,
+                        uploaded_by: userIdGlobal
                     });
                 }
             }
@@ -2414,7 +2663,8 @@ async function uploadAnexo(tarefaId, inputEl) {
         var { error: insertErr } = await supabaseClient.from('tarefa_anexos').insert({
             tarefa_id: tarefaId,
             nome_arquivo: file.name,
-            url: publicUrl
+            url: publicUrl,
+            uploaded_by: userIdGlobal
         });
 
         if (insertErr) {
@@ -2443,18 +2693,10 @@ async function uploadAnexo(tarefaId, inputEl) {
 }
 
 async function excluirAnexo(anexoId, tarefaId) {
-    var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
-    var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-    
-    // Se não for Diretor ou Secretário, verificar se é responsável pela tarefa
-    if (!ehDiretor && !ehSecretario) {
-        var { data: responsaveis } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
-        var ehResponsavel = (responsaveis || []).some(function(r) { return r.user_id === userIdGlobal; });
-        if (!ehResponsavel) {
-            Swal.fire('Acesso Negado', 'Apenas o responsável pela tarefa pode excluir anexos.', 'error'); 
-            return; 
-        }
+    var { data: anexo } = await supabaseClient.from('tarefa_anexos').select('uploaded_by').eq('id', anexoId).maybeSingle();
+    if (!anexo || anexo.uploaded_by !== userIdGlobal) {
+        Swal.fire('Acesso Negado', 'Apenas quem anexou o arquivo pode excluí-lo.', 'error');
+        return;
     }
 
     if (!confirm('Excluir este anexo?')) return;
@@ -3295,7 +3537,8 @@ async function salvarEventoAvancado() {
                     await supabaseClient.from('tarefa_anexos').insert({
                         tarefa_id: tData.id,
                         nome_arquivo: f.name,
-                        url: urlData.publicUrl
+                        url: urlData.publicUrl,
+                        uploaded_by: userIdGlobal
                     });
                 }
             }
@@ -3470,6 +3713,91 @@ async function salvarEdicaoEvento(id) {
         btn.textContent = 'Salvar Alterações';
     }
 }
+async function enviarComentarioTarefa(tarefaId) {
+    var textarea = document.getElementById('tarefa-novo-comentario');
+    if (!textarea) return;
+
+    var texto = textarea.value.trim();
+    var arquivos = window._comentarioAnexosTemp || [];
+
+    if (!texto && arquivos.length === 0) {
+        Swal.fire('Atenção', 'Digite um comentário ou anexe um arquivo.', 'warning');
+        return;
+    }
+
+    try {
+        var anexosEnviados = [];
+
+        for (var i = 0; i < arquivos.length; i++) {
+            var file = arquivos[i];
+            var filePath = 'comentarios/' + tarefaId + '/' + Date.now() + '_' + i + '_' + sanitizarNomeArquivo(file.name);
+            var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
+            if (uploadErr) throw uploadErr;
+            var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+            anexosEnviados.push({ nome: file.name, url: publicUrl });
+        }
+
+        var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
+
+        var { data: novoComentario, error: insertErr } = await supabaseClient.from('tarefa_comentarios').insert({
+            tarefa_id: tarefaId,
+            user_id: userIdGlobal,
+            user_name: nomeUsuario,
+            texto: texto || ''
+        }).select().maybeSingle();
+
+        if (insertErr) throw insertErr;
+
+        if (novoComentario && anexosEnviados.length > 0) {
+            var anexosInsert = anexosEnviados.map(function(a) {
+                return { comentario_id: novoComentario.id, nome_arquivo: a.nome, url: a.url };
+            });
+            await supabaseClient.from('tarefa_comentario_anexos').insert(anexosInsert);
+        }
+
+        // Criar notificações para responsáveis e criador da tarefa (exceto quem comentou)
+        var { data: tarefaInfo } = await supabaseClient
+            .from('tarefas')
+            .select('criado_por, tarefa_responsaveis(user_id)')
+            .eq('id', tarefaId)
+            .maybeSingle();
+
+        if (tarefaInfo) {
+            var notificarIds = [];
+            if (tarefaInfo.criado_por && tarefaInfo.criado_por !== userIdGlobal) {
+                notificarIds.push(tarefaInfo.criado_por);
+            }
+            (tarefaInfo.tarefa_responsaveis || []).forEach(function(r) {
+                if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
+                    notificarIds.push(r.user_id);
+                }
+            });
+
+            for (var i = 0; i < notificarIds.length; i++) {
+                await supabaseClient.from('notificacoes').insert({
+                    user_id: notificarIds[i],
+                    tipo: 'comentario_tarefa',
+                    titulo: 'Novo comentário em tarefa',
+                    mensagem: nomeUsuario + ' comentou em uma tarefa que você acompanha.',
+                    tarefa_id: tarefaId
+                });
+            }
+        }
+
+        window._comentarioAnexosTemp = [];
+        fecharModal('modal-detalhe-tarefa');
+        abrirDetalheTarefa(tarefaId);
+        carregarTarefas();
+
+        // Disparar evento para atualizar notificações no painel
+        window.dispatchEvent(new CustomEvent('novaNotificacao'));
+    } catch (err) {
+        console.error('Erro ao enviar comentário:', err);
+        Swal.fire('Erro', 'Não foi possível enviar o comentário: ' + err.message, 'error');
+    }
+}
+
 function configurarModoTarefas(modo) {
     diretorModoVisualizacao = modo;
     
@@ -3513,5 +3841,6 @@ window.excluirSubtarefa = excluirSubtarefa;
 window.toggleSubtarefa = toggleSubtarefa;
 window.uploadAnexo = uploadAnexo;
 window.excluirAnexo = excluirAnexo;
+window.enviarComentarioTarefa = enviarComentarioTarefa;
 window.carregarTarefas = carregarTarefas;
 window.carregarEventos = carregarEventos;
