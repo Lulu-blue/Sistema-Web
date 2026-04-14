@@ -25,6 +25,10 @@ var idsRHGlobal = [];
 var moduloIniciado = false;
 var inicializacaoPromise = null;
 
+// Calendário de Tarefas
+var dataCalendarioTarefasAtual = new Date();
+var dataFiltroTarefasSelecionada = null;
+
 // ==========================================
 // INICIALIZAÇÃO
 // ==========================================
@@ -585,6 +589,77 @@ async function excluirEvento(id) {
 // ==========================================
 // TAREFAS — KANBAN (3 COLUNAS)
 // ==========================================
+
+function tarefaVisivelParaUsuario(t) {
+    var ehCriador = t.criado_por === userIdGlobal;
+    var ehResponsavel = (t._respUserIds && t._respUserIds.indexOf(userIdGlobal) !== -1) || t._ehMinhaViaSub;
+    var roleFiltro = (userRoleGlobal || '').toLowerCase();
+    var isDiretor = roleFiltro.includes('diretor');
+    var isSecretario = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
+
+    var vinculadaAoGrupo = function(task, idSet) {
+        if (!idSet || idSet.length === 0) return false;
+        if (idSet.indexOf(task.criado_por) !== -1) return true;
+        if (!task._respUserIds) return false;
+        return task._respUserIds.some(function(uid) { return idSet.indexOf(uid) !== -1; });
+    };
+
+    if (isSecretario) {
+        var secMode = window.secretarioModoVisualizacao || 'normal';
+        if (secMode === 'normal') {
+            return ehCriador || ehResponsavel;
+        } else if (secMode === 'direcao') {
+            if (window.secretarioModoGerencia) {
+                var idsPosturasSec = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+                return vinculadaAoGrupo(t, idsPosturasSec) || (ehCriador && t._respUserIds.some(function(uid) { return idsPosturasSec.indexOf(uid) !== -1; }));
+            } else {
+                return vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsDiretoresGlobal.indexOf(uid) !== -1; }));
+            }
+        } else if (secMode === 'gerencia_ambiental') {
+            return vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeAmbientalGlobal.indexOf(uid) !== -1; }));
+        } else if (secMode === 'cuidado_animal') {
+            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
+        } else if (secMode === 'juridico') {
+            return vinculadaAoGrupo(t, idsJuridicoGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsJuridicoGlobal.indexOf(uid) !== -1; }));
+        } else if (secMode === 'recursos_humanos') {
+            return vinculadaAoGrupo(t, idsRHGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsRHGlobal.indexOf(uid) !== -1; }));
+        }
+        return false;
+    }
+    else if (isDiretor) {
+        if (diretorModoVisualizacao === 'direcao' || !diretorModoVisualizacao) {
+            return ehCriador || ehResponsavel;
+        } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
+            return vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeAmbientalGlobal.indexOf(uid) !== -1; }));
+        } else if (diretorModoVisualizacao === 'cuidado_animal') {
+            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
+        } else {
+            var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+            return vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(function(uid) { return idsPosturas.indexOf(uid) !== -1; }));
+        }
+    }
+    else if (roleFiltro.includes('gerente')) {
+        var roleNorm = roleFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var isRA = roleNorm.includes('regularizacao');
+        var isCA = roleNorm.includes('cuidado') && roleNorm.includes('animal');
+        var isJuridicoAuto = roleNorm.includes('interface') && roleNorm.includes('juridica');
+
+        if (isJuridicoAuto) {
+            return ehCriador || ehResponsavel;
+        } else if (isRA) {
+            return vinculadaAoGrupo(t, idsEquipeAmbientalGlobal);
+        } else if (isCA) {
+            return vinculadaAoGrupo(t, idsEquipeCAGlobal);
+        } else {
+            var idsPosturasGer = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
+            return vinculadaAoGrupo(t, idsPosturasGer);
+        }
+    }
+    else {
+        return ehCriador || ehResponsavel;
+    }
+}
+
 async function carregarTarefas() {
     if (carregandoTarefas) return;
 
@@ -620,7 +695,7 @@ async function carregarTarefas() {
             responsaveis = resResp.data || [];
         }
 
-        // Buscar avatares dos responsáveis
+        // Buscar avatares dos responsáveis e nomes dos criadores
         var userIdsResp = [];
         (responsaveis || []).forEach(function (r) {
             if (r.user_id && userIdsResp.indexOf(r.user_id) === -1) userIdsResp.push(r.user_id);
@@ -629,6 +704,16 @@ async function carregarTarefas() {
         if (userIdsResp.length > 0) {
             var { data: perfis } = await supabaseClient.from('profiles').select('id, avatar_url').in('id', userIdsResp);
             (perfis || []).forEach(function (p) { avatarMap[p.id] = p.avatar_url || ''; });
+        }
+
+        var criadorIds = [];
+        (tarefasCache || []).forEach(function (t) {
+            if (t.criado_por && criadorIds.indexOf(t.criado_por) === -1) criadorIds.push(t.criado_por);
+        });
+        var criadorMap = {};
+        if (criadorIds.length > 0) {
+            var { data: perfisCriadores } = await supabaseClient.from('profiles').select('id, full_name').in('id', criadorIds);
+            (perfisCriadores || []).forEach(function (p) { criadorMap[p.id] = p.full_name || ''; });
         }
 
         // Buscar subtarefas de todas
@@ -664,7 +749,10 @@ async function carregarTarefas() {
         // Mapear: para cada tarefa-pai, verificar se o user é responsável de alguma subtarefa
         var ehMinhaViaSubMap = {};
         var minhasSubIds = {};
+        var subRespMap = {};
         subRespData.forEach(function (r) {
+            if (!subRespMap[r.tarefa_id]) subRespMap[r.tarefa_id] = [];
+            subRespMap[r.tarefa_id].push(r.user_id);
             if (r.user_id === userIdGlobal) {
                 minhasSubIds[r.tarefa_id] = true;
                 // Encontrar a subtarefa e pegar o tarefa_pai_id
@@ -673,6 +761,13 @@ async function carregarTarefas() {
                     ehMinhaViaSubMap[sub.tarefa_pai_id] = true;
                 }
             }
+        });
+
+        // Marcar subtarefas como "minhas" para uso no calendário
+        (subtarefas || []).forEach(function (s) {
+            var ehCriador = s.criado_por === userIdGlobal;
+            var ehResp = subRespMap[s.id] && subRespMap[s.id].indexOf(userIdGlobal) !== -1;
+            s._ehMinha = ehCriador || ehResp;
         });
 
         var hoje = new Date();
@@ -732,85 +827,9 @@ async function carregarTarefas() {
             t._subtarefas = subtarefasCache[t.id] || [];
             t._ehMinhaViaSub = !!ehMinhaViaSubMap[t.id];
             t._minhasSubIds = minhasSubIds;
+            t._nomeCriador = criadorMap[t.criado_por] || '';
 
-            // 1. DADOS BÁSICOS DA TAREFA
-            var ehCriador = t.criado_por === userIdGlobal;
-            var ehResponsavel = t._respUserIds.indexOf(userIdGlobal) !== -1 || t._ehMinhaViaSub;
-            
-            var roleFiltro = (userRoleGlobal || '').toLowerCase();
-            var isDiretor = roleFiltro.includes('diretor');
-            var isSecretario = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
-
-            // Função helper interna para verificar se a tarefa pertence a um conjunto de IDs (criador ou responsável)
-            var vinculadaAoGrupo = function(task, idSet) {
-                if (!idSet || idSet.length === 0) return false;
-                if (idSet.indexOf(task.criado_por) !== -1) return true;
-                return task._respUserIds.some(function(uid) { return idSet.indexOf(uid) !== -1; });
-            };
-
-            var exibirTarefa = false;
-
-            // 2. REGRAS DE VISIBILIDADE
-            if (isSecretario) {
-                var secMode = window.secretarioModoVisualizacao || 'normal';
-                
-                if (secMode === 'normal') {
-                    // Modo dashboard geral: Só vê o que criou ou é responsável
-                    if (ehCriador || ehResponsavel) exibirTarefa = true;
-                } else if (secMode === 'direcao') {
-                    if (window.secretarioModoGerencia) {
-                        var idsPosturasSec = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                        // Para o superior ver a tarefa que ele mesmo criou neste setor, ela DEVE ter alguém do setor como responsável
-                        // Ou ser criada por alguém do setor
-                        if (vinculadaAoGrupo(t, idsPosturasSec) || (ehCriador && t._respUserIds.some(uid => idsPosturasSec.includes(uid)))) exibirTarefa = true;
-                    } else {
-                        if (vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(uid => idsDiretoresGlobal.includes(uid)))) exibirTarefa = true;
-                    }
-                } else if (secMode === 'gerencia_ambiental') {
-                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeAmbientalGlobal.includes(uid)))) exibirTarefa = true;
-                } else if (secMode === 'cuidado_animal') {
-                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeCAGlobal.includes(uid)))) exibirTarefa = true;
-                } else if (secMode === 'juridico') {
-                    if (vinculadaAoGrupo(t, idsJuridicoGlobal) || (ehCriador && t._respUserIds.some(uid => idsJuridicoGlobal.includes(uid)))) exibirTarefa = true;
-                } else if (secMode === 'recursos_humanos') {
-                    if (vinculadaAoGrupo(t, idsRHGlobal) || (ehCriador && t._respUserIds.some(uid => idsRHGlobal.includes(uid)))) exibirTarefa = true;
-                }
-            } 
-            else if (isDiretor) {
-                if (diretorModoVisualizacao === 'direcao' || !diretorModoVisualizacao) {
-                    if (ehCriador || ehResponsavel) exibirTarefa = true;
-                } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
-                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeAmbientalGlobal.includes(uid)))) exibirTarefa = true;
-                } else if (diretorModoVisualizacao === 'cuidado_animal') {
-                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(uid => idsEquipeCAGlobal.includes(uid)))) exibirTarefa = true;
-                } else {
-                    var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                    if (vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(uid => idsPosturas.includes(uid)))) exibirTarefa = true;
-                }
-            } 
-            else if (roleFiltro.includes('gerente')) {
-                var roleNorm = roleFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                var isRA = roleNorm.includes('regularizacao');
-                var isCA = roleNorm.includes('cuidado') && roleNorm.includes('animal');
-                var isJuridicoAuto = roleNorm.includes('interface') && roleNorm.includes('juridica');
-
-                if (isJuridicoAuto) {
-                    if (ehCriador || ehResponsavel) exibirTarefa = true;
-                } else if (isRA) {
-                    if (vinculadaAoGrupo(t, idsEquipeAmbientalGlobal)) exibirTarefa = true;
-                } else if (isCA) {
-                    if (vinculadaAoGrupo(t, idsEquipeCAGlobal)) exibirTarefa = true;
-                } else {
-                    var idsPosturasGer = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                    if (vinculadaAoGrupo(t, idsPosturasGer)) exibirTarefa = true;
-                }
-            }
-            else {
-                // Fiscais, Agente Admin, etc.
-                if (ehCriador || ehResponsavel) exibirTarefa = true;
-            }
-
-            if (!exibirTarefa) return;
+            if (!tarefaVisivelParaUsuario(t)) return;
 
             // Filtrar do Kanban tarefas concluídas há mais de 30 dias
             if (t.status === 'concluida') {
@@ -835,11 +854,233 @@ async function carregarTarefas() {
         renderizarColunaTarefas('coluna-em-progresso', emProgresso, '#3b82f6', 'Em Progresso');
         renderizarColunaTarefas('coluna-concluidas', concluidas, '#10b981', 'Concluídas');
 
+        // Atualiza calendário de tarefas
+        renderizarCalendarioTarefas();
+
     } catch (err) {
         console.error('Erro ao carregar tarefas:', err);
     } finally {
         carregandoTarefas = false;
     }
+}
+
+// ==========================================
+// CALENDÁRIO DE TAREFAS
+// ==========================================
+function corArcoIrisTarefa(id) {
+    var cores = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#6366f1', '#a855f7'];
+    var hash = 0;
+    for (var i = 0; i < id.length; i++) {
+        hash += id.charCodeAt(i);
+    }
+    return cores[hash % cores.length];
+}
+
+function renderizarCalendarioTarefas() {
+    var grid = document.getElementById('tarefas-calendario-grid');
+    var titulo = document.getElementById('tarefas-calendario-mes-ano');
+    if (!grid || !titulo) return;
+
+    grid.innerHTML = '';
+    var ano = dataCalendarioTarefasAtual.getFullYear();
+    var mes = dataCalendarioTarefasAtual.getMonth();
+    var nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    titulo.textContent = nomesMeses[mes] + ' ' + ano;
+
+    var primeiroDia = new Date(ano, mes, 1).getDay();
+    var diasNoMes = new Date(ano, mes + 1, 0).getDate();
+    var hoje = new Date();
+    var isMesAtual = hoje.getFullYear() === ano && hoje.getMonth() === mes;
+
+    for (var i = 0; i < primeiroDia; i++) {
+        var divVazio = document.createElement('div');
+        divVazio.style.background = 'rgba(255,255,255,0.1)';
+        divVazio.style.borderRadius = '8px';
+        divVazio.style.border = '1px solid rgba(255,255,255,0.1)';
+        grid.appendChild(divVazio);
+    }
+
+    for (var dia = 1; dia <= diasNoMes; dia++) {
+        var dataStr = ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+        var isSelecionado = dataFiltroTarefasSelecionada === dataStr;
+
+        var diaCell = document.createElement('div');
+        diaCell.style.background = isSelecionado ? '#e0f2fe' : 'rgba(255,255,255,0.3)';
+        diaCell.style.borderRadius = '8px';
+        diaCell.style.border = isSelecionado ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.2)';
+        diaCell.style.padding = '8px';
+        diaCell.style.position = 'relative';
+        diaCell.style.minHeight = '45px';
+        diaCell.style.display = 'flex';
+        diaCell.style.flexDirection = 'column';
+        diaCell.style.cursor = 'pointer';
+        diaCell.style.transition = 'all 0.2s';
+        diaCell.onclick = (function(d) { return function() { selecionarDataCalendarioTarefas(d); }; })(dataStr);
+
+        var numeroSpan = document.createElement('span');
+        numeroSpan.textContent = dia;
+        numeroSpan.style.fontWeight = '600';
+        numeroSpan.style.fontSize = '0.9rem';
+        numeroSpan.style.color = isSelecionado ? '#1e40af' : '#475569';
+        numeroSpan.style.alignSelf = 'flex-start';
+
+        if (isMesAtual && dia === hoje.getDate() && !isSelecionado) {
+            numeroSpan.style.background = '#3b82f6';
+            numeroSpan.style.color = 'white';
+            numeroSpan.style.width = '24px';
+            numeroSpan.style.height = '24px';
+            numeroSpan.style.display = 'flex';
+            numeroSpan.style.alignItems = 'center';
+            numeroSpan.style.justifyContent = 'center';
+            numeroSpan.style.borderRadius = '50%';
+            diaCell.style.border = '2px solid #bfdbfe';
+            diaCell.style.background = '#eff6ff';
+        }
+
+        diaCell.appendChild(numeroSpan);
+
+        var areaBarras = document.createElement('div');
+        areaBarras.style.flex = '1';
+        areaBarras.style.marginTop = '4px';
+        areaBarras.style.display = 'flex';
+        areaBarras.style.flexWrap = 'wrap';
+        areaBarras.style.gap = '3px';
+        areaBarras.style.overflowY = 'hidden';
+
+        // Coletar todas as tarefas e subtarefas visíveis não concluídas
+        var todasTarefasVisiveis = [];
+        tarefasCache.forEach(function(t) {
+            if (t.status === 'concluida') return;
+            if (tarefaVisivelParaUsuario(t)) todasTarefasVisiveis.push(t);
+        });
+        Object.keys(subtarefasCache).forEach(function(paiId) {
+            (subtarefasCache[paiId] || []).forEach(function(s) {
+                if (s.status === 'concluida') return;
+                if (s._ehMinha) todasTarefasVisiveis.push(s);
+            });
+        });
+
+        var tarefasNoDia = [];
+        todasTarefasVisiveis.forEach(function(t) {
+            if (!t.created_at) return;
+            var criacao = t.created_at.substring(0, 10);
+            var prazo = t.prazo ? t.prazo.substring(0, 10) : criacao;
+            if (dataStr >= criacao && dataStr <= prazo) {
+                tarefasNoDia.push(t);
+            }
+        });
+
+        if (tarefasNoDia.length > 0 && !isSelecionado) {
+            var corBase = corArcoIrisTarefa(tarefasNoDia[0].id);
+            diaCell.style.background = corBase + '0a';
+            diaCell.style.borderColor = corBase + '40';
+        }
+
+        tarefasNoDia.forEach(function(t) {
+            var bar = document.createElement('div');
+            bar.style.width = '100%';
+            bar.style.height = '6px';
+            bar.style.borderRadius = '3px';
+            bar.style.background = corArcoIrisTarefa(t.id);
+            bar.style.marginBottom = '2px';
+            bar.title = t.titulo || 'Tarefa';
+            areaBarras.appendChild(bar);
+        });
+
+        diaCell.appendChild(areaBarras);
+        grid.appendChild(diaCell);
+    }
+}
+
+function selecionarDataCalendarioTarefas(dataStr) {
+    if (dataFiltroTarefasSelecionada === dataStr) {
+        dataFiltroTarefasSelecionada = null;
+    } else {
+        dataFiltroTarefasSelecionada = dataStr;
+    }
+    renderizarCalendarioTarefas();
+    renderizarTarefasDoDia(dataStr);
+}
+
+function mudarMesCalendarioTarefas(direcao) {
+    dataCalendarioTarefasAtual.setMonth(dataCalendarioTarefasAtual.getMonth() + direcao);
+    dataFiltroTarefasSelecionada = null;
+    renderizarCalendarioTarefas();
+    var secao = document.getElementById('tarefas-dia-selecionado');
+    if (secao) secao.style.display = 'none';
+}
+
+function renderizarTarefasDoDia(dataStr) {
+    var secao = document.getElementById('tarefas-dia-selecionado');
+    var titulo = document.getElementById('tarefas-dia-titulo');
+    var lista = document.getElementById('tarefas-dia-lista');
+    if (!secao || !titulo || !lista) return;
+
+    // Coletar todas as tarefas e subtarefas visíveis não concluídas
+    var todasTarefasVisiveis = [];
+    tarefasCache.forEach(function(t) {
+        if (t.status === 'concluida') return;
+        if (tarefaVisivelParaUsuario(t)) todasTarefasVisiveis.push(t);
+    });
+    Object.keys(subtarefasCache).forEach(function(paiId) {
+        (subtarefasCache[paiId] || []).forEach(function(s) {
+            if (s.status === 'concluida') return;
+            if (s._ehMinha) todasTarefasVisiveis.push(s);
+        });
+    });
+
+    var tarefasDoDia = [];
+    todasTarefasVisiveis.forEach(function(t) {
+        if (!t.created_at) return;
+        var criacao = t.created_at.substring(0, 10);
+        var prazo = t.prazo ? t.prazo.substring(0, 10) : criacao;
+        if (dataStr >= criacao && dataStr <= prazo) {
+            tarefasDoDia.push(t);
+        }
+    });
+
+    if (tarefasDoDia.length === 0) {
+        secao.style.display = 'none';
+        return;
+    }
+
+    var dataFmt = new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
+    titulo.textContent = 'Tarefas de ' + dataFmt;
+
+    var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+    tarefasDoDia.forEach(function(t) {
+        var cor = corArcoIrisTarefa(t.id);
+        var prazoStr = t.prazo ? formatarDataBRTarefa(t.prazo) : '-';
+        var statusColor = t.status === 'concluida' ? '#10b981' : (t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
+        var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+        html += '<div style="background:white; border-radius:8px; padding:10px 12px; border:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; border-left:3px solid ' + cor + ';">';
+        html += '<div>';
+        html += '<div style="font-weight:600; font-size:0.85rem; color:#1e293b;">' + escapeHtmlTarefa(t.titulo || 'Sem título') + '</div>';
+        html += '<div style="font-size:0.75rem; color:#64748b;">Prazo: ' + prazoStr + '</div>';
+        html += '</div>';
+        html += '<span style="background:' + statusColor + '15; color:' + statusColor + '; border:1px solid ' + statusColor + '40; border-radius:6px; padding:2px 8px; font-size:0.7rem; font-weight:700;">' + statusLabel + '</span>';
+        html += '</div>';
+    });
+    html += '</div>';
+
+    lista.innerHTML = html;
+    secao.style.display = 'block';
+}
+
+function formatarDataBRTarefa(dataStr) {
+    if (!dataStr) return '-';
+    var d = new Date(dataStr + 'T00:00:00');
+    return d.toLocaleDateString('pt-BR');
+}
+
+function escapeHtmlTarefa(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
@@ -867,9 +1108,13 @@ function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
 
         html += '<div onclick="abrirDetalheTarefa(\'' + t.id + '\')" style="background:white; border-radius:10px; padding:12px; margin-bottom:8px; border-left:4px solid ' + borderColor + '; cursor:pointer; ' + extraStyle + ' transition:transform 0.15s;" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'none\'">';
 
-        html += '<div style="font-size:15px; font-weight:600; color:#1e293b; margin-bottom:2px;">' + t.titulo;
+        html += '<div style="font-size:15px; font-weight:600; color:#1e293b; margin-bottom:2px;">' + escapeHtmlTarefa(t.titulo);
         if (ehMinhaDireta) html += ' <span style="font-size:14px; background:#8b5cf6; color:white; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:1px;">VOCÊ</span>';
         html += '</div>';
+
+        if (t._nomeCriador) {
+            html += '<div style="font-size:12px; color:#94a3b8; margin-bottom:4px;">Por ' + escapeHtmlTarefa(t._nomeCriador) + '</div>';
+        }
 
         // Aviso de prazo próximo (≤5 dias)
         if (prazoDt && t.status !== 'concluida') {
@@ -1380,6 +1625,13 @@ async function abrirDetalheTarefa(id) {
             tarefa = tData;
         }
 
+        // Buscar nome de quem criou a tarefa
+        var nomeCriador = '';
+        if (tarefa.criado_por) {
+            var { data: perfilCriador } = await supabaseClient.from('profiles').select('full_name').eq('id', tarefa.criado_por).maybeSingle();
+            nomeCriador = perfilCriador ? perfilCriador.full_name : '';
+        }
+
         // Buscar subtarefas atualizadas
         var { data: subtarefas } = await supabaseClient
             .from('tarefas')
@@ -1442,7 +1694,13 @@ async function abrirDetalheTarefa(id) {
 
         var html = '<div class="modal-overlay ativo" id="modal-detalhe-tarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-tarefa\')">';
         html += '<div class="modal-container" style="max-width:600px;">';
-        html += '<div class="modal-header"><h2>' + tarefa.titulo + '</h2>';
+        html += '<div class="modal-header">';
+        html += '<div style="display:flex; flex-direction:column; gap:2px;">';
+        if (nomeCriador) {
+            html += '<div style="font-size:12px; color:#64748b; font-weight:500;">Criado por ' + escapeHtmlTarefa(nomeCriador) + '</div>';
+        }
+        html += '<h2 style="margin:0;">' + escapeHtmlTarefa(tarefa.titulo) + '</h2>';
+        html += '</div>';
         html += '<button class="modal-close" onclick="fecharModal(\'modal-detalhe-tarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
         html += '</div><div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">';
 
@@ -1579,7 +1837,10 @@ async function abrirDetalheTarefa(id) {
                     subAnx.forEach(function (a) {
                         html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
                         html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none;">' + a.nome_arquivo + '</a>';
+                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none; flex:1;">' + a.nome_arquivo + '</a>';
+                        if (ehDiretorReal || ehSecretario || subRespUserId === userIdGlobal) {
+                            html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + s.id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px;">✕</button>';
+                        }
                         html += '</div>';
                     });
                 }
@@ -1607,8 +1868,8 @@ async function abrirDetalheTarefa(id) {
         });
         html += '</div>';
 
-        // Botão excluir tarefa (Diretor, Secretário ou Gerente que criou a tarefa)
-        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
+        // Botão excluir tarefa — apenas quem criou pode excluir
+        if (tarefa.criado_por === userIdGlobal) {
             html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
         }
 
@@ -1676,17 +1937,10 @@ async function alterarStatusTarefa(id, novoStatus) {
 }
 
 async function excluirTarefa(id) {
-    var roleLower = (userRoleGlobal || '').toLowerCase();
-    var ehDiretor = roleLower.includes('diretor');
-    var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-    
-    // Se não for Diretor ou Secretário, verificar se é Gerente que criou a tarefa
-    if (!ehDiretor && !ehSecretario) {
-        var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
-        if (!tarefa || tarefa.criado_por !== userIdGlobal) {
-            Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem excluí-la.', 'error'); 
-            return; 
-        }
+    var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por').eq('id', id).maybeSingle();
+    if (!tarefa || tarefa.criado_por !== userIdGlobal) {
+        Swal.fire('Acesso Negado', 'Apenas quem criou a tarefa pode excluí-la.', 'error'); 
+        return; 
     }
 
     if (!confirm('Excluir esta tarefa e todas as subtarefas?')) return;
@@ -2087,10 +2341,10 @@ async function uploadAnexo(tarefaId, inputEl) {
     if (!file) return;
 
     try {
-        // Verificar se o usuário é responsável pela tarefa ou é Diretor/Secretário
+        // Verificar se o usuário é responsável, criador ou é Diretor/Secretário
         var { data: tarefaInfo } = await supabaseClient
             .from('tarefas')
-            .select('tarefa_pai_id, tarefa_responsaveis(user_id)')
+            .select('tarefa_pai_id, criado_por, tarefa_responsaveis(user_id)')
             .eq('id', tarefaId)
             .maybeSingle();
         
@@ -2098,27 +2352,42 @@ async function uploadAnexo(tarefaId, inputEl) {
         
         var responsaveis = tarefaInfo.tarefa_responsaveis || [];
         var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
+        var ehCriador = tarefaInfo.criado_por === userIdGlobal;
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
-        // Só permite anexar se for responsável ou Diretor/Secretário
-        if (!ehResponsavel && !ehDiretor && !ehSecretario) {
-            Swal.fire('Acesso Negado', 'Apenas o responsável pela tarefa pode anexar arquivos.', 'error');
+        // Só permite anexar se for responsável, criador ou Diretor/Secretário
+        if (!ehResponsavel && !ehCriador && !ehDiretor && !ehSecretario) {
+            Swal.fire('Acesso Negado', 'Apenas o responsável ou criador da tarefa pode anexar arquivos.', 'error');
             return;
         }
         
         var filePath = tarefaId + '/' + Date.now() + '_' + file.name;
         var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
-        if (uploadErr) throw uploadErr;
+        if (uploadErr) {
+            console.error('Erro no upload do storage:', uploadErr);
+            if (uploadErr.message && uploadErr.message.toLowerCase().includes('policy')) {
+                Swal.fire('Erro de Permissão', 'Falha ao enviar arquivo para o Storage. Verifique se as políticas do bucket "tarefa_anexos" permitem upload para usuários autenticados.', 'error');
+            } else {
+                Swal.fire('Erro no Upload', 'Falha ao enviar arquivo para o Storage: ' + uploadErr.message, 'error');
+            }
+            return;
+        }
 
         var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
 
-        await supabaseClient.from('tarefa_anexos').insert({
+        var { error: insertErr } = await supabaseClient.from('tarefa_anexos').insert({
             tarefa_id: tarefaId,
             nome_arquivo: file.name,
             url: publicUrl
         });
+
+        if (insertErr) {
+            console.error('Erro ao salvar registro do anexo:', insertErr);
+            Swal.fire('Erro no Banco', 'Arquivo enviado, mas não foi possível salvar o registro: ' + insertErr.message, 'error');
+            return;
+        }
 
         // Detectar se é subtarefa para reabrir o modal correto
         var modalId = (tarefaInfo && tarefaInfo.tarefa_pai_id) ? tarefaInfo.tarefa_pai_id : tarefaId;
@@ -2126,7 +2395,8 @@ async function uploadAnexo(tarefaId, inputEl) {
         abrirDetalheTarefa(modalId);
         carregarTarefas(); // Atualiza Kanban em background
     } catch (err) {
-        alert('Erro no upload: ' + err.message);
+        console.error('Erro inesperado no upload:', err);
+        Swal.fire('Erro Inesperado', err.message || 'Ocorreu um erro ao processar o anexo.', 'error');
     }
 }
 
@@ -2147,9 +2417,45 @@ async function excluirAnexo(anexoId, tarefaId) {
 
     if (!confirm('Excluir este anexo?')) return;
     try {
+        // Buscar info da tarefa para saber se é subtarefa
+        var { data: tarefaInfo } = await supabaseClient
+            .from('tarefas')
+            .select('tarefa_pai_id, status')
+            .eq('id', tarefaId)
+            .maybeSingle();
+
         await supabaseClient.from('tarefa_anexos').delete().eq('id', anexoId);
-        fecharModal('modal-detalhe-tarefa');
-        abrirDetalheTarefa(tarefaId);
+
+        // Se for subtarefa, verificar se ainda tem anexos
+        if (tarefaInfo && tarefaInfo.tarefa_pai_id) {
+            var { data: anexosRestantes } = await supabaseClient
+                .from('tarefa_anexos')
+                .select('id')
+                .eq('tarefa_id', tarefaId);
+
+            // Se não tem mais anexos e estava concluída, voltar para pendente
+            if ((!anexosRestantes || anexosRestantes.length === 0) && tarefaInfo.status === 'concluida') {
+                await supabaseClient.from('tarefas').update({ status: 'pendente' }).eq('id', tarefaId);
+
+                // Atualizar status da tarefa pai
+                var { data: todasSubs } = await supabaseClient
+                    .from('tarefas')
+                    .select('id, status')
+                    .eq('tarefa_pai_id', tarefaInfo.tarefa_pai_id);
+                var todasConcluidas = (todasSubs || []).every(function (s) { return s.status === 'concluida'; });
+                if (todasConcluidas && todasSubs && todasSubs.length > 0) {
+                    await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', tarefaInfo.tarefa_pai_id);
+                } else {
+                    await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaInfo.tarefa_pai_id);
+                }
+            }
+
+            fecharModal('modal-detalhe-tarefa');
+            abrirDetalheTarefa(tarefaInfo.tarefa_pai_id);
+        } else {
+            fecharModal('modal-detalhe-tarefa');
+            abrirDetalheTarefa(tarefaId);
+        }
         carregarTarefas(); // Atualiza em background
     } catch (err) { alert('Erro: ' + err.message); }
 }

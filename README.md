@@ -86,6 +86,14 @@ O sistema possui **8+ cargos distintos** com permissões específicas:
 
 ---
 
+## 🗂️ Históricos e Gestão de Documentos Avançada
+- Os Fiscais agora possuem total autonomia para **Editar seus próprios registros diretamente através da aba Histórico Geral**.
+- **Gerenciador de Anexos**: No detalhamento do documento, os criadores do registro podem substituir o documento PDF principal sem corromper a pontuação e também fazer upload de múltiplos arquivos `.pdf/.jpg` na nova área de "Documentos Adicionais".
+- A pesquisa unificada abrange desde dados extraídos como Nome e Bairro até o próprio `N° Sequencial` (`001/2026`) diretamente do banco.
+- **Auto de Infração**: O recolhimento do CPF agora é **obrigatório**, e o valor é mapeado dinamicamente para exibição e geração do PDF final oficial do Auto.
+
+---
+
 ## 📅 Fechamento Anual (`fechamento.js`)
 - **Mecanismo de Consolidação**: Reúne todos os registros de produtividade e controle processual do ano vigente.
 - **Geração de Anexos (ZIP)**: Cria automaticamente um arquivo ZIP organizado por pastas:

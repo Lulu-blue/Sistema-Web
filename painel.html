@@ -1058,6 +1058,41 @@
                     </button>
                 </div>
 
+                <!-- CALENDÁRIO DE TAREFAS -->
+                <div style="background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="margin: 0; font-size: 1rem; color: #1e293b; font-weight: 700;">Calendário de Tarefas</h2>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button onclick="mudarMesCalendarioTarefas(-1)" style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <span id="tarefas-calendario-mes-ano" style="font-weight: 700; color: #1e293b; font-size: 0.95rem; text-transform: uppercase; min-width: 120px; text-align: center;">Mês Ano</span>
+                            <button onclick="mudarMesCalendarioTarefas(1)" style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; margin-bottom: 8px;">
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">DOM</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">SEG</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">TER</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUA</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUI</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SEX</div>
+                        <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SÁB</div>
+                    </div>
+
+                    <div id="tarefas-calendario-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; grid-auto-rows: minmax(45px, auto);">
+                        <!-- Dias injetados pelo JS -->
+                    </div>
+
+                    <div id="tarefas-dia-selecionado" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: none;">
+                        <h3 id="tarefas-dia-titulo" style="margin: 0 0 10px 0; font-size: 0.95rem; color: #1e293b;">Tarefas do dia</h3>
+                        <div id="tarefas-dia-lista"></div>
+                    </div>
+                </div>
+
                 <div>
                     <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 16px;">
                         <div style="display: flex; gap: 8px; align-items: center;">
