@@ -418,20 +418,9 @@ async function carregarRankingFiscaisHome() {
 
 let graficoDocsInstance = null;
 
-// Grafico Doughnut: Documentos por Tipo
+// Grafico Doughnut: Controle Processual
 async function carregarGraficoDocumentos() {
     try {
-        var hoje = new Date();
-        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-        // Buscar todos os registros do controle processual dos ultimos 30 dias
-        const { data: docs, error } = await supabaseClient
-            .from('controle_processual')
-            .select('categoria_id')
-            .gte('created_at', trintaDiasAtras);
-
-        if (error) throw error;
-
         // Mapa de nomes por categoria_id
         var nomesTipo = {
             '1.1': 'Notificação Preliminar',
@@ -443,18 +432,31 @@ async function carregarGraficoDocumentos() {
             '1.7': 'Réplica'
         };
 
-        // Contar por tipo
+        // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        if (docs) {
-            docs.forEach(function (d) {
-                var tipo = d.categoria_id || 'Outros';
-                var nome = nomesTipo[tipo] || ('Cat. ' + tipo);
-                if (!contagem[nome]) contagem[nome] = 0;
-                contagem[nome]++;
-                totalDocs++;
-            });
+        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7'];
+
+        for (var i = 0; i < categoriasCP.length; i++) {
+            var cat = categoriasCP[i];
+            var { count, error: errCount } = await supabaseClient
+                .from('controle_processual')
+                .select('*', { count: 'exact', head: true })
+                .eq('categoria_id', cat);
+
+            if (errCount) {
+                console.error('Erro ao contar ' + cat + ':', errCount);
+                continue;
+            }
+
+            if (count && count > 0) {
+                var nome = nomesTipo[cat] || ('Cat. ' + cat);
+                contagem[nome] = count;
+                totalDocs += count;
+            }
         }
+
+        console.log('[GP Gráfico] Contagens por categoria:', contagem, 'Total:', totalDocs);
 
         // Atualizar card total
         var elTotalDocs = document.getElementById('gerente-total-docs');
@@ -474,7 +476,10 @@ async function carregarGraficoDocumentos() {
         var canvas = document.getElementById('grafico-docs-tipo');
         if (!canvas) return;
 
-        if (graficoDocsInstance) graficoDocsInstance.destroy();
+        if (graficoDocsInstance) {
+            try { graficoDocsInstance.destroy(); } catch(e) {}
+            graficoDocsInstance = null;
+        }
 
         graficoDocsInstance = new Chart(canvas, {
             type: 'doughnut',
@@ -491,7 +496,7 @@ async function carregarGraficoDocumentos() {
                 responsive: true,
                 plugins: {
                     legend: {
-                        position: 'right',
+                        position: 'bottom',
                         labels: {
                             color: '#1e293b',
                             font: { size: 12, weight: 'bold' },
@@ -912,6 +917,23 @@ async function abrirModalAtribuirFiscal(areaId, areaNome, fiscalAtual) {
 
 // Relatorio individual de um fiscal (chamado ao clicar no ranking)
 async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
+    if (window._abrindoRelatorioFiscal) return;
+    window._abrindoRelatorioFiscal = true;
+
+    // overlay de carregamento
+    const loadingId = 'loading-relatorio-fiscal';
+    if (!document.getElementById(loadingId)) {
+        document.body.insertAdjacentHTML('beforeend', `
+            <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;">
+                <div style="background:#0f172a;padding:22px 32px;border-radius:10px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                    <div style="width:40px;height:40px;border:4px solid rgba(255,255,255,0.2);border-top-color:#10b981;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;"></div>
+                    <div style="font-size:15px;font-weight:600;">Carregando relatório...</div>
+                </div>
+                <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            </div>
+        `);
+    }
+
     try {
         // 1. Buscar todos os registros do fiscal (Produtividade e Controle Processual)
         const { data: regProd } = await supabaseClient
@@ -963,20 +985,55 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
 
         const mesesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
         const dataObj = new Date();
-        const anoAtual = dataObj.getFullYear();
-        const mesAtual = mesesNome[dataObj.getMonth()];
+        let anoRelatorio = dataObj.getFullYear();
+        let mesIndex = dataObj.getMonth();
+
+        // Regra do relatório: dias 1, 2, 3 referem-se ao mês anterior
+        if (dataObj.getDate() <= 3) {
+            mesIndex -= 1;
+            if (mesIndex < 0) {
+                mesIndex = 11;
+                anoRelatorio -= 1;
+            }
+        }
+
+        const mesAtual = mesesNome[mesIndex];
+        const anoAtual = anoRelatorio;
         const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
 
-        // 3. Preparar dados para gráfico de pizza (tipos de documentos)
-        const docPorTipo = {};
-        registrosFiltrados.forEach(r => {
+        // Filtrar registros do mês do relatório
+        const registrosMes = registrosFiltrados.filter(r => {
+            const dt = typeof obterDataReal === 'function' ? obterDataReal(r) : new Date(r.created_at);
+            return dt.getFullYear() === anoAtual && dt.getMonth() === mesIndex;
+        });
+
+        // 3. Preparar dados para gráfico de pizza (tipos de documentos) - APENAS Controle Processual
+        // MODO ANO: todos os CP do ano atual (incluindo pontuação zerada)
+        const docPorTipoAno = {};
+        const regCPAno = (regCP || []).filter(r => {
+            const dt = new Date(r.created_at);
+            return dt.getFullYear() === anoAtual;
+        });
+        regCPAno.forEach(r => {
             const catId = r.categoria_id || 'outros';
             let catNome = 'Outros';
             if (typeof CATEGORIAS !== 'undefined') {
                 const cDef = CATEGORIAS.find(c => c.id === catId);
                 if (cDef) catNome = cDef.nome;
             }
-            docPorTipo[catNome] = (docPorTipo[catNome] || 0) + 1;
+            docPorTipoAno[catNome] = (docPorTipoAno[catNome] || 0) + 1;
+        });
+
+        // MODO MÊS: todos os registros do mês do relatório (Produtividade + CP, pontuação > 0)
+        const docPorTipoMes = {};
+        registrosMes.forEach(r => {
+            const catId = r.categoria_id || 'outros';
+            let catNome = 'Outros';
+            if (typeof CATEGORIAS !== 'undefined') {
+                const cDef = CATEGORIAS.find(c => c.id === catId);
+                if (cDef) catNome = cDef.nome;
+            }
+            docPorTipoMes[catNome] = (docPorTipoMes[catNome] || 0) + 1;
         });
 
         // 4. Gerar tabelas por categoria
@@ -998,8 +1055,8 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         });
 
         let secoesHTML = '';
-        Object.values(porCategoria).forEach(cat => {
-            const catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(c => c.nome === cat.nome) : null;
+        Object.entries(porCategoria).forEach(([catId, cat]) => {
+            const catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(c => c.id === catId) : null;
             const temNumero = cat.registros.some(r => r.numero_sequencial);
             const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco) || [];
 
@@ -1031,7 +1088,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
 
             secoesHTML += `
                 <div class="relatorio-secao">
-                    <h3>${cat.nome}</h3>
+                    <h3>${catDef ? catDef.nome : cat.nome}</h3>
                     <table>
                         <thead><tr>${headerCols}</tr></thead>
                         <tbody>${linhas}</tbody>
@@ -1044,9 +1101,49 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         // 5. Criar modal com layout de duas colunas
         const modalHTML = `
             <div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()" style="overflow-y:auto;">
+                <button onclick="fecharRelatorioGerente()" title="Fechar" style="position:fixed;top:12px;right:16px;z-index:100000;background:rgba(15,23,42,0.7);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25);">×</button>
+                <style>
+                    @media (max-width: 900px) {
+                        #modal-relatorio-gerente {
+                            align-items: flex-start !important;
+                            padding-top: 15px !important;
+                        }
+                        #modal-relatorio-gerente > div {
+                            flex-direction: column !important;
+                            width: 96% !important;
+                            margin: 0 auto !important;
+                        }
+                        #modal-relatorio-gerente .relatorio-preview {
+                            font-size: 0.82rem;
+                            max-height: none;
+                        }
+                        #modal-relatorio-gerente .relatorio-preview h1 {
+                            font-size: 1.25rem;
+                        }
+                        #modal-relatorio-gerente .relatorio-col-graficos {
+                            flex-direction: row !important;
+                            flex-wrap: wrap !important;
+                            order: -1 !important;
+                            max-height: none;
+                            gap: 10px;
+                        }
+                        #modal-relatorio-gerente .relatorio-col-graficos > div {
+                            flex: 1 1 48%;
+                            padding: 10px;
+                            min-height: 200px;
+                            overflow: visible;
+                        }
+                    }
+                    @media (max-width: 580px) {
+                        #modal-relatorio-gerente .relatorio-col-graficos > div {
+                            flex: 1 1 100%;
+                            min-height: 180px;
+                        }
+                    }
+                </style>
                 <div style="display:flex;gap:20px;padding:20px;max-width:1400px;margin:0 auto;align-items:flex-start;">
                     <!-- COLUNA ESQUERDA: Relatório -->
-                    <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5;max-height:90vh;overflow-y:auto;">
+                    <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5;min-width:320px;max-height:90vh;overflow-y:auto;">
                         <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${mesAtual}/${anoAtual}</h1>
                         <div class="relatorio-info">
                             <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
@@ -1075,11 +1172,15 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                     </div>
 
                     <!-- COLUNA DIREITA: Gráficos -->
-                    <div style="flex:0.8;display:flex;flex-direction:column;gap:20px;max-height:90vh;">
+                    <div class="relatorio-col-graficos" style="flex:0.8;min-width:280px;display:flex;flex-direction:column;gap:20px;max-height:90vh;">
                         <!-- Gráfico de Pizza: Tipos de Documentos -->
                         <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-                            <h3 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">Documentos por Tipo</h3>
-                            <div style="position:relative;height:250px;">
+                            <h3 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">N° de registros na Produtividade</h3>
+                            <div style="display:flex;justify-content:center;gap:10px;margin-bottom:15px;">
+                                <button id="btn-grafico-mes" onclick="alternarModoGraficoDocsFiscal('mes')" style="padding:6px 14px;border:1px solid #10b981;background:#10b981;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Mês</button>
+                                <button id="btn-grafico-ano" onclick="alternarModoGraficoDocsFiscal('ano')" style="padding:6px 14px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Ano</button>
+                            </div>
+                            <div id="grafico-pizza-docs-wrapper" style="position:relative;height:380px;">
                                 <canvas id="grafico-pizza-docs"></canvas>
                             </div>
                         </div>
@@ -1099,27 +1200,68 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
         // 6. Renderizar gráficos
-        renderizarGraficosFiscal(docPorTipo, tarefasStatus);
+        window.docPorTipoMesFiscal = docPorTipoMes;
+        window.docPorTipoAnoFiscal = docPorTipoAno;
+        window.tarefasStatusFiscal = tarefasStatus;
+        window.modoGraficoDocsFiscal = 'mes';
+        renderizarGraficosFiscal(docPorTipoMes, tarefasStatus);
 
     } catch (err) {
         console.error("Erro ao gerar relatório do fiscal:", err);
         alert("Erro ao gerar relatório: " + (err.message || err));
+    } finally {
+        const loading = document.getElementById('loading-relatorio-fiscal');
+        if (loading) loading.remove();
+        // pequeno delay pra garantir que o DOM está estável antes de liberar novo clique
+        setTimeout(() => { window._abrindoRelatorioFiscal = false; }, 300);
     }
 }
 
+// Função para alternar entre Mês e Ano no gráfico do fiscal
+function alternarModoGraficoDocsFiscal(modo) {
+    window.modoGraficoDocsFiscal = modo;
+    const docPorTipo = modo === 'mes' ? window.docPorTipoMesFiscal : window.docPorTipoAnoFiscal;
+
+    // Atualizar botões
+    const btnMes = document.getElementById('btn-grafico-mes');
+    const btnAno = document.getElementById('btn-grafico-ano');
+    if (btnMes) {
+        btnMes.style.background = modo === 'mes' ? '#10b981' : '#f8fafc';
+        btnMes.style.color = modo === 'mes' ? 'white' : '#475569';
+        btnMes.style.borderColor = modo === 'mes' ? '#10b981' : '#e2e8f0';
+    }
+    if (btnAno) {
+        btnAno.style.background = modo === 'ano' ? '#10b981' : '#f8fafc';
+        btnAno.style.color = modo === 'ano' ? 'white' : '#475569';
+        btnAno.style.borderColor = modo === 'ano' ? '#10b981' : '#e2e8f0';
+    }
+
+    // Atualizar ou criar gráfico
+    renderizarGraficosFiscal(docPorTipo, window.tarefasStatusFiscal);
+}
+window.alternarModoGraficoDocsFiscal = alternarModoGraficoDocsFiscal;
+
 // Função para renderizar gráficos do fiscal
 function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
-    // Gráfico de Pizza - Documentos por Tipo
-    const canvasPizza = document.getElementById('grafico-pizza-docs');
+    // Gráfico de Pizza - N° de registros na Produtividade
+    let canvasPizza = document.getElementById('grafico-pizza-docs');
+    const wrapper = document.getElementById('grafico-pizza-docs-wrapper') || (canvasPizza ? canvasPizza.parentElement : null);
+
+    if (wrapper && (!canvasPizza || !document.body.contains(canvasPizza))) {
+        wrapper.innerHTML = '<canvas id="grafico-pizza-docs"></canvas>';
+        canvasPizza = document.getElementById('grafico-pizza-docs');
+    }
+
     if (canvasPizza && typeof Chart !== 'undefined' && Object.keys(docPorTipo).length > 0) {
         // Destruir gráfico anterior se existir
-        if (canvasPizza.chartInstance) {
-            canvasPizza.chartInstance.destroy();
+        if (window.graficoPizzaDocsFiscal) {
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            window.graficoPizzaDocsFiscal = null;
         }
 
         const cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
 
-        canvasPizza.chartInstance = new Chart(canvasPizza, {
+        window.graficoPizzaDocsFiscal = new Chart(canvasPizza, {
             type: 'doughnut',
             data: {
                 labels: Object.keys(docPorTipo),
@@ -1137,9 +1279,10 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
                     legend: {
                         position: 'bottom',
                         labels: {
-                            font: { size: 11 },
-                            padding: 10,
-                            usePointStyle: true
+                            font: { size: 10 },
+                            padding: 8,
+                            usePointStyle: true,
+                            boxWidth: 8
                         }
                     },
                     tooltip: {
@@ -1157,10 +1300,17 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
             }
         });
     } else if (canvasPizza) {
-        canvasPizza.parentElement.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px;">Nenhum documento encontrado</div>';
+        if (window.graficoPizzaDocsFiscal) {
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            window.graficoPizzaDocsFiscal = null;
+        }
+        // Não destruir o canvas, apenas limpar para mensagem se quisermos
+        const ctx = canvasPizza.getContext('2d');
+        ctx.clearRect(0, 0, canvasPizza.width, canvasPizza.height);
     }
 
     // Gráfico de Colunas - Status das Tarefas
+    const statusTarefas = tarefasStatus || window.tarefasStatusFiscal || { concluidas: 0, emProgresso: 0, atrasadas: 0 };
     const canvasColunas = document.getElementById('grafico-colunas-tarefas');
     if (canvasColunas && typeof Chart !== 'undefined') {
         // Destruir gráfico anterior se existir
@@ -1174,7 +1324,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
                 labels: ['Concluídas', 'Em Progresso', 'Atrasadas'],
                 datasets: [{
                     label: 'Quantidade',
-                    data: [tarefasStatus.concluidas, tarefasStatus.emProgresso, tarefasStatus.atrasadas],
+                    data: [statusTarefas.concluidas, statusTarefas.emProgresso, statusTarefas.atrasadas],
                     backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
                     borderRadius: 6,
                     borderSkipped: false
@@ -1183,16 +1333,20 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: {
+                    padding: { right: 10, left: 5 }
+                },
                 plugins: {
                     legend: { display: false }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: { stepSize: 1 },
+                        ticks: { stepSize: 1, font: { size: 10 } },
                         grid: { color: 'rgba(0,0,0,0.05)' }
                     },
                     x: {
+                        ticks: { font: { size: 10 }, maxRotation: 30, minRotation: 0 },
                         grid: { display: false }
                     }
                 }
@@ -1220,24 +1374,42 @@ function fecharRelatorioGerente() {
 }
 
 function salvarPDFGerente() {
-    var conteudo = document.getElementById('relatorio-gerente-conteudo');
-    var acoes = document.getElementById('relatorio-gerente-acoes');
-    if (!conteudo || typeof html2pdf === 'undefined') {
-        alert('Funcao de PDF nao disponivel.');
-        return;
-    }
-
+    // Esconder botões antes de imprimir
+    const acoes = document.getElementById('relatorio-gerente-acoes');
     if (acoes) acoes.style.display = 'none';
 
-    html2pdf().set({
-        margin: [10, 10, 10, 10],
-        filename: 'relatorio_fiscal.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(conteudo).save().then(function () {
-        if (acoes) acoes.style.display = '';
-    });
+    // Salvar título original
+    const tituloOriginal = document.title;
+
+    // Pegar nome do fiscal (primeiro span editável da info)
+    const spansInfo = document.querySelectorAll('#modal-relatorio-gerente .relatorio-info span[contenteditable="true"]');
+    let nome = 'Fiscal';
+    if (spansInfo.length > 0) nome = spansInfo[0].textContent.trim();
+
+    // Pegar Mês e Ano do relatório (primeiro span editável do período, ou data atual como fallback)
+    let mes = String(new Date().getMonth() + 1).padStart(2, '0');
+    let ano = String(new Date().getFullYear());
+    const spansPeriodo = document.querySelectorAll('#modal-relatorio-gerente .relatorio-info span[contenteditable="true"]');
+    if (spansPeriodo.length > 1) {
+        const partes = spansPeriodo[1].textContent.trim().split('/');
+        if (partes.length === 2) {
+            mes = partes[0];
+            ano = partes[1];
+        }
+    }
+
+    // Mudar título (navegadores usam isso como nome padrão do PDF)
+    // Usa traço no lugar de barra no MM/YYYY para evitar problemas de nome de arquivo
+    document.title = `Produtividade ${mes} -${ano} - ${nome} `;
+
+    // Disparar impressão
+    window.print();
+
+    setTimeout(() => {
+        document.title = tituloOriginal;
+        if (acoes) acoes.style.display = 'flex';
+        fecharRelatorioGerente();
+    }, 500);
 }
 
 
@@ -1892,6 +2064,7 @@ function exportarRelatorioGerentePDF() {
         filename: `Analise_Estatistica_Consolidada.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2 },
+        pagebreak: { mode: ['css', 'legacy'] },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
@@ -3766,16 +3939,6 @@ async function carregarGraficoDocumentosSecretario() {
     if (!canvas) return;
 
     try {
-        var hoje = new Date();
-        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-        const { data: docs, error } = await supabaseClient
-            .from('controle_processual')
-            .select('categoria_id')
-            .gte('created_at', trintaDiasAtras);
-
-        if (error) throw error;
-
         var nomesTipo = {
             '1.1': 'Notificação',
             '1.2': 'Auto de Infração',
@@ -3786,16 +3949,28 @@ async function carregarGraficoDocumentosSecretario() {
             '1.7': 'Réplica'
         };
 
+        // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        if (docs) {
-            docs.forEach(function (d) {
-                var tipo = d.categoria_id || 'Outros';
-                var nome = nomesTipo[tipo] || ('Cat. ' + tipo);
-                if (!contagem[nome]) contagem[nome] = 0;
-                contagem[nome]++;
-                totalDocs++;
-            });
+        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7'];
+
+        for (var i = 0; i < categoriasCP.length; i++) {
+            var cat = categoriasCP[i];
+            var { count, error: errCount } = await supabaseClient
+                .from('controle_processual')
+                .select('*', { count: 'exact', head: true })
+                .eq('categoria_id', cat);
+
+            if (errCount) {
+                console.error('Erro ao contar ' + cat + ':', errCount);
+                continue;
+            }
+
+            if (count && count > 0) {
+                var nome = nomesTipo[cat] || ('Cat. ' + cat);
+                contagem[nome] = count;
+                totalDocs += count;
+            }
         }
 
         if (elTotal) {
@@ -3806,7 +3981,7 @@ async function carregarGraficoDocumentosSecretario() {
         var valores = Object.values(contagem);
 
         if (labels.length === 0) {
-            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:13px;">Nenhum documento nos últimos 30 dias</div>';
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:13px;">Nenhum documento registrado</div>';
             return;
         }
 

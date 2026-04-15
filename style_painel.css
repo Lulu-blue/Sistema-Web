@@ -67,11 +67,14 @@ body {
 
 /* SIDEBAR COM DEGRADÊ */
 .sidebar {
-    width: 280px;
+    width: clamp(200px, 20vw, 280px);
+    min-width: clamp(200px, 20vw, 280px);
+    max-width: clamp(200px, 20vw, 280px);
+    flex-shrink: 0;
     background: var(--sidebar-gradient);
     display: flex;
     flex-direction: column;
-    padding: 2.5rem 1.5rem;
+    padding: 2.5rem clamp(0.8rem, 1.5vw, 1.5rem);
     color: var(--text-white);
     box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
     z-index: 10;
@@ -210,11 +213,14 @@ h1 {
 
 /* --- SIDEBAR COM GLASSMORPHISM --- */
 .sidebar {
-    width: 280px;
+    width: clamp(200px, 20vw, 280px);
+    min-width: clamp(200px, 20vw, 280px);
+    max-width: clamp(200px, 20vw, 280px);
+    flex-shrink: 0;
     background: var(--sidebar-gradient);
     display: flex;
     flex-direction: column;
-    padding: 2.5rem 1.2rem;
+    padding: 2.5rem clamp(0.8rem, 1.5vw, 1.2rem);
     color: var(--text-white);
     box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
     z-index: 10;

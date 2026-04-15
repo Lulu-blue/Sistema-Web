@@ -88,10 +88,10 @@ async function obterBase64Cabecalho() {
 // Cada categoria espelha uma aba da planilha original
 // Começando com 1 categoria de teste (2°)
 const CATEGORIAS = [
-    // === CONTROLE PROCESSUAL (1.1° a 1.7°) — Destaque ===
+    // === CONTROLE PROCESSUAL (16.1° a 16.7°) — Destaque ===
     {
         id: '1.1',
-        nome: 'Notificação Preliminar',
+        nome: 'Controle Processual: Notificação Preliminar',
         pontos: 5,
         destaque: true,
         campos: [
@@ -105,7 +105,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.2',
-        nome: 'Auto de Infração',
+        nome: 'Controle Processual: Auto de Infração',
         pontos: 5,
         destaque: true,
         campos: [
@@ -128,7 +128,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.3',
-        nome: 'Aviso de Recebimento (AR)',
+        nome: 'Controle Processual: Aviso de Recebimento (AR)',
         pontos: 10,
         destaque: true,
         campos: [
@@ -140,7 +140,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.4',
-        nome: 'Ofício',
+        nome: 'Controle Processual: Ofício',
         pontos: 10,
         destaque: true,
         campos: [
@@ -150,7 +150,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.5',
-        nome: 'Relatório',
+        nome: 'Controle Processual: Relatório',
         pontos: 10,
         destaque: true,
         campos: [
@@ -159,7 +159,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.6',
-        nome: 'Protocolo',
+        nome: 'Controle Processual: Protocolo',
         pontos: 8,
         destaque: true,
         campos: [
@@ -172,7 +172,7 @@ const CATEGORIAS = [
     },
     {
         id: '1.7',
-        nome: 'Réplica',
+        nome: 'Controle Processual: Réplica',
         pontos: 50,
         destaque: true,
         campos: [
@@ -180,7 +180,7 @@ const CATEGORIAS = [
             { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true }
         ]
     },
-    // === CATEGORIAS GERAIS (2° a 30°) ===
+    // === CATEGORIAS GERAIS (1° a 29°) ===
     {
         id: '2',
         nome: 'Vistorias de limpeza de vias, praças e passeios públicos',
@@ -258,7 +258,7 @@ const CATEGORIAS = [
     },
     {
         id: '9',
-        nome: 'Processos (via protocolo municipal) de Alvarás de Localização vistoriados e informados',
+        nome: 'Por Processos (via protocolo municipal) vistoriados e informados de Prévias para Alvarás de Localização, por unidade.',
         pontos: 20,
         campos: [
             { nome: 'n_processo', label: 'N° do Processo', tipo: 'text', obrigatorio: true },
@@ -487,6 +487,34 @@ const CATEGORIAS = [
     }
 ];
 
+function obterIdVisual(categoriaId) {
+    const mapa = {
+        '1.1': '16.1',
+        '1.2': '16.2',
+        '1.3': '16.3',
+        '1.4': '16.4',
+        '1.5': '16.5',
+        '1.6': '16.6',
+        '1.7': '16.7',
+        '2': '1',
+        '3': '2',
+        '4': '3',
+        '5': '4',
+        '6': '5',
+        '7': '6',
+        '8': '7',
+        '9': '8',
+        '10': '9',
+        '11': '10',
+        '12': '11',
+        '13': '12',
+        '14': '13',
+        '15': '14',
+        '16': '15'
+    };
+    return mapa[categoriaId] || categoriaId;
+}
+
 // --- VARIÁVEIS GLOBAIS ---
 let categoriaAtual = null;
 
@@ -532,7 +560,7 @@ function criarCard(cat) {
     card.onclick = () => abrirFormulario(cat);
     card.innerHTML = `
         ${cat.icone ? `<div class="card-icon">${cat.icone}</div>` : ''}
-        <div class="card-title">${cat.id}° - ${cat.nome}</div>
+        <div class="card-title">${obterIdVisual(cat.id)}° - ${cat.nome}</div>
         <div class="card-pontos">${cat.pontos} pts ${cat.por_hora ? 'por hora' : 'por unidade'}</div>
     `;
     return card;
@@ -1125,7 +1153,8 @@ function popularFiltroCategorias() {
         const registro = todosRegistros.find(r => r.categoria_id === catId);
         const option = document.createElement('option');
         option.value = catId;
-        option.textContent = `${catId}° - ${registro.categoria_nome}`;
+        const catDef = CATEGORIAS.find(c => c.id === catId);
+        option.textContent = `${obterIdVisual(catId)}° - ${catDef ? catDef.nome : registro.categoria_nome}`;
         select.appendChild(option);
     });
 
@@ -1203,7 +1232,7 @@ function renderizarTabela(registros) {
         html += `
             <tr onclick="abrirDetalhes('${reg.id}')">
                 <td>${data}<br><small style="color:#94a3b8">${hora}</small></td>
-                <td><span class="badge-categoria">${reg.categoria_id}°</span></td>
+                <td><span class="badge-categoria">${obterIdVisual(reg.categoria_id)}°</span></td>
                 <td>${resumo || '—'}</td>
                 <td><span class="badge-pontos">+${reg.pontuacao}</span></td>
             </tr>
@@ -1226,7 +1255,8 @@ function abrirDetalhes(id) {
     const titulo = document.getElementById('detalhe-titulo');
     const corpo = document.getElementById('detalhe-campos');
 
-    titulo.textContent = `${reg.categoria_id}° - ${reg.categoria_nome}`;
+    const catDefTitulo = CATEGORIAS.find(c => c.id === reg.categoria_id);
+    titulo.textContent = `${obterIdVisual(reg.categoria_id)}° - ${catDefTitulo ? catDefTitulo.nome : reg.categoria_nome}`;
 
     // Buscar definição dos campos da categoria
     const catDef = CATEGORIAS.find(c => c.id === reg.categoria_id);
@@ -1819,14 +1849,14 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
         registros.forEach((reg) => {
             let nomeCategoria = 'Desconhecido';
             switch (reg.categoria_id) {
-                case '1.1': nomeCategoria = 'NP'; break;
-                case '1.2': nomeCategoria = 'Auto Infração'; break;
-                case '1.3': nomeCategoria = 'AR'; break;
-                case '1.4': nomeCategoria = 'Ofício'; break;
-                case '1.5': nomeCategoria = 'Relatório de Vistoria'; break;
-                case '1.6': nomeCategoria = 'Protocolo'; break;
-                case '1.7': nomeCategoria = 'Réplica'; break;
-                case '11': nomeCategoria = 'Dívida Ativa'; break;
+                case '1.1': nomeCategoria = 'Controle Processual: NP'; break;
+                case '1.2': nomeCategoria = 'Controle Processual: Auto Infração'; break;
+                case '1.3': nomeCategoria = 'Controle Processual: AR'; break;
+                case '1.4': nomeCategoria = 'Controle Processual: Ofício'; break;
+                case '1.5': nomeCategoria = 'Controle Processual: Relatório de Vistoria'; break;
+                case '1.6': nomeCategoria = 'Controle Processual: Protocolo'; break;
+                case '1.7': nomeCategoria = 'Controle Processual: Réplica'; break;
+                case '11': nomeCategoria = 'Controle Processual: Dívida Ativa'; break;
                 default:
                     const catObj = CATEGORIAS.find(c => c.id === reg.categoria_id);
                     nomeCategoria = catObj ? catObj.nome : 'Desconhecido';
@@ -1904,7 +1934,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
 
         container.innerHTML = `
             ${graficoHTML}
-            <div style="overflow-x: auto;">
+            <div class="table-scroll-top">
                 <table class="historico-tabela">
                     <thead>${headerHTML}</thead>
                     <tbody>${bodyHTML}</tbody>
@@ -2012,7 +2042,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
 
     container.innerHTML = `
         ${graficoHTML}
-        <div style="overflow-x: auto;">
+        <div class="table-scroll-top">
             <table class="historico-tabela">
                 <thead>${headerHTML}</thead>
                 <tbody>${bodyHTML}</tbody>
@@ -2700,8 +2730,8 @@ async function abrirRelatorio() {
 
     // Gerar tabelas por categoria
     let secoesHTML = '';
-    Object.values(porCategoria).forEach(cat => {
-        const catDef = CATEGORIAS.find(c => c.nome === cat.nome);
+    Object.entries(porCategoria).forEach(([catId, cat]) => {
+        const catDef = CATEGORIAS.find(c => c.id === catId);
 
         const temNumero = cat.registros.some(r => r.numero_sequencial);
         const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco) || [];
@@ -2727,7 +2757,7 @@ async function abrirRelatorio() {
 
         secoesHTML += `
             <div class="relatorio-secao">
-                <h3>${cat.nome}</h3>
+                <h3>${catDef ? catDef.nome : cat.nome}</h3>
                 <table>
                     <thead><tr>${headerCols}</tr></thead>
                     <tbody>${linhas}</tbody>
@@ -3748,7 +3778,8 @@ function renderizarListaNPAI() {
     let html = '';
     lista.forEach(reg => {
         const campos = reg.campos || {};
-        const catNome = reg.categoria_nome || (reg.categoria_id === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração');
+        const catDefNPAI = CATEGORIAS.find(c => c.id === reg.categoria_id);
+        const catNome = catDefNPAI ? catDefNPAI.nome : (reg.categoria_nome || (reg.categoria_id === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração'));
         const nome = campos.nome || campos.n_notificacao || '—';
         const bairro = campos.bairro || '—';
         const dataVenc = campos.data_vencimento

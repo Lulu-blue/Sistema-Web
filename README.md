@@ -829,3 +829,29 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Resposta NP/AI com data**: ao selecionar "ATENDIDO" em Notificação Preliminar ou Auto de Infração, um campo de data aparece pré-preenchido com o dia de hoje e é salvo como `ATENDIDO - dd/mm/aa`.
 - **Filtro de tarefas no calendário**: o calendário de tarefas respeita os modos de visualização por cargo (Secretário/Diretor/Gerente) e exclui tarefas concluídas da visualização.
 - **Cache GitHub Pages**: após atualizações no `tarefas.js` ou `painel.js`, usuários devem pressionar `Ctrl+F5` para carregar a versão mais recente.
+
+### Categorias e Numeração Visual
+- **Renumbering Seguro**: Implementado `obterIdVisual()` para exibir as categorias de Controle Processual como `16.1°` a `16.7°` e as atividades gerais como `1°` a `15°`, **sem alterar os IDs originais no banco de dados**.
+- **Prefixo Padronizado**: Todas as categorias de Controle Processual agora exibem o prefixo `"Controle Processual: "` nos relatórios e históricos.
+
+### Sidebar Responsiva e Fixa
+- **Largura Proporcional**: A sidebar agora usa `clamp(200px, 20vw, 280px)`, garantindo que:
+  - **Nunca seja comprimida** pelo conteúdo das páginas (`flex-shrink: 0`).
+  - **Se adapte proporcionalmente** ao redimensionamento da janela do navegador.
+- **Histórico Geral Otimizado**: Zoom reduzido em ~15% (`zoom: 0.85`) e a barra de rolagem horizontal das tabelas de Controle Processual foi reposicionada para a **parte superior** (acima do cabeçalho), facilitando a navegação.
+
+### Gráficos e Relatórios do Fiscal (Painel do Gerente)
+- **Correção do PDF do Relatório Fiscal**: A exportação de PDF pelo superior (Gerente/Diretor/Secretário) foi corrigida. A função `salvarPDFGerente()` em `gerente.js` agora utiliza `window.print()` com CSS `@media print` dedicado, gerando corretamente **todas as páginas** do relatório (antes gerava apenas a primeira página via `html2pdf.js`).
+- **Proteção Contra Duplo Clique**: Ao abrir o relatório de um fiscal no painel de gestão, um overlay de "Carregando..." com spinner aparece e **bloqueia cliques adicionais** até que o modal esteja totalmente renderizado.
+- **Botão Fechar (X) no Modal**: Adicionado botão fixo no canto superior direito do modal do relatório fiscal, e corrigido o fechamento ao clicar fora da área do conteúdo em telas reduzidas.
+- **Toggle Mês/Ano no Gráfico**: Adicionados botões "Mês" e "Ano" no gráfico de pizza do relatório fiscal:
+  - **Mês**: exibe todas as categorias do relatório (produtividade + CP com pontos > 0).
+  - **Ano**: exibe todos os registros de CP do ano atual (incluindo pontuação zerada).
+- **Layout Responsivo do Modal**: Em telas entre 580px e 900px, os gráficos ficam lado a lado no topo e o relatório abaixo. Em telas menores que 580px, os gráficos empilham verticalmente.
+- **Legenda do Gráfico "Controle Processual"**: A legenda do gráfico doughnut no painel do Gerente foi movida da direita para **embaixo do gráfico**.
+
+### Performance dos Gráficos de Gestão
+- **Evitado Limite de 1000 Linhas**: As funções `carregarGraficoDocumentos()` e `carregarGraficoDocumentosSecretario()` em `gerente.js` passaram a usar consultas `count(*)` por categoria (`head: true`) ao invés de buscar todas as linhas, evitando inconsistências quando o `controle_processual` ultrapassa 1000 registros.
+
+### Correções de Estabilidade
+- **Limpeza de Syntax**: Removidos caracteres literais `\n` acidentalmente injetados nos arquivos JS durante substituições automatizadas anteriores, que estavam quebrando gráficos e funcionalidades de histórico.

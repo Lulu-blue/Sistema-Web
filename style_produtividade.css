@@ -835,6 +835,20 @@
     font-size: 0.9rem;
 }
 
+/* Zoom no conteúdo do Histórico Geral */
+#aba-historico-geral {
+    zoom: 0.85;
+}
+
+/* Scrollbar horizontal da tabela no topo */
+.table-scroll-top {
+    overflow-x: auto;
+    transform: rotateX(180deg);
+}
+.table-scroll-top table {
+    transform: rotateX(180deg);
+}
+
 .historico-tabela thead th {
     background: #f8fafc;
     color: #475569;
@@ -994,17 +1008,35 @@
     }
 
     #modal-relatorio,
-    #modal-relatorio * {
+    #modal-relatorio *,
+    #modal-relatorio-gerente,
+    #modal-relatorio-gerente * {
         visibility: visible;
     }
 
-    #modal-relatorio {
+    #modal-relatorio,
+    #modal-relatorio-gerente {
         position: absolute;
         left: 0;
         top: 0;
         width: 100%;
         height: auto !important;
         overflow: visible !important;
+    }
+
+    #modal-relatorio-gerente .relatorio-col-graficos,
+    #modal-relatorio-gerente .relatorio-col-graficos * {
+        visibility: hidden !important;
+        display: none !important;
+    }
+
+    #modal-relatorio-gerente > div {
+        display: block !important;
+    }
+
+    #modal-relatorio-gerente .relatorio-preview {
+        max-width: 100% !important;
+        width: 100% !important;
     }
 
     .relatorio-preview {
