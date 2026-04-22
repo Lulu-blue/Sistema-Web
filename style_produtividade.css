@@ -1010,7 +1010,9 @@
     #modal-relatorio,
     #modal-relatorio *,
     #modal-relatorio-gerente,
-    #modal-relatorio-gerente * {
+    #modal-relatorio-gerente *,
+    #modal-estatisticas-funcionario,
+    #modal-estatisticas-funcionario * {
         visibility: visible;
     }
 
@@ -1022,6 +1024,20 @@
         width: 100%;
         height: auto !important;
         overflow: visible !important;
+    }
+
+    #modal-estatisticas-funcionario,
+    #modal-estatisticas-funcionario.modal-overlay,
+    #modal-estatisticas-funcionario.modal-overlay.ativo {
+        position: static !important;
+        width: 100%;
+        height: auto !important;
+        min-height: 100%;
+        overflow: visible !important;
+        display: block !important;
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+        padding: 0 !important;
     }
 
     #modal-relatorio-gerente .relatorio-col-graficos,
@@ -1037,6 +1053,36 @@
     #modal-relatorio-gerente .relatorio-preview {
         max-width: 100% !important;
         width: 100% !important;
+    }
+
+    /* Esconder gráficos, botões e ajustar layout do modal de estatísticas na impressão */
+    #modal-estatisticas-funcionario canvas,
+    #modal-estatisticas-funcionario #grafico-pizza-docs-estatisticas,
+    #modal-estatisticas-funcionario #relatorio-est-acoes,
+    #modal-estatisticas-funcionario button[onclick*="document.getElementById('modal-estatisticas-funcionario').remove()"] {
+        visibility: hidden !important;
+        display: none !important;
+    }
+
+    #modal-estatisticas-funcionario > div {
+        max-width: 100% !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas {
+        margin-top: 0 !important;
+        border-top: none !important;
+        padding-top: 0 !important;
+    }
+
+    #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas table,
+    #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas > div {
+        page-break-inside: avoid;
     }
 
     .relatorio-preview {

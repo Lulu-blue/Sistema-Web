@@ -5359,6 +5359,11 @@ async function abrirEstatisticasFuncionario(userId, nome, cargo) {
     modal.id = modalId;
     modal.className = 'modal-overlay ativo';
     modal.style.cssText = 'background:rgba(0,0,0,0.7);';
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    };
 
     modal.innerHTML = ''
         + '<div style="background:white;border-radius:16px;width:95%;max-width:800px;max-height:90vh;overflow-y:auto;position:relative;">'
@@ -5605,9 +5610,9 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     }, 100);
 
     // Se o usuário logado for Secretário(a) e o funcionário for Fiscal de Posturas, mostrar relatório de produtividade
-    var cargoUsuario = (window.userProfile && window.userProfile.role) || '';
+    var cargoUsuario = (window.userRoleGlobal || '');
     var ehSecretario = cargoUsuario.includes('Secretário') || cargoUsuario.includes('Secretária');
-    if (ehSecretario && cargo && cargo.includes('Fiscal de Posturas')) {
+    if (ehSecretario && cargo && (cargo.includes('Fiscal de Posturas') || cargo === 'Fiscal')) {
         try {
             await adicionarRelatorioFiscalNasEstatisticas(userId, nome);
         } catch (err) {
@@ -5700,24 +5705,32 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
     });
 
     var secoesHTML = '';
+    var styleTabela = 'width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1;';
+    var styleTh = 'background:#f1f5f9;border:1px solid #cbd5e1;padding:10px 12px;text-align:left;font-weight:600;color:#475569;';
+    var styleTd = 'border:1px solid #cbd5e1;padding:10px 12px;color:#1e293b;';
+    var styleTdNum = 'border:1px solid #cbd5e1;padding:10px 12px;color:#1e293b;text-align:center;';
+    var styleTdLink = 'border:1px solid #cbd5e1;padding:10px 12px;text-align:center;';
+
     Object.entries(porCategoria).forEach(function (_ref) {
         var catId = _ref[0];
         var cat = _ref[1];
         var catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(function (c) { return c.id === catId; }) : null;
         var temNumero = cat.registros.some(function (r) { return r.numero_sequencial; });
         var camposDef = catDef && catDef.campos ? catDef.campos.filter(function (c) { return c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco; }) : [];
+        var camposFile = catDef && catDef.campos ? catDef.campos.filter(function (c) { return c.tipo === 'file'; }) : [];
 
         var headerCols = '';
-        if (temNumero) headerCols += '<th>N°</th>';
-        headerCols += camposDef.map(function (c) { return '<th>' + c.label + '</th>'; }).join('');
-        headerCols += '<th>Data</th>';
-        headerCols += '<th>Pontos</th>';
+        if (temNumero) headerCols += '<th style="' + styleTh + '">N°</th>';
+        headerCols += camposDef.map(function (c) { return '<th style="' + styleTh + '">' + c.label + '</th>'; }).join('');
+        headerCols += '<th style="' + styleTh + '">Data</th>';
+        headerCols += '<th style="' + styleTh + '">Anexo</th>';
+        headerCols += '<th style="' + styleTh + '">Pontos</th>';
 
         var linhas = cat.registros.map(function (r) {
             var tds = '';
-            if (temNumero) tds += '<td>' + (r.numero_sequencial || '-') + '</td>';
+            if (temNumero) tds += '<td style="' + styleTdNum + '">' + (r.numero_sequencial || '-') + '</td>';
             tds += camposDef.map(function (c) {
-                return '<td>' + ((r.campos && r.campos[c.nome]) || '-') + '</td>';
+                return '<td style="' + styleTd + '">' + ((r.campos && r.campos[c.nome]) || '-') + '</td>';
             }).join('');
             var dataFormatada = '-';
             if (typeof obterDataReal === 'function') {
@@ -5725,19 +5738,43 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
             } else {
                 dataFormatada = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
             }
-            tds += '<td>' + dataFormatada + '</td>';
-            tds += '<td>' + (r.pontuacao || 0) + '</td>';
+            tds += '<td style="' + styleTd + '">' + dataFormatada + '</td>';
+
+            // Anexos: campos do tipo file + anexos_extras
+            var anexos = [];
+            if (r.campos) {
+                camposFile.forEach(function (cf) {
+                    if (r.campos[cf.nome]) anexos.push({ url: r.campos[cf.nome], label: cf.label });
+                });
+                if (Array.isArray(r.campos.anexos_extras)) {
+                    r.campos.anexos_extras.forEach(function (url, idx) {
+                        anexos.push({ url: url, label: 'Anexo ' + (idx + 1) });
+                    });
+                }
+            }
+            if (anexos.length === 0) {
+                tds += '<td style="' + styleTd + '">-</td>';
+            } else if (anexos.length === 1) {
+                tds += '<td style="' + styleTdLink + '"><a href="' + anexos[0].url + '" target="_blank" title="' + anexos[0].label + '" style="display:inline-block;padding:4px 10px;background:#dbeafe;color:#1e40af;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;cursor:pointer;">📎 Abrir</a></td>';
+            } else {
+                var linksAnexos = anexos.map(function (a, i) {
+                    return '<a href="' + a.url + '" target="_blank" title="' + a.label + '" style="display:inline-block;padding:3px 8px;background:#dbeafe;color:#1e40af;border-radius:5px;font-size:11px;font-weight:600;text-decoration:none;margin:2px;cursor:pointer;">' + (i + 1) + '</a>';
+                }).join('');
+                tds += '<td style="' + styleTdLink + '">' + linksAnexos + '</td>';
+            }
+
+            tds += '<td style="' + styleTdNum + '">' + (r.pontuacao || 0) + '</td>';
             return '<tr>' + tds + '</tr>';
         }).join('');
 
         var subtotal = cat.registros.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
-        var colSpanSubtotal = (temNumero ? 1 : 0) + camposDef.length + 1;
+        var colSpanSubtotal = (temNumero ? 1 : 0) + camposDef.length + 2;
 
-        secoesHTML += '<div style="margin-bottom:20px;"><h4 style="margin:0 0 10px 0;color:#1e293b;font-size:15px;">' + (catDef ? catDef.nome : cat.nome) + '</h4>';
-        secoesHTML += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        secoesHTML += '<thead><tr style="background:#f1f5f9;">' + headerCols + '</tr></thead>';
+        secoesHTML += '<div style="margin-bottom:24px;"><h4 style="margin:0 0 12px 0;color:#1e293b;font-size:15px;">' + (catDef ? catDef.nome : cat.nome) + '</h4>';
+        secoesHTML += '<div style="overflow-x:auto;"><table style="' + styleTabela + '">';
+        secoesHTML += '<thead><tr>' + headerCols + '</tr></thead>';
         secoesHTML += '<tbody>' + linhas + '</tbody>';
-        secoesHTML += '<tfoot><tr><td colspan="' + colSpanSubtotal + '" style="text-align:right;font-weight:600;background:#f8fafc;">Subtotal:</td><td style="font-weight:600;background:#f8fafc;">' + subtotal + '</td></tr></tfoot>';
+        secoesHTML += '<tfoot><tr><td colspan="' + colSpanSubtotal + '" style="' + styleTh + ' text-align:right;">Subtotal:</td><td style="' + styleTh + '">' + subtotal + '</td></tr></tfoot>';
         secoesHTML += '</table></div></div>';
     });
 
@@ -5754,7 +5791,7 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
     secaoHTML += '</div>';
 
     // Gráfico de pizza
-    secaoHTML += '<div style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
+    secaoHTML += '<div id="grafico-pizza-container-est" style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
     secaoHTML += '<h4 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">N° de registros na Produtividade</h4>';
     secaoHTML += '<div style="display:flex;justify-content:center;gap:10px;margin-bottom:15px;">';
     secaoHTML += '<button id="btn-grafico-est-mes" onclick="alternarModoGraficoDocsFiscalEstatisticas(\'mes\')" style="padding:6px 14px;border:1px solid #10b981;background:#10b981;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Mês</button>';
@@ -5764,10 +5801,16 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
     secaoHTML += '</div>';
 
     // Tabelas por categoria
-    secaoHTML += '<div style="background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
+    secaoHTML += '<div id="relatorio-est-conteudo" style="background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
     secaoHTML += '<h4 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;text-align:center;">Registros por Categoria</h4>';
     secaoHTML += secoesHTML || '<div style="text-align:center;color:#94a3b8;padding:20px;">Nenhum registro encontrado.</div>';
     secaoHTML += '</div>';
+
+    // Botão Salvar como PDF
+    secaoHTML += '<div id="relatorio-est-acoes" style="display:flex;justify-content:center;gap:12px;margin-top:20px;">';
+    secaoHTML += '<button onclick="salvarPDFEstatisticasFiscal(\'' + nomeFiscal.replace(/'/g, "\\'") + '\')" style="padding:12px 24px;background:#0f172a;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.9\'" onmouseout="this.style.opacity=\'1\'">💾 Salvar como PDF</button>';
+    secaoHTML += '</div>';
+
     secaoHTML += '</div>';
 
     container.insertAdjacentHTML('beforeend', secaoHTML);
@@ -5857,6 +5900,68 @@ function renderizarGraficoPizzaDocsEstatisticas(docPorTipo) {
         }
     });
 }
+
+// Salvar como PDF a seção de relatório fiscal dentro do modal de estatísticas
+function salvarPDFEstatisticasFiscal(nomeFiscal) {
+    var secao = document.getElementById('secao-relatorio-fiscal-estatisticas');
+    if (!secao) return;
+
+    var mes = String(new Date().getMonth() + 1).padStart(2, '0');
+    var ano = String(new Date().getFullYear());
+
+    // Clonar a seção para não modificar o DOM original
+    var clone = secao.cloneNode(true);
+
+    // Remover container do gráfico e botões do clone
+    var graficoContainer = clone.querySelector('#grafico-pizza-container-est');
+    if (graficoContainer) graficoContainer.remove();
+    var botoes = clone.querySelectorAll('button');
+    botoes.forEach(function (b) { b.remove(); });
+
+    // Criar iframe invisível para impressão isolada
+    var iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.bottom = '-9999px';
+    iframe.style.right = '-9999px';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    var doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Produtividade ' + mes + '-' + ano + ' - ' + nomeFiscal + '</title>');
+    doc.write('<style>');
+    doc.write('@page { margin: 15mm; }');
+    doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #1e293b; }');
+    doc.write('h3 { text-align: center; margin: 0 0 16px 0; font-size: 20px; }');
+    doc.write('h4 { text-align: center; margin: 0 0 12px 0; font-size: 16px; }');
+    doc.write('table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; page-break-inside: auto; }');
+    doc.write('thead { display: table-header-group; }');
+    doc.write('tr { page-break-inside: avoid; }');
+    doc.write('th, td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; }');
+    doc.write('th { background: #f1f5f9; font-weight: 600; color: #475569; }');
+    doc.write('td { color: #1e293b; }');
+    doc.write('td:nth-last-child(1) { text-align: center; }');
+    doc.write('a { color: #1e40af; text-decoration: none; }');
+    doc.write('div { page-break-inside: auto; }');
+    doc.write('</style></head><body>');
+    doc.write(clone.innerHTML);
+    doc.write('</body></html>');
+    doc.close();
+
+    // Aguardar renderização e imprimir
+    setTimeout(function () {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+
+        // Remover iframe após impressão (ou tentativa)
+        setTimeout(function () {
+            iframe.remove();
+        }, 1000);
+    }, 300);
+}
+window.salvarPDFEstatisticasFiscal = salvarPDFEstatisticasFiscal;
 
 // ==========================================
 // FORMULÁRIOS DE NOVO FUNCIONÁRIO POR CARGO
