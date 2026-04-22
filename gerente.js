@@ -5740,7 +5740,7 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
             }
             tds += '<td style="' + styleTd + '">' + dataFormatada + '</td>';
 
-            // Anexos: campos do tipo file + anexos_extras
+            // Anexos: campos do tipo file + anexos_extras + anexo_pdf/ar (WYSIWYG)
             var anexos = [];
             if (r.campos) {
                 camposFile.forEach(function (cf) {
@@ -5751,7 +5751,20 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
                         anexos.push({ url: url, label: 'Anexo ' + (idx + 1) });
                     });
                 }
+                if (r.campos.anexo_pdf) {
+                    anexos.push({ url: r.campos.anexo_pdf, label: 'Documento' });
+                }
+                if (r.campos.anexo_ar) {
+                    anexos.push({ url: r.campos.anexo_ar, label: 'AR' });
+                }
             }
+            // Remover duplicatas por URL (evita botões duplicados quando anexo_pdf já é um campo file da categoria)
+            var urlsVistas = {};
+            anexos = anexos.filter(function (a) {
+                if (urlsVistas[a.url]) return false;
+                urlsVistas[a.url] = true;
+                return true;
+            });
             if (anexos.length === 0) {
                 tds += '<td style="' + styleTd + '">-</td>';
             } else if (anexos.length === 1) {

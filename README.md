@@ -866,16 +866,22 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 ### Tabela de Registros Aprimorada
 - **Bordas visíveis**: todas as células (`th` e `td`) agora possuem bordas sólidas (`#cbd5e1`) separando linhas e colunas.
 - **Espaçamento**: padding aumentado para `10px 12px` em todas as células, eliminando o "grudamento" entre pontuação e data.
-- **Coluna "Anexo"**: nova coluna que detecta automaticamente campos do tipo `file` e o array `anexos_extras` de cada registro.
+- **Coluna "Anexo"**: nova coluna que detecta automaticamente campos do tipo `file`, o array `anexos_extras` e as chaves `anexo_pdf` / `anexo_ar` do JSONB `campos` de cada registro.
   - Sem anexo: exibe `-`.
   - 1 anexo: botão azul `📎 Abrir` que abre o documento em nova aba.
   - Múltiplos anexos: botões numerados (`1`, `2`, `3`...) cada um abrindo seu respectivo documento.
+  - **Filtro de duplicatas**: URLs repetidas são automaticamente removidas, evitando botões duplicados em categorias onde o anexo já é definido como campo `file` (ex: Notificação Preliminar, Protocolo).
 
 ### Exportação PDF do Relatório Fiscal (dentro do Modal de Estatísticas)
 - **Botão "Salvar como PDF"**: adicionado ao final da seção do relatório, com estilo idêntico ao do painel do Gerente (`#0f172a`, bordas arredondadas, emoji 💾).
 - **Impressão via iframe isolado**: a função `salvarPDFEstatisticasFiscal()` cria um iframe invisível, clona apenas o conteúdo do relatório e imprime de forma isolada. Isso evita conflitos com o CSS global `@media print` do site, que antes escondia o modal e gerava página em branco.
 - **Paginação corrigida**: o conteúdo flui naturalmente por múltiplas páginas. Removido `page-break-inside: avoid` excessivo em divs que causava grandes espaços em branco entre páginas. Mantido apenas `page-break-inside: avoid` nas linhas de tabela (`tr`) para não cortar uma linha ao meio.
 - **Gráfico excluído do PDF**: o container do gráfico de pizza (botões Mês/Ano, canvas e espaço reservado de 380px) é removido completamente do clone antes da impressão, garantindo que o PDF contenha apenas as tabelas de registros.
+
+### Correções de Anexos no Relatório de Produtividade (Modal de Estatísticas)
+- **Documentos WYSIWYG**: categorias geradoras de documentos oficiais via editor (`Auto de Infração`, `Ofício`, `Relatório`, `Réplica`) passaram a exibir corretamente o botão de anexo no relatório do fiscal. O sistema agora lê a chave `anexo_pdf` do JSONB `campos`, já que essas categorias não possuem campo `file` na definição da categoria.
+- **Aviso de Recebimento (AR)**: também é detectado via chave `anexo_ar`.
+- **Remoção de duplicatas**: implementado filtro por URL única no array de anexos antes da renderização, corrigindo o problema de botões duplicados em categorias como **Notificação Preliminar** e **Protocolo**, onde o campo `anexo_pdf` já está definido como `file` na categoria e também existe no JSONB `campos`.
 
 ### UX do Modal de Estatísticas
 - **Clique fora fecha**: o modal agora fecha ao clicar no overlay escuro (`onclick` no fundo do modal), comportamento padrão dos demais modais do sistema.
