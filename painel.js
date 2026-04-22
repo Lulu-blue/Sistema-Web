@@ -1123,6 +1123,20 @@ window.addEventListener('modoTarefasMudou', function (e) {
                 if (mtWrapper) mtWrapper.style.display = 'none';
                 window.secretarioModoVisualizacao = 'cuidado_animal';
                 window.secretarioModoGerencia = false;
+            } else if (modo === 'juridico' || modo === 'recursos_humanos') {
+                // Modo JURÍDICO ou RH: mostra home-especial (calendário + tarefas)
+                if (hsc) hsc.style.display = 'none';
+                if (hdc) hdc.style.display = 'none';
+                if (hgc) hgc.style.display = 'none';
+                if (hga) hga.style.display = 'none';
+                if (hdca) hdca.style.display = 'none';
+                if (hEsp) {
+                    hEsp.style.display = 'block';
+                    if (typeof carregarHomeEspecial === 'function') carregarHomeEspecial();
+                }
+                if (mtWrapper) mtWrapper.style.display = 'none';
+                window.secretarioModoVisualizacao = modo;
+                window.secretarioModoGerencia = false;
             } else if (modo === 'direcao') {
                 // Modo direção
                 if (hsc) hsc.style.display = 'none';
@@ -1640,13 +1654,23 @@ function toggleGerenciaPosturasSecretario() {
         // Mudar para home do gerente
         mudarAba('home');
     } else {
-        // FECHAR
-        submenuGerencia.style.display = 'none';
-        if (btnGerencia && btnGerencia.querySelector('svg')) {
-            btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+        var abaHome = document.getElementById('aba-home');
+        var naHome = abaHome && abaHome.style.display === 'block';
+
+        if (!naHome) {
+            // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+            window.secretarioModoVisualizacao = 'direcao';
+            window.secretarioModoGerencia = true;
+            mudarAba('home');
+        } else {
+            // FECHAR
+            submenuGerencia.style.display = 'none';
+            if (btnGerencia && btnGerencia.querySelector('svg')) {
+                btnGerencia.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+            }
+            window.secretarioModoGerencia = false;
+            mudarAba('home');
         }
-        window.secretarioModoGerencia = false;
-        mudarAba('home');
     }
 }
 window.toggleGerenciaPosturasSecretario = toggleGerenciaPosturasSecretario;
@@ -1693,13 +1717,26 @@ function toggleDirecaoMeioAmbiente() {
         if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
         mudarAba('home');
     } else {
-        // FECHAR - volta para modo normal (gestao de diretores)
-        // Fechar também os sub-submenus de gerencia
-        if (submenuGerencia) submenuGerencia.style.display = 'none';
-        if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
-        window.secretarioModoGerencia = false;
-        fecharDirecaoSecretario();
-        mudarAba('home');
+        var abaHome = document.getElementById('aba-home');
+        var naHome = abaHome && abaHome.style.display === 'block';
+
+        if (!naHome) {
+            // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+            if (submenuGerencia) submenuGerencia.style.display = 'none';
+            if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
+            window.secretarioModoGerencia = false;
+            window.secretarioModoVisualizacao = 'direcao';
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao');
+            mudarAba('home');
+        } else {
+            // FECHAR - volta para modo normal (gestao de diretores)
+            // Fechar também os sub-submenus de gerencia
+            if (submenuGerencia) submenuGerencia.style.display = 'none';
+            if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
+            window.secretarioModoGerencia = false;
+            fecharDirecaoSecretario();
+            mudarAba('home');
+        }
     }
 }
 window.toggleDirecaoMeioAmbiente = toggleDirecaoMeioAmbiente;
@@ -1749,9 +1786,19 @@ function toggleGerenciaAmbientalSecretario() {
         if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
         mudarAba('home');
     } else {
-        // FECHAR
-        fecharGerenciaAmbientalSecretario();
-        mudarAba('home');
+        var abaHome = document.getElementById('aba-home');
+        var naHome = abaHome && abaHome.style.display === 'block';
+
+        if (!naHome) {
+            // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+            window.secretarioModoVisualizacao = 'gerencia_ambiental';
+            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
+            mudarAba('home');
+        } else {
+            // FECHAR
+            fecharGerenciaAmbientalSecretario();
+            mudarAba('home');
+        }
     }
 }
 window.toggleGerenciaAmbientalSecretario = toggleGerenciaAmbientalSecretario;
@@ -2276,12 +2323,24 @@ function toggleCuidadoAnimalSecretario() {
         if (!estaAberto) {
             // ABRIR - modo Cuidado Animal
             console.log('DEBUG - Abrindo submenu Cuidado Animal');
-            // Fechar outros submenus (Direção, Gerências)
+            // Fechar outros submenus (Direção, Gerências, Jurídico, RH)
+            var submenuJuridico = document.getElementById('secretario-submenu-juridico');
+            var submenuRH = document.getElementById('secretario-submenu-rh');
+            var btnJuridico = document.getElementById('btn-toggle-juridico-secretario');
+            var btnRH = document.getElementById('btn-toggle-rh-secretario');
             if (submenuDirecao) submenuDirecao.style.display = 'none';
             if (submenuGerencia) submenuGerencia.style.display = 'none';
             if (submenuGerenciaAmbiental) submenuGerenciaAmbiental.style.display = 'none';
+            if (submenuJuridico) submenuJuridico.style.display = 'none';
+            if (submenuRH) submenuRH.style.display = 'none';
             if (btnDirecao && btnDirecao.querySelector('svg')) {
                 btnDirecao.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+            }
+            if (btnJuridico && btnJuridico.querySelector('svg')) {
+                btnJuridico.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+            }
+            if (btnRH && btnRH.querySelector('svg')) {
+                btnRH.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
             }
 
             submenu.style.display = 'block';
@@ -2295,13 +2354,24 @@ function toggleCuidadoAnimalSecretario() {
             if (typeof configurarModoTarefas === 'function') configurarModoTarefas('cuidado_animal');
             mudarAba('home');
         } else {
-            // FECHAR
-            if (btn.querySelector('svg')) {
-                btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+            var abaHome = document.getElementById('aba-home');
+            var naHome = abaHome && abaHome.style.display === 'block';
+
+            if (!naHome) {
+                // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+                window.secretarioModoVisualizacao = 'cuidado_animal';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('cuidado_animal');
+                mudarAba('home');
+            } else {
+                // FECHAR
+                submenu.style.display = 'none';
+                if (btn.querySelector('svg')) {
+                    btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+                }
+                window.secretarioModoVisualizacao = 'normal';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
+                mudarAba('home');
             }
-            window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
-            mudarAba('home');
         }
     } catch (err) {
         console.error('Erro em toggleCuidadoAnimalSecretario:', err);
@@ -2343,12 +2413,22 @@ function toggleJuridicoSecretario() {
             if (typeof configurarModoTarefas === 'function') configurarModoTarefas('juridico');
             mudarAba('home');
         } else {
-            // FECHAR
-            submenu.style.display = 'none';
-            if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
-            window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
-            mudarAba('home');
+            var abaHome = document.getElementById('aba-home');
+            var naHome = abaHome && abaHome.style.display === 'block';
+
+            if (!naHome) {
+                // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+                window.secretarioModoVisualizacao = 'juridico';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('juridico');
+                mudarAba('home');
+            } else {
+                // FECHAR
+                submenu.style.display = 'none';
+                if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+                window.secretarioModoVisualizacao = 'normal';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
+                mudarAba('home');
+            }
         }
     } catch (err) { console.error('Erro em toggleJuridicoSecretario:', err); }
 }
@@ -2388,12 +2468,22 @@ function toggleRHSecretario() {
             if (typeof configurarModoTarefas === 'function') configurarModoTarefas('recursos_humanos');
             mudarAba('home');
         } else {
-            // FECHAR
-            submenu.style.display = 'none';
-            if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
-            window.secretarioModoVisualizacao = 'normal';
-            if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
-            mudarAba('home');
+            var abaHome = document.getElementById('aba-home');
+            var naHome = abaHome && abaHome.style.display === 'block';
+
+            if (!naHome) {
+                // JÁ ABERTO, MAS NÃO NA HOME → apenas vai para home mantendo aberto
+                window.secretarioModoVisualizacao = 'recursos_humanos';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('recursos_humanos');
+                mudarAba('home');
+            } else {
+                // FECHAR
+                submenu.style.display = 'none';
+                if (btn.querySelector('svg')) btn.querySelector('svg').innerHTML = '<path d="M12 5v14M5 12h14"></path>';
+                window.secretarioModoVisualizacao = 'normal';
+                if (typeof configurarModoTarefas === 'function') configurarModoTarefas('padrao');
+                mudarAba('home');
+            }
         }
     } catch (err) { console.error('Erro em toggleRHSecretario:', err); }
 }

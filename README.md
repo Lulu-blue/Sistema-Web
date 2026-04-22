@@ -21,7 +21,9 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
 | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
 | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
-| `PERMISSOES_SETUP.md` | Guia completo e definitivo de configuração de permissões hierárquicas, regras de RLS (Row Level Security) e criação de cargos e funções no Supabase, consolidando os antigos arquivos `.sql` soltos e `.csv`. |
+| `redefinir-senha.html` | Página de redefinição de senha via token de segurança (válido por 1h) |
+| `cabecalho_img.js` | Módulo com a imagem do cabeçalho em Base64 para geração de documentos oficiais |
+| `PERMISSOES_SETUP.md` | **Guia definitivo** de permissões hierárquicas e políticas RLS (Row Level Security) do Supabase. Substitui todos os antigos arquivos `.sql` soltos. |
 | `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
 
 ---
@@ -162,6 +164,8 @@ Gestão completa de áreas de atuação e mapeamento de bairros para fiscais.
 
 ### Mapeamento de Bairros
 - **Cadastro de bairros**: Nome do bairro, área vinculada, fiscal responsável.
+- **Ordenação de áreas**: Áreas exibidas em ordem crescente numérica (`Área 1`, `Área 2` … `Área 10`).
+- **Agrupamento de bairros**: Bairros ordenados primeiro por área (numérico) e, dentro de cada área, em ordem alfabética. Bairros sem área ficam ao final.
 - **Busca rápida**: Filtro de bairros por nome.
 - **Contador**: Total de bairros cadastrados.
 
@@ -299,12 +303,16 @@ Tabela designada para categorias "Públicas". Possui a mesma estrutura mas inclu
 É a coluna vital para evitar 100 tabelas — Os inputs preenchidos das 36 modais viram um Hashmap armazenado de forma compacta. Se houverem PDFs, nela também vai o `publicUrl` guardado do bucket Storage.
 
 ### *RLS (Row Level Security)*
-A seguridade ocorre camada a camada no BD:
-- Fiscais podem inserir e ler os próprios `registros_produtividade`. Ninguém pode ler os da outra pessoa.
-- A exclusão e edição também só permite alterar onde `user_id == auth.uid()`.
-- O `controle_processual` permite todos os logados visualizarem em *Select*, mas mantém *Updates/Deletes* travados para si mesmo.
-- A tabela `profiles` possui um seletor aberto para permitir verificações de nível no login, mas bloqueia atualizações (Avatar ou Configs) estritamente para o proprietário (`id == auth.uid()`).
-- No Bucket de Storage `anexos` e `avatars`, usuários têm pastas sob seus `user_ids` nas quais podem criar/atualizar/excluir arquivos livremente. Arquivos baixados têm políticas de SELECT puramente público.
+A segurança ocorre camada a camada no banco de dados. O sistema possui **14 tabelas ativas com RLS** e mais de **80 políticas** configuradas. As principais regras são:
+
+- **`registros_produtividade`**: Fiscais inserem/leem/editam apenas os próprios registros (`user_id = auth.uid()`). Gerência visualiza tudo.
+- **`controle_processual`**: Todos os logados visualizam (*SELECT* livre). Updates/Deletes restritos ao dono do registro ou a admins/gerentes.
+- **`profiles`**: Tabela mais complexa (26 políticas). Hierarquia rigorosa — Secretários têm gestão total, Diretores gerenciam Gerentes e abaixo, Gerentes gerenciam Fiscais e abaixo. Cada usuário pode editar o próprio perfil.
+- **`tarefas`**: Leitura livre para autenticados. Edição/exclusão controlada por `is_chefe()`, cargo hierárquico ou ser o criador. Cargos especiais (Jurídico, Administração) veem apenas as próprias tarefas.
+- **`notificacoes`**: Cada usuário vê apenas as próprias notificações (`user_id = auth.uid()`).
+- **Buckets de Storage** (`anexos`, `avatars`, `tarefa_anexos`): Upload/download para usuários autenticados. Arquivos organizados em pastas por `user_id`.
+
+> 📋 **Para o catálogo completo de todas as políticas RLS por tabela**, consulte o arquivo **`PERMISSOES_SETUP.md`** (Anexo B).
 
 ### `eventos` (Módulo de Tarefas)
 Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_inicio`, `data_fim`, `cor` (hex), `criado_por` (FK → auth.users), `responsavel_id`.
@@ -319,7 +327,7 @@ Relação N:N entre tarefas e usuários. Campos: `tarefa_id` (FK → tarefas), `
 Anexos PDF vinculados a tarefas/subtarefas. Campos: `tarefa_id` (FK → tarefas), `nome_arquivo`, `url` (public URL do Storage), `uploaded_by` (FK → auth.users).
 
 ### `tarefa_comentarios` (Módulo de Tarefas)
-Comentários em tarefas. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name`, `texto`, `created_at`.
+Comentários em tarefas. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name`, `texto`, `anexo_url`, `anexo_nome`, `created_at`.
 
 ### `tarefa_comentario_anexos` (Módulo de Tarefas)
 Anexos vinculados a comentários (suporte a múltiplos arquivos por comentário). Campos: `comentario_id` (FK → tarefa_comentarios), `nome_arquivo`, `url`, `uploaded_by`.
@@ -335,6 +343,9 @@ Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → a
 
 ### `bairros` (Módulo de Bairros)
 Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `fiscal_id` (FK → auth.users), `created_at`.
+
+### `exclusao_logs` (Auditoria)
+Tabela de logs de exclusão de usuários. Substituíu a antiga `log_exclusoes`. Campos: dados do registro de auditoria.
 
 ### Variáveis de Controle de Modo (Frontend)
 | Variável | Valores | Descrição |
@@ -494,14 +505,14 @@ Secretário(a) (nível 4)
 ```
 
 ### Comportamento do Sub-menu:
-- **Clicar em "Direção de Meio Ambiente" (menu fechado)**: Abre o menu, muda para modo Direção
-- **Clicar em "Direção de Meio Ambiente" (menu aberto + sub-submenu aberto)**: Fecha apenas o sub-submenu, mantém o menu aberto, volta para modo Direção
-- **Clicar em "Direção de Meio Ambiente" (menu aberto + sem sub-submenu)**: Fecha o menu completamente, volta para modo normal
-- **Clicar em "Gerência de Posturas"**: Abre/fecha sub-submenu, alterna modo Gerente (Posturas)
-- **Clicar em "Gerência de Regularização Ambiental"**: Abre/fecha sub-submenu, alterna modo Gerência RA
+- **Clicar no botão principal (menu fechado)**: Abre o menu e vai para a Home do modo correspondente
+- **Clicar no botão principal (menu aberto + não está na Home)**: Apenas vai para a Home do modo mantendo o menu aberto
+- **Clicar no botão principal (menu aberto + já está na Home)**: Fecha o menu completamente e volta para modo normal
+- **Clicar no botão principal (menu aberto + sub-submenu aberto)**: Fecha apenas o sub-submenu, mantém o menu aberto e vai para a Home do modo
+- **Clicar em "Gerência de Posturas" / "Gerência de Regularização Ambiental" / "Cuidado Animal" / "Jurídico" / "RH"**: Segue o mesmo padrão de toggle acima
 - **Clicar fora do menu**: Fecha todo o menu, volta para modo normal
 
-> **Nota:** O botão "Direção de Meio Ambiente" requer **dois cliques** para fechar completamente quando um sub-submenu está aberto. O primeiro clique fecha o sub-submenu e volta para a visão do Diretor, o segundo clique fecha o menu principal.
+> **Nota:** Qualquer botão com submenu requer **dois cliques para fechar** quando o usuário já está na Home daquele modo. O primeiro clique sempre garante que o usuário esteja na Home correta mantendo o menu aberto; o segundo clique fecha o menu.
 
 ### Filtros de Visibilidade de Tarefas por Modo:
 
@@ -515,7 +526,7 @@ Secretário(a) (nível 4)
 #### Secretário(a)
 | Modo | Tarefas Visíveis |
 |------|------------------|
-| `normal` | Todas as tarefas (sem filtro) |
+| `normal` | Apenas tarefas onde o Secretário é responsável ou criador |
 | `direcao` | Tarefas de Diretores |
 | `gerencia_posturas` | Tarefas criadas por Gerentes de Posturas (sub-modo) |
 | `gerencia_ambiental` | Tarefas criadas por Gerentes RA **OU** onde equipe RA é responsável |
@@ -621,41 +632,27 @@ Cargos com permissões específicas e restritas, **não tratados como Gerentes**
 
 ## 🔐 Permissões Hierárquicas (SQL)
 
-### Script: `setup_permissoes_diretor_gerenciar.sql`
-Configura políticas RLS para permitir que **Diretor** e **Secretário** gerenciem funcionários.
+> **Nota:** Os antigos arquivos `.sql` soltos (`setup_permissoes_diretor_gerenciar.sql`, `setup_permissoes_secretario.sql`, etc.) foram consolidados em **`PERMISSOES_SETUP.md`**. Consulte esse arquivo para o catálogo completo de políticas RLS, funções SQL e scripts de configuração.
 
-### Funções Criadas:
-| Função | Descrição |
-|--------|-----------|
-| `is_diretor_ou_secretario(user_id)` | Verifica se usuário tem permissão de gestão |
-| `criar_novo_usuario(email, senha, nome, role, cpf)` | Cria usuário completo (auth.users + profiles) |
-| `desativar_usuario(user_id)` | Marca usuário como inativo |
+### Resumo das Funções SQL Existentes
 
-### Políticas RLS:
-- **INSERT**: Diretor/Secretário podem cadastrar novos funcionários
-- **UPDATE**: Diretor/Secretário podem atualizar qualquer perfil
-- **SELECT**: Todos autenticados podem visualizar perfis
-
-### Script: `setup_permissoes_secretario.sql`
-Configura permissões especiais para **Secretário** e **Desenvolvedores** gerenciarem qualquer usuário no sistema.
-
-#### Funções Criadas:
 | Função | Descrição | Quem pode usar |
 |--------|-----------|----------------|
+| `is_diretor_ou_secretario(user_id)` | Verifica se usuário tem permissão de gestão | Interno |
 | `is_secretario_ou_dev(user_id)` | Verifica se é Secretário ou Dev | Interno |
-| `criar_novo_usuario(email, senha, nome, cargo, cpf, matricula)` | Cria usuário completo | Secretário/Dev |
+| `criar_novo_usuario(email, senha, nome, cargo, cpf, matricula)` | Cria usuário completo (auth.users + profiles) | Secretário/Dev |
 | `desativar_usuario(user_id)` | Soft delete (marca como inativo) | Secretário/Dev |
 | `excluir_usuario_permanente(user_id)` | Hard delete (apenas Devs) | Desenvolvedor |
-
-#### Critérios de Identificação:
-- **Secretário**: Campo `role` contém "Secretário", "Secretario", "Secretária" ou "Secretaria"
-- **Desenvolvedor**: Email contém "dev@", "admin@", "desenvolvedor" ou role contém "admin"
+| `pode_excluir_usuario(user_id)` | Verifica se o usuário atual pode excluir o alvo | Interno (RLS) |
+| `pode_gerenciar_usuario(manager_id, target_id)` | Verifica se gestor pode gerenciar alvo | Interno (RLS) |
+| `get_nivel_hierarquico(user_id)` | Retorna nível hierárquico (0=Fiscal, 1=Gerente, 2=Diretor, 3=Secretário) | Interno |
+| `transferir_para_secretario_do_secretario(user_id)` | Promove servidor ao cargo de Secretário do Secretário | Secretário/Dev |
 
 ### Hierarquia de Exclusão:
 ```
 Secretário(a) pode desativar: Todos (incluindo Diretores)
 Diretor pode desativar: Gerentes, Fiscais, Equipe RA (exceto Secretários)
-Gerente pode desativar: Após as políticas SQL, somente via código da aplicação
+Gerente pode desativar: Fiscais e Equipe sob sua responsabilidade
 ```
 
 ---
@@ -849,6 +846,7 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
   - **Ano**: exibe todos os registros de CP do ano atual (incluindo pontuação zerada).
 - **Layout Responsivo do Modal**: Em telas entre 580px e 900px, os gráficos ficam lado a lado no topo e o relatório abaixo. Em telas menores que 580px, os gráficos empilham verticalmente.
 - **Legenda do Gráfico "Controle Processual"**: A legenda do gráfico doughnut no painel do Gerente foi movida da direita para **embaixo do gráfico**.
+- **Interatividade no Gráfico de Status das Tarefas**: Ao clicar em uma fatia do gráfico doughnut de status (Concluídas, Em Progresso, Pendentes, Atrasadas) no relatório do fiscal, aparece uma lista filtrada com as tarefas daquele status. Clicar em uma tarefa da lista abre o modal completo de detalhes da tarefa (`abrirDetalheTarefa`).
 
 ### Performance dos Gráficos de Gestão
 - **Evitado Limite de 1000 Linhas**: As funções `carregarGraficoDocumentos()` e `carregarGraficoDocumentosSecretario()` em `gerente.js` passaram a usar consultas `count(*)` por categoria (`head: true`) ao invés de buscar todas as linhas, evitando inconsistências quando o `controle_processual` ultrapassa 1000 registros.

@@ -1,6 +1,10 @@
 # 🔐 Configuração de Permissões Hierárquicas
 
-Este guia explica como configurar as permissões para que Gerentes, Diretores e Secretários possam excluir funcionários.
+Este guia documenta as permissões reais do banco de dados Supabase do SEMAC, consolidando políticas RLS, hierarquia de cargos e tabelas do sistema.
+
+> **Última atualização:** Abril/2026 (sincronizado com os CSVs de políticas do Supabase)
+
+---
 
 ## 📋 Resumo da Hierarquia
 
@@ -21,9 +25,11 @@ Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental
 Gerente → pode excluir: Fiscal, Equipe Ambiental
 ```
 
-## 🚀 Opção 1: SQL Simples (Recomendado para começar)
+---
 
-Execute o arquivo `setup_permissoes_simples.sql` no SQL Editor do Supabase:
+## 🚀 Opção 1: SQL Simples (Legado)
+
+Execute no SQL Editor do Supabase:
 
 1. Acesse seu projeto no Supabase Dashboard
 2. Vá em "SQL Editor"
@@ -34,6 +40,8 @@ Isso vai:
 - ✅ Habilitar exclusão na tabela `profiles` para Gerente+
 - ✅ Criar função de "soft delete" (desativar usuário)
 - ✅ Adicionar colunas para controle de ativação
+
+---
 
 ## 🔧 Opção 2: Edge Function (Exclusão Completa)
 
@@ -261,6 +269,8 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
 }
 ```
 
+---
+
 ## 🔐 Opção 3: Permissões Especiais do Secretário e Desenvolvedores
 
 Para permitir que **Secretários** e **Desenvolvedores** possam **criar e excluir qualquer usuário** no sistema:
@@ -330,6 +340,8 @@ No Supabase Dashboard:
    - `SUPABASE_URL`: sua URL do Supabase
    - `SUPABASE_SERVICE_ROLE_KEY`: a chave de serviço
 
+---
+
 ## ✅ Testando
 
 1. Faça login como Gerente
@@ -337,13 +349,19 @@ No Supabase Dashboard:
 3. Digite seu CPF, senha e "EXCLUIR"
 4. O usuário deve ser removido completamente
 
+---
+
 ## 📝 Logs de Exclusão
 
-Para manter um registro de quem excluiu quem, use a tabela `log_exclusoes` do primeiro SQL:
+Para manter um registro de exclusões, consulte a tabela `exclusao_logs`:
 
 ```sql
-SELECT * FROM public.log_exclusoes ORDER BY excluido_em DESC;
+SELECT * FROM public.exclusao_logs ORDER BY created_at DESC;
 ```
+
+> **Nota:** A tabela antiga `log_exclusoes` foi descontinuada. Use `exclusao_logs`.
+
+---
 
 ## 🆘 Solução de Problemas
 
@@ -359,6 +377,8 @@ SELECT * FROM public.log_exclusoes ORDER BY excluido_em DESC;
 - O CPF e senha do gerente devem estar corretos
 - O CPF deve estar no formato com ou sem pontuação
 
+---
+
 ## 🔒 Segurança
 
 ⚠️ **IMPORTANTE:**
@@ -370,9 +390,9 @@ SELECT * FROM public.log_exclusoes ORDER BY excluido_em DESC;
 ---
 
 ## 🏗️ Anexo A: Configuração de Novo Cargo - Secretário(a) do Secretário(a)
-*Consolidado do arquivo setup_secretario_do_secretario.sql*
 
 O sistema permite que o Secretário principal promova servidores para o cargo via SQL:
+
 ```sql
 CREATE OR REPLACE FUNCTION public.transferir_para_secretario_do_secretario(
     p_user_id UUID
@@ -389,44 +409,272 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+
 Uso: `SELECT public.transferir_para_secretario_do_secretario('UUID-AQUI');`
 
-## 🛡️ Anexo B: Resumo Definitivo de Políticas RLS do Controle Processual
-*Consolidação dos arquivos fix_rls_definitivo.sql e controle_processual.sql*
+---
 
-Para corrigir problemas com `UUIDs` ou bloqueios no `INSERT` da tabela `controle_processual`, os seguintes scripts foram criados para garantir que todo usuário possa inserir o seu próprio registro e gerenciar seus anexos no storage (`anexos`):
+## 🗃️ Anexo B: Catálogo Completo de Políticas RLS por Tabela
 
-```sql
--- Políticas Tabela (Controle Processual)
-DROP POLICY IF EXISTS "Permitir insert para o proprio usuario" ON public.controle_processual;
-CREATE POLICY "Permitir insert para o proprio usuario" ON public.controle_processual FOR INSERT TO authenticated WITH CHECK (user_id::uuid = auth.uid()::uuid);
+> Este anexo foi gerado a partir dos dados reais exportados do Supabase (arquivos CSV). Reflete o estado atual do banco em produção.
 
-CREATE POLICY "Permitir update para o proprio usuario" ON public.controle_processual FOR UPDATE TO authenticated USING (user_id::uuid = auth.uid()::uuid) WITH CHECK (user_id::uuid = auth.uid()::uuid);
+### Tabela: `areas` (Áreas de Atuação)
 
-CREATE POLICY "Fiscal deleta próprios registros CP" ON public.controle_processual FOR DELETE TO authenticated USING (user_id::uuid = auth.uid()::uuid);
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Gerencia altera areas | ALL | authenticated | Apenas Gerentes, Diretores, Secretários e admins |
+| Visualizacao publica de areas | SELECT | public | Livre |
 
--- Políticas Storage (Anexos AR)
-DROP POLICY IF EXISTS "Permitir upload no bucket anexos para todos" ON storage.objects;
-CREATE POLICY "Permitir upload no bucket anexos para todos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'anexos');
+**Resumo:** Visualização pública. Alterações restritas à gerência.
 
-DROP POLICY IF EXISTS "Permitir update no bucket anexos para todos" ON storage.objects;
-CREATE POLICY "Permitir update no bucket anexos para todos" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'anexos');
-```
+---
 
-## 🗃️ Anexo C: Tabela de Regras Supabase Resumidas
-*Consolidado de planilhas CSV*
-| Política | Comando | Restrição Principal |
-|---|---|---|
-| Todos veem registros CP | SELECT | N/A (Permissivo para `public`) |
-| Gerencia pode ver todos os registros CP | SELECT | `get_nivel_hierarquico() >= 1` ou dono do log |
-| Permitir update para o proprio usuario | UPDATE | `user_id = auth.uid()` |
-| Gerentes podem deletar CP | DELETE | Função de Perfil = `Gerente de Posturas` |
-| Admin_Update_Processual_Completa | UPDATE | Perfis `admin` ou `administrador` |
+### Tabela: `bairros` (Bairros Mapeados)
 
-## 🛡️ Anexo D: Políticas RLS do Módulo de Tarefas, Comentários e Notificações
-*Consolidação do arquivo `migracao_comentarios_notificacoes.sql`*
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Gerencia altera bairros | ALL | authenticated | Apenas Gerentes, Diretores, Secretários e admins |
+| Visualizacao publica de bairros | SELECT | public | Livre |
 
-Execute este bloco no SQL Editor do Supabase para criar/atualizar as tabelas e políticas de segurança do módulo de Tarefas:
+**Resumo:** Visualização pública. Alterações restritas à gerência.
+
+---
+
+### Tabela: `controle_processual` (Documentos Oficiais)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Admin_Update_Processual_Completa | UPDATE | public | Admin, Administrador de Posturas, Gerente de Posturas |
+| Fiscal deleta próprios registros CP | DELETE | authenticated | `user_id = auth.uid()` |
+| Gerencia pode ver todos os registros CP | SELECT | authenticated | `get_nivel_hierarquico() >= 1` OU dono |
+| Gerente pode ler todos os registros de CP | SELECT | public | Dono OU roles gerente/admin |
+| Gerentes podem deletar CP | DELETE | authenticated | `role = 'Gerente de Posturas'` |
+| Permitir insert para o proprio usuario | INSERT | authenticated | `user_id = auth.uid()` |
+| Permitir update em controle_processual para admin | UPDATE | public | Admin, Administrador, Gerente de Posturas, Gerente Fiscal |
+| Permitir update para o proprio usuario | UPDATE | authenticated | `user_id = auth.uid()` |
+| Todos veem registros CP | SELECT | public | Livre |
+
+**Resumo:** Todos visualizam. Fiscais inserem/editam/deletam apenas os próprios. Gerentes e admins têm poderes amplos de gestão.
+
+---
+
+### Tabela: `eventos` (Calendário de Eventos/Projetos)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Eventos: atualização para autenticados | UPDATE | authenticated | Livre |
+| Eventos: exclusão para autenticados | DELETE | authenticated | Livre |
+| Eventos: inserção para autenticados | INSERT | authenticated | Livre |
+| Eventos: leitura para todos autenticados | SELECT | authenticated | Livre |
+
+**Resumo:** Qualquer usuário autenticado pode criar, editar e excluir eventos. Controle de criação é feito no frontend (apenas Diretor/Secretário).
+
+---
+
+### Tabela: `exclusao_logs` (Logs de Exclusão)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| exclusao_logs_insert | INSERT | authenticated | Livre |
+| exclusao_logs_select | SELECT | authenticated | Livre |
+
+**Resumo:** Registro de exclusões. Tabela substituiu a antiga `log_exclusoes`.
+
+---
+
+### Tabela: `notificacoes` (Sistema de Notificações)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Notificações: DELETE próprias | DELETE | authenticated | `user_id = auth.uid()` |
+| Notificações: INSERT para autenticados | INSERT | authenticated | Livre |
+| Notificações: SELECT próprias | SELECT | authenticated | `user_id = auth.uid()` |
+| Notificações: UPDATE próprias | UPDATE | authenticated | `user_id = auth.uid()` |
+
+**Resumo:** Cada usuário vê, edita e apaga apenas suas próprias notificações. Qualquer um pode inserir notificações para outros.
+
+---
+
+### Tabela: `profiles` (Perfis de Usuários)
+
+> Possui **26 políticas RLS** — a tabela mais complexa do sistema.
+
+#### Políticas de Inserção (INSERT)
+| Política | Restrição |
+|----------|-----------|
+| Diretor CA cria usuarios CA | Diretor do Cuidado Animal cria Gerentes/Coordenadores CA |
+| Diretores podem inserir perfis | Diretores e Secretários |
+| Gerente CA cria coordenadores | Gerente do Cuidado Animal cria Coordenadores CA |
+| Gerente pode cadastrar novos perfis | Gerentes Fiscais, Gerentes e Admins |
+| Gestão Total do Secretário | Secretários têm poder total |
+| Permitir insercao por gestores | Qualquer gestor (Secretário, Diretor, Gerente) ativo |
+| Permitir insert para diretores e secretarios | Diretores e Secretários |
+| Secretario cria usuarios | Secretários ativos |
+| Secretário pode inserir novos perfis | Secretários |
+| Usuario pode criar seu proprio perfil | `auth.uid() = id` (public) |
+| profiles_insert | Livre para authenticated |
+
+#### Políticas de Atualização (UPDATE)
+| Política | Restrição |
+|----------|-----------|
+| Editar próprio perfil | `auth.uid() = id` |
+| Gerente atualiza perfis | Gerentes, Gerentes Fiscais, Admins |
+| Gerente pode atualizar perfis | Dono OU Gerente Fiscal/Gerente/Admin |
+| Gestão de Diretores sobre Gerentes | Diretores, Secretários OU dono |
+| Permitir atualizacao por gestores ou proprio | Gestor ativo que pode gerenciar o alvo |
+| Permitir desativacao hierarquica | Hierarquia: Secretário > Diretor > Gerente > Fiscal |
+| Permitir update hierarquico | `get_nivel_hierarquico()` maior que o do alvo |
+| Permitir update para diretores e secretarios | Diretores, Secretários OU dono |
+| Usuário atualiza proprio perfil | `auth.uid() = id` (public) |
+| profiles_update | Livre para authenticated |
+
+#### Políticas de Exclusão (DELETE)
+| Política | Restrição |
+|----------|-----------|
+| Gerente pode excluir perfis | Gerentes Fiscais, Gerentes, Admins |
+| Gestão Total do Secretário | Secretários têm poder total |
+| Gestão de Diretores sobre Gerentes | Diretores, Secretários OU dono |
+| Permitir exclusao hierarquica | `pode_excluir_usuario(id)` |
+
+#### Políticas de Leitura (SELECT)
+| Política | Restrição |
+|----------|-----------|
+| Leitura publica de perfis | Livre (public) |
+| Perfis visíveis para todos | Livre (authenticated) |
+| Permitir select para todos autenticados | Livre (authenticated) |
+| profiles_select | Livre (authenticated) |
+
+**Resumo:** Hierarquia rigorosa. Secretários têm gestão total. Diretores gerenciam Gerentes e abaixo. Gerentes gerenciam Fiscais e abaixo. Cada um edita o próprio perfil.
+
+---
+
+### Tabela: `registros_produtividade` (Produtividade Comum)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Fiscal deleta próprios registros | DELETE | public | `auth.uid() = user_id` |
+| Fiscal edita próprios registros | UPDATE | public | `auth.uid() = user_id` |
+| Fiscal insere próprios registros | INSERT | public | `auth.uid() = user_id` |
+| Fiscal vê próprios registros | SELECT | public | `auth.uid() = user_id` |
+| Gerencia pode ver todos os registros | SELECT | authenticated | `get_nivel_hierarquico() >= 1` OU dono |
+| Gerente pode ler todos os registros de produtividade | SELECT | public | Dono OU roles gerente/admin |
+| Gerentes podem deletar Produtividade | DELETE | authenticated | `role = 'Gerente de Posturas'` |
+| Permitir insert para registros comuns | INSERT | authenticated | `user_id = auth.uid()` |
+| Permitir update para registros comuns | UPDATE | authenticated | `user_id = auth.uid()` |
+
+**Resumo:** Similar ao `controle_processual`. Fiscais gerenciam apenas os próprios registros. Gerência visualiza tudo e pode deletar.
+
+---
+
+### Tabela: `tarefas` (Tarefas e Subtarefas)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Agente Administracao ve proprias tarefas | ALL | authenticated | Agente de Administração + dono/responsável |
+| Coordenador Cuidado Animal ve proprias tarefas | SELECT | authenticated | Coordenador CA + dono/responsável |
+| Diretor Cuidado Animal ve todas tarefas CA | SELECT | authenticated | Diretor CA vê toda a equipe CA |
+| Gerente Cuidado Animal ve tarefas da equipe | SELECT | authenticated | Gerente CA vê tarefas dos coordenadores |
+| Gerente Interface Juridica ve proprias tarefas | ALL | authenticated | Gerente Jurídico + dono/responsável |
+| Secretario ve todas tarefas | ALL | authenticated | Secretários têm poder total |
+| Tarefas: atualização | UPDATE | authenticated | Livre |
+| Tarefas: exclusão | DELETE | authenticated | Livre |
+| Tarefas: inserção | INSERT | authenticated | Livre |
+| Tarefas: leitura para todos | SELECT | authenticated | Livre |
+| tarefas_delete | DELETE | authenticated | `is_chefe()` OU criador |
+| tarefas_insert | INSERT | authenticated | Livre |
+| tarefas_select | SELECT | authenticated | Livre |
+| tarefas_update | UPDATE | authenticated | `is_chefe()` OU criador |
+
+**Resumo:** Leitura livre para autenticados. Edição/exclusão controlada por `is_chefe()`, cargo hierárquico ou ser o criador. Cargos especiais (Jurídico, Administração) veem apenas as próprias tarefas.
+
+---
+
+### Tabela: `tarefa_responsaveis` (Responsáveis por Tarefa)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Cargo especial gerencia proprios responsaveis | ALL | authenticated | Gerente Jurídico ou Agente de Administração |
+| Diretor CA gerencia responsaveis | ALL | authenticated | Diretor do Cuidado Animal |
+| Gerente CA gerencia responsaveis | ALL | authenticated | Gerente do Cuidado Animal |
+| Responsáveis: exclusão | DELETE | authenticated | Livre |
+| Responsáveis: inserção | INSERT | authenticated | Livre |
+| Responsáveis: leitura | SELECT | authenticated | Livre |
+| Secretario gerencia responsaveis | ALL | authenticated | Secretários |
+| tarefa_responsaveis_delete | DELETE | authenticated | `is_chefe()` |
+| tarefa_responsaveis_insert | INSERT | authenticated | Livre |
+| tarefa_responsaveis_select | SELECT | authenticated | Livre |
+| tarefa_responsaveis_update | UPDATE | authenticated | `is_chefe()` |
+
+**Resumo:** Leitura livre. Modificação restrita a `is_chefe()` ou gestores específicos por área (CA, Jurídico, Secretário).
+
+---
+
+### Tabela: `tarefa_anexos` (Anexos de Tarefas)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Anexos: exclusão | DELETE | authenticated | Livre |
+| Anexos: inserção | INSERT | authenticated | Livre |
+| Anexos: leitura | SELECT | authenticated | Livre |
+| tarefa_anexos_delete | DELETE | authenticated | `is_chefe()` |
+| tarefa_anexos_insert | INSERT | authenticated | Livre |
+| tarefa_anexos_select | SELECT | authenticated | Livre |
+
+**Resumo:** Upload e leitura livres. Exclusão controlada por `is_chefe()`.
+
+---
+
+### Tabela: `tarefa_comentarios` (Comentários em Tarefas)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Comentários: INSERT para autenticados | INSERT | authenticated | Livre |
+| Comentários: SELECT para autenticados | SELECT | authenticated | Livre |
+
+**Resumo:** Qualquer usuário autenticado pode comentar e visualizar comentários.
+
+---
+
+### Tabela: `tarefa_comentario_anexos` (Anexos em Comentários)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Anexos comentário: INSERT para autenticados | INSERT | authenticated | Livre |
+| Anexos comentário: SELECT para autenticados | SELECT | authenticated | Livre |
+
+**Resumo:** Qualquer usuário autenticado pode anexar e visualizar anexos de comentários.
+
+---
+
+### Tabela: `tarefa_visualizacoes` (Visualizações de Tarefas)
+
+| Política | Comando | Público | Restrição |
+|----------|---------|---------|-----------|
+| Visualizações: INSERT para autenticados | INSERT | authenticated | Livre |
+| Visualizações: SELECT para autenticados | SELECT | authenticated | Livre |
+
+**Resumo:** Qualquer usuário autenticado pode registrar e visualizar quem abriu as tarefas.
+
+---
+
+## ⚠️ Anexo C: Tabelas Vazias ou Descontinuadas
+
+As seguintes tabelas existem no banco mas **estão sem dados** e/ou **foram substituídas**:
+
+| Tabela | Status | Observação |
+|--------|--------|------------|
+| `evento_anexos` | Vazia | Não possui registros nem políticas RLS ativas |
+| `log_desativacoes` | Vazia | Não possui registros |
+| `log_exclusoes` | Descontinuada | Substituída por `exclusao_logs` |
+| `password_reset_tokens` | Vazia | Não possui registros |
+
+> **Atenção:** Tabelas vazias podem ser removidas em futuras migrações de limpeza, desde que confirmado que não há dependências no código.
+
+---
+
+## 🛡️ Anexo D: SQL de Criação das Tabelas do Módulo de Tarefas
+
+Execute este bloco no SQL Editor do Supabase para recriar/atualizar as tabelas e políticas de segurança do módulo de Tarefas:
 
 ```sql
 -- =====================================================
@@ -440,6 +688,8 @@ CREATE TABLE IF NOT EXISTS public.tarefa_comentarios (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     user_name TEXT,
     texto TEXT NOT NULL,
+    anexo_url TEXT,
+    anexo_nome TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
@@ -538,7 +788,7 @@ CREATE POLICY "Notificações: DELETE próprias" ON public.notificacoes FOR DELE
 ```
 
 ### Políticas de Storage para `tarefa_anexos`
-O bucket `tarefa_anexos` precisa das seguintes políticas de storage para permitir upload e exclusão de anexos por usuários autenticados:
+O bucket `tarefa_anexos` precisa das seguintes políticas de storage:
 
 ```sql
 -- SELECT (download/visualização)

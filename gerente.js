@@ -494,13 +494,16 @@ async function carregarGraficoDocumentos() {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         position: 'bottom',
                         labels: {
                             color: '#1e293b',
-                            font: { size: 12, weight: 'bold' },
-                            padding: 15
+                            font: { size: 10, weight: 'bold' },
+                            padding: 8,
+                            usePointStyle: true,
+                            boxWidth: 6
                         }
                     },
                     tooltip: {
@@ -683,6 +686,25 @@ async function carregarGestaoBairrosAreas() {
         globalAreas = areasData || [];
         globalBairros = bairrosData || [];
         globalRegistrosCP = registrosCP || [];
+
+        // Ordenar áreas numericamente pelo número extraído do nome (ex: "Área 1", "Área 2" ... "Área 10")
+        globalAreas.sort(function(a, b) {
+            var numA = parseInt(String(a.nome).replace(/\D/g, ''), 10) || 0;
+            var numB = parseInt(String(b.nome).replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+        });
+
+        // Ordenar bairros: primeiro por área (numérico), depois alfabeticamente pelo nome
+        globalBairros.sort(function(a, b) {
+            var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
+            var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+
+            var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+            var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+
+            if (numA !== numB) return numA - numB;
+            return String(a.nome).localeCompare(String(b.nome));
+        });
 
         renderizarListaAreas();
         renderizarListaBairros();
@@ -959,16 +981,19 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             .select('tarefa_id')
             .eq('user_id', fiscalId);
 
-        let tarefasStatus = { concluidas: 0, emProgresso: 0, atrasadas: 0 };
+        let tarefasStatus = { concluidas: 0, emProgresso: 0, atrasadas: 0, pendentes: 0 };
+        let tarefasCompletas = [];
 
         if (tarefasFiscal && tarefasFiscal.length > 0) {
             const tarefaIds = tarefasFiscal.map(t => t.tarefa_id);
             const { data: tarefas } = await supabaseClient
                 .from('tarefas')
-                .select('status, prazo')
-                .in('id', tarefaIds);
+                .select('*')
+                .in('id', tarefaIds)
+                .is('tarefa_pai_id', null);
 
             if (tarefas) {
+                tarefasCompletas = tarefas;
                 const hoje = new Date().toISOString().split('T')[0];
                 tarefas.forEach(t => {
                     const prazoVencido = t.prazo && t.prazo < hoje;
@@ -976,12 +1001,17 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                         tarefasStatus.concluidas++;
                     } else if (prazoVencido) {
                         tarefasStatus.atrasadas++;
-                    } else {
+                    } else if (t.status === 'em_progresso') {
                         tarefasStatus.emProgresso++;
+                    } else {
+                        tarefasStatus.pendentes++;
                     }
                 });
             }
         }
+
+        // Armazenar tarefas completas para interatividade do gráfico
+        window.tarefasCompletasFiscal = tarefasCompletas;
 
         const mesesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
         const dataObj = new Date();
@@ -1103,7 +1133,31 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             <div class="modal-overlay ativo" id="modal-relatorio-gerente" onclick="if(event.target===this)fecharRelatorioGerente()" style="overflow-y:auto;">
                 <button onclick="fecharRelatorioGerente()" title="Fechar" style="position:fixed;top:12px;right:16px;z-index:100000;background:rgba(15,23,42,0.7);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25);">×</button>
                 <style>
+                    #modal-relatorio-gerente .relatorio-preview table {
+                        width: 100%;
+                        table-layout: fixed;
+                        border-collapse: collapse;
+                    }
+                    #modal-relatorio-gerente .relatorio-preview th,
+                    #modal-relatorio-gerente .relatorio-preview td {
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                    }
+                    /* Zoom progressivo para manter lado a lado sem cortar */
+                    @media (max-width: 1200px) {
+                        #modal-relatorio-gerente > div { zoom: 0.9; }
+                    }
+                    @media (max-width: 1100px) {
+                        #modal-relatorio-gerente > div { zoom: 0.82; }
+                    }
+                    @media (max-width: 1000px) {
+                        #modal-relatorio-gerente > div { zoom: 0.74; }
+                    }
                     @media (max-width: 900px) {
+                        #modal-relatorio-gerente > div { zoom: 0.66; }
+                    }
+                    /* A partir daqui muda para graficos em cima, relatorio embaixo */
+                    @media (max-width: 840px) {
                         #modal-relatorio-gerente {
                             align-items: flex-start !important;
                             padding-top: 15px !important;
@@ -1112,6 +1166,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                             flex-direction: column !important;
                             width: 96% !important;
                             margin: 0 auto !important;
+                            zoom: 1;
                         }
                         #modal-relatorio-gerente .relatorio-preview {
                             font-size: 0.82rem;
@@ -1122,28 +1177,24 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                         }
                         #modal-relatorio-gerente .relatorio-col-graficos {
                             flex-direction: row !important;
-                            flex-wrap: wrap !important;
+                            flex-wrap: nowrap !important;
                             order: -1 !important;
                             max-height: none;
                             gap: 10px;
                         }
                         #modal-relatorio-gerente .relatorio-col-graficos > div {
-                            flex: 1 1 48%;
-                            padding: 10px;
-                            min-height: 200px;
-                            overflow: visible;
-                        }
-                    }
-                    @media (max-width: 580px) {
-                        #modal-relatorio-gerente .relatorio-col-graficos > div {
-                            flex: 1 1 100%;
-                            min-height: 180px;
+                            flex: 1 1 calc(50% - 5px);
+                            min-width: 0;
+                            padding: 8px;
+                            box-sizing: border-box;
+                            min-height: auto;
+                            overflow: hidden;
                         }
                     }
                 </style>
                 <div style="display:flex;gap:20px;padding:20px;max-width:1400px;margin:0 auto;align-items:flex-start;">
                     <!-- COLUNA ESQUERDA: Relatório -->
-                    <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5;min-width:320px;max-height:90vh;overflow-y:auto;">
+                    <div class="relatorio-preview" id="relatorio-gerente-conteudo" style="flex:1.5 1 380px;min-width:380px;max-height:90vh;overflow-y:auto;overflow-x:auto;">
                         <h1 contenteditable="true">RELATÓRIO DE PRODUTIVIDADE — ${mesAtual}/${anoAtual}</h1>
                         <div class="relatorio-info">
                             <div><strong>Fiscal:</strong> <span contenteditable="true">${nomeFiscal}</span></div>
@@ -1172,7 +1223,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                     </div>
 
                     <!-- COLUNA DIREITA: Gráficos -->
-                    <div class="relatorio-col-graficos" style="flex:0.8;min-width:280px;display:flex;flex-direction:column;gap:20px;max-height:90vh;">
+                    <div class="relatorio-col-graficos" style="flex:0.8 1 300px;min-width:300px;display:flex;flex-direction:column;gap:20px;max-height:90vh;">
                         <!-- Gráfico de Pizza: Tipos de Documentos -->
                         <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
                             <h3 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">N° de registros na Produtividade</h3>
@@ -1191,6 +1242,14 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                             <div style="position:relative;height:200px;">
                                 <canvas id="grafico-colunas-tarefas"></canvas>
                             </div>
+                            <!-- Botões de filtro rápido abaixo do gráfico -->
+                            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;">
+                                <button onclick="renderizarListaTarefasStatusFiscal(0, 'Concluídas', '#10b981')" style="padding:8px;border:1px solid #10b981;background:#f0fdf4;color:#166534;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Concluídas</button>
+                                <button onclick="renderizarListaTarefasStatusFiscal(1, 'Em Progresso', '#3b82f6')" style="padding:8px;border:1px solid #3b82f6;background:#dbeafe;color:#1e40af;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Em Progresso</button>
+                                <button onclick="renderizarListaTarefasStatusFiscal(2, 'Pendentes', '#f59e0b')" style="padding:8px;border:1px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Pendentes</button>
+                                <button onclick="renderizarListaTarefasStatusFiscal(3, 'Atrasadas', '#ef4444')" style="padding:8px;border:1px solid #ef4444;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Atrasadas</button>
+                            </div>
+                            <div id="lista-tarefas-status-fiscal" style="margin-top:16px;display:none;"></div>
                         </div>
                     </div>
                 </div>
@@ -1310,7 +1369,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
     }
 
     // Gráfico de Colunas - Status das Tarefas
-    const statusTarefas = tarefasStatus || window.tarefasStatusFiscal || { concluidas: 0, emProgresso: 0, atrasadas: 0 };
+    const statusTarefas = tarefasStatus || window.tarefasStatusFiscal || { concluidas: 0, emProgresso: 0, atrasadas: 0, pendentes: 0 };
     const canvasColunas = document.getElementById('grafico-colunas-tarefas');
     if (canvasColunas && typeof Chart !== 'undefined') {
         // Destruir gráfico anterior se existir
@@ -1321,11 +1380,11 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         canvasColunas.chartInstance = new Chart(canvasColunas, {
             type: 'bar',
             data: {
-                labels: ['Concluídas', 'Em Progresso', 'Atrasadas'],
+                labels: ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'],
                 datasets: [{
                     label: 'Quantidade',
-                    data: [statusTarefas.concluidas, statusTarefas.emProgresso, statusTarefas.atrasadas],
-                    backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
+                    data: [statusTarefas.concluidas, statusTarefas.emProgresso, statusTarefas.pendentes, statusTarefas.atrasadas],
+                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
                     borderRadius: 6,
                     borderSkipped: false
                 }]
@@ -1352,7 +1411,77 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
                 }
             }
         });
+
+        // Event listener de clique no canvas para interatividade
+        if (!canvasColunas._clickListenerAdded) {
+            console.log('[Relatório Fiscal] Adicionando click listener no canvas de colunas');
+            canvasColunas.addEventListener('click', function (evt) {
+                console.log('[Relatório Fiscal] Canvas clicado');
+                var chart = canvasColunas.chartInstance;
+                if (!chart) {
+                    console.log('[Relatório Fiscal] chartInstance não encontrado');
+                    return;
+                }
+                var points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+                console.log('[Relatório Fiscal] points:', points);
+                if (points && points.length > 0) {
+                    var index = points[0].index;
+                    var labels = ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'];
+                    var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+                    console.log('[Relatório Fiscal] Clicou em:', labels[index]);
+                    renderizarListaTarefasStatusFiscal(index, labels[index], cores[index]);
+                } else {
+                    console.log('[Relatório Fiscal] Nenhuma barra detectada no clique');
+                }
+            });
+            canvasColunas._clickListenerAdded = true;
+        }
     }
+}
+
+// Função para renderizar lista de tarefas filtradas por status no relatório do fiscal
+function renderizarListaTarefasStatusFiscal(index, nomeStatus, cor) {
+    var listaContainer = document.getElementById('lista-tarefas-status-fiscal');
+    if (!listaContainer) return;
+
+    var todasTarefas = window.tarefasCompletasFiscal || [];
+    if (todasTarefas.length === 0) {
+        listaContainer.style.display = 'none';
+        return;
+    }
+
+    var hoje = new Date().toISOString().split('T')[0];
+    var filtradas = todasTarefas.filter(function (t) {
+        if (index === 0) return t.status === 'concluida';
+        if (index === 1) return t.status === 'em_progresso';
+        if (index === 3) return t.status !== 'concluida' && t.prazo && t.prazo < hoje;
+        return t.status !== 'concluida' && t.status !== 'em_progresso' && (!t.prazo || t.prazo >= hoje);
+    });
+
+    if (filtradas.length === 0) {
+        listaContainer.style.display = 'none';
+        listaContainer.innerHTML = '';
+        return;
+    }
+
+    var listaHtml = '<h4 style="margin:0 0 10px 0;font-size:14px;color:#1e293b;border-bottom:2px solid ' + cor + ';padding-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+    listaHtml += '<span>Tarefas: ' + nomeStatus + '</span>';
+    listaHtml += '<span style="font-size:12px;color:#64748b;">' + filtradas.length + ' tarefa(s)</span>';
+    listaHtml += '</h4>';
+    listaHtml += '<div style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;">';
+
+    filtradas.forEach(function (t) {
+        var prazoTexto = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
+        var prazoCor = (t.prazo && t.prazo < hoje && t.status !== 'concluida') ? '#dc2626' : '#64748b';
+        listaHtml += '<div onclick="if(typeof abrirDetalheTarefa === \'function\') abrirDetalheTarefa(\'' + t.id + '\')" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor=\'#cbd5e1\';this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.05)\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.boxShadow=\'none\'">';
+        listaHtml += '<div style="font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (t.titulo || 'Sem título') + '</div>';
+        listaHtml += '<div style="font-size:11px;color:' + prazoCor + ';margin-top:4px;">Prazo: ' + prazoTexto + '</div>';
+        listaHtml += '</div>';
+    });
+
+    listaHtml += '</div>';
+    listaContainer.innerHTML = listaHtml;
+    listaContainer.style.display = 'block';
 }
 
 function fecharRelatorioGerente() {
@@ -1367,7 +1496,16 @@ function fecharRelatorioGerente() {
         }
         if (canvasColunas && canvasColunas.chartInstance) {
             canvasColunas.chartInstance.destroy();
+            canvasColunas._clickListenerAdded = false;
         }
+
+        // Limpar lista de tarefas e dados globais
+        var listaContainer = document.getElementById('lista-tarefas-status-fiscal');
+        if (listaContainer) {
+            listaContainer.innerHTML = '';
+            listaContainer.style.display = 'none';
+        }
+        window.tarefasCompletasFiscal = [];
 
         modal.remove();
     }
@@ -5219,7 +5357,8 @@ async function abrirEstatisticasFuncionario(userId, nome, cargo) {
 
     var modal = document.createElement('div');
     modal.id = modalId;
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    modal.className = 'modal-overlay ativo';
+    modal.style.cssText = 'background:rgba(0,0,0,0.7);';
 
     modal.innerHTML = ''
         + '<div style="background:white;border-radius:16px;width:95%;max-width:800px;max-height:90vh;overflow-y:auto;position:relative;">'
@@ -5259,12 +5398,12 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     var tarefaIds = responsaveis ? responsaveis.map(function (r) { return r.tarefa_id; }) : [];
 
-    // Buscar tarefas principais (não subtarefas)
+    // Buscar tarefas principais (não subtarefas) com evento_id
     var tarefasPrincipais = [];
     if (tarefaIds.length > 0) {
         var { data: tarefas, error: errTarefas } = await supabaseClient
             .from('tarefas')
-            .select('*')
+            .select('*, evento_id')
             .in('id', tarefaIds)
             .is('tarefa_pai_id', null);
 
@@ -5272,10 +5411,10 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
         tarefasPrincipais = tarefas || [];
     }
 
-    // Buscar tarefas criadas pelo usuário (que ele criou para outros)
+    // Buscar tarefas criadas pelo usuário com evento_id
     var { data: tarefasCriadas, error: errCriadas } = await supabaseClient
         .from('tarefas')
-        .select('*')
+        .select('*, evento_id')
         .eq('criado_por', userId)
         .is('tarefa_pai_id', null);
 
@@ -5287,27 +5426,27 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     (tarefasCriadas || []).forEach(function (t) { if (!tarefasMap[t.id]) tarefasMap[t.id] = t; });
     var todasTarefas = Object.values(tarefasMap);
 
-    // Buscar subtarefas das tarefas principais
+    // Buscar subtarefas das tarefas principais com evento_id
     var paiIds = todasTarefas.map(function (t) { return t.id; });
     var subtarefas = [];
     if (paiIds.length > 0) {
         var { data: subs, error: errSubs } = await supabaseClient
             .from('tarefas')
-            .select('*')
+            .select('*, evento_id')
             .in('tarefa_pai_id', paiIds);
 
         if (errSubs) throw errSubs;
         subtarefas = subs || [];
     }
 
-    // Buscar subtarefas onde o usuário é responsável diretamente
+    // Buscar subtarefas onde o usuário é responsável diretamente com evento_id
     var subtarefaIds = tarefaIds.filter(function (id) {
         return !todasTarefas.some(function (t) { return t.id === id; });
     });
     if (subtarefaIds.length > 0) {
         var { data: subsResp, error: errSubsResp } = await supabaseClient
             .from('tarefas')
-            .select('*')
+            .select('*, evento_id')
             .in('id', subtarefaIds);
 
         if (errSubsResp) throw errSubsResp;
@@ -5318,208 +5457,405 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
         });
     }
 
-    // Buscar projetos/eventos onde o usuário é responsável
-    var { data: eventos, error: errEventos } = await supabaseClient
-        .from('eventos')
-        .select('*')
-        .eq('responsavel_id', userId);
-
-    if (errEventos) throw errEventos;
-
-    // Calcular estatísticas
     var hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
-    var stats = {
-        tarefas: { atrasadas: 0, concluidas: 0, emProgresso: 0, pendentes: 0 },
-        subtarefas: { atrasadas: 0, concluidas: 0, emProgresso: 0, pendentes: 0 },
-        projetos: eventos ? eventos.length : 0
-    };
-
-    todasTarefas.forEach(function (t) {
-        var prazo = t.prazo ? new Date(t.prazo) : null;
-        var atrasada = prazo && prazo < hoje && t.status !== 'concluida';
-
-        if (t.status === 'concluida') {
-            stats.tarefas.concluidas++;
-        } else if (t.status === 'em_progresso') {
-            if (atrasada) {
-                stats.tarefas.atrasadas++;
+    // Separar tarefas e subtarefas em comuns e de eventos
+    function calcularStats(lista) {
+        var stats = { atrasadas: 0, concluidas: 0, emProgresso: 0, pendentes: 0 };
+        lista.forEach(function (t) {
+            var prazo = t.prazo ? new Date(t.prazo) : null;
+            var atrasada = prazo && prazo < hoje && t.status !== 'concluida';
+            if (t.status === 'concluida') {
+                stats.concluidas++;
+            } else if (t.status === 'em_progresso') {
+                if (atrasada) stats.atrasadas++;
+                else stats.emProgresso++;
             } else {
-                stats.tarefas.emProgresso++;
+                if (atrasada) stats.atrasadas++;
+                else stats.pendentes++;
             }
-        } else {
-            if (atrasada) {
-                stats.tarefas.atrasadas++;
-            } else {
-                stats.tarefas.pendentes++;
-            }
-        }
-    });
+        });
+        return stats;
+    }
 
-    subtarefas.forEach(function (s) {
-        var prazo = s.prazo ? new Date(s.prazo) : null;
-        var atrasada = prazo && prazo < hoje && s.status !== 'concluida';
+    var tarefasComuns = todasTarefas.filter(function (t) { return !t.evento_id; });
+    var tarefasEventos = todasTarefas.filter(function (t) { return t.evento_id; });
+    var subtarefasComuns = subtarefas.filter(function (s) { return !s.evento_id; });
+    var subtarefasEventos = subtarefas.filter(function (s) { return s.evento_id; });
 
-        if (s.status === 'concluida') {
-            stats.subtarefas.concluidas++;
-        } else if (s.status === 'em_progresso') {
-            if (atrasada) {
-                stats.subtarefas.atrasadas++;
-            } else {
-                stats.subtarefas.emProgresso++;
-            }
-        } else {
-            if (atrasada) {
-                stats.subtarefas.atrasadas++;
-            } else {
-                stats.subtarefas.pendentes++;
-            }
-        }
-    });
+    var statsTarefas = calcularStats(tarefasComuns.concat(subtarefasComuns));
+    var statsEventos = calcularStats(tarefasEventos.concat(subtarefasEventos));
 
-    // Gerar HTML
+    // Arrays para filtragem interativa
+    var todasComuns = tarefasComuns.concat(subtarefasComuns);
+    var todasEventosLista = tarefasEventos.concat(subtarefasEventos);
+
+    function gerarCards(stats) {
+        return '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:20px;">'
+            + '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.atrasadas + '</div><div style="font-size:12px;opacity:0.9;">Atrasadas</div></div>'
+            + '<div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.concluidas + '</div><div style="font-size:12px;opacity:0.9;">Concluídas</div></div>'
+            + '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.emProgresso + '</div><div style="font-size:12px;opacity:0.9;">Em Progresso</div></div>'
+            + '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.pendentes + '</div><div style="font-size:12px;opacity:0.9;">Pendentes</div></div>'
+            + '</div>';
+    }
+
+    function gerarSecao(titulo, stats, canvasId, listaId, dadosTarefas) {
+        return '<div style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">'
+            + '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:18px;text-align:center;">' + titulo + '</h3>'
+            + gerarCards(stats)
+            + '<div style="background:#f8fafc;border-radius:10px;padding:16px;">'
+            + '<h4 style="margin:0 0 12px 0;color:#475569;font-size:14px;text-align:center;">Distribuição por Status</h4>'
+            + '<div style="height:220px;position:relative;">'
+            + '<canvas id="' + canvasId + '"></canvas>'
+            + '</div>'
+            + '<div id="' + listaId + '" style="margin-top:12px;display:none;"></div>'
+            + '</div>'
+            + '</div>';
+    }
+
     var html = '';
-
-    // Cards de resumo
-    html += '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:16px;margin-bottom:30px;">';
-
-    html += '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:12px;padding:20px;text-align:center;color:white;">';
-    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.atrasadas + stats.subtarefas.atrasadas) + '</div>';
-    html += '<div style="font-size:13px;opacity:0.9;">Atrasadas</div>';
-    html += '</div>';
-
-    html += '<div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:12px;padding:20px;text-align:center;color:white;">';
-    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.concluidas + stats.subtarefas.concluidas) + '</div>';
-    html += '<div style="font-size:13px;opacity:0.9;">Concluídas</div>';
-    html += '</div>';
-
-    html += '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:12px;padding:20px;text-align:center;color:white;">';
-    html += '<div style="font-size:32px;font-weight:700;">' + (stats.tarefas.emProgresso + stats.subtarefas.emProgresso) + '</div>';
-    html += '<div style="font-size:13px;opacity:0.9;">Em Progresso</div>';
-    html += '</div>';
-
-    html += '<div style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:12px;padding:20px;text-align:center;color:white;">';
-    html += '<div style="font-size:32px;font-weight:700;">' + stats.projetos + '</div>';
-    html += '<div style="font-size:13px;opacity:0.9;">Eventos</div>';
-    html += '</div>';
-
-    html += '</div>';
-
-    // Gráfico de barras
-    html += '<div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:24px;">';
-    html += '<h3 style="margin:0 0 20px 0;color:#1e293b;font-size:16px;text-align:center;">Distribuição por Status</h3>';
-    html += '<div style="height:300px;position:relative;">';
-    html += '<canvas id="grafico-estatisticas-funcionario"></canvas>';
-    html += '</div>';
-    html += '</div>';
-
-    // Tabela detalhada
-    html += '<div style="background:#f8fafc;border-radius:12px;padding:20px;">';
-    html += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;">Detalhamento</h3>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:14px;">';
-    html += '<thead><tr style="border-bottom:2px solid #e2e8f0;">';
-    html += '<th style="text-align:left;padding:10px;color:#64748b;font-weight:600;">Tipo</th>';
-    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Atrasadas</th>';
-    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Concluídas</th>';
-    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Em Progresso</th>';
-    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Pendentes</th>';
-    html += '<th style="text-align:center;padding:10px;color:#64748b;font-weight:600;">Total</th>';
-    html += '</tr></thead>';
-    html += '<tbody>';
-
-    html += '<tr style="border-bottom:1px solid #e2e8f0;">';
-    html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Tarefas</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.tarefas.atrasadas + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#10b981;font-weight:600;">' + stats.tarefas.concluidas + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#3b82f6;font-weight:600;">' + stats.tarefas.emProgresso + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.tarefas.pendentes + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.tarefas.atrasadas + stats.tarefas.concluidas + stats.tarefas.emProgresso + stats.tarefas.pendentes) + '</td>';
-    html += '</tr>';
-
-    html += '<tr>';
-    html += '<td style="padding:12px 10px;font-weight:600;color:#1e293b;">Subtarefas</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#ef4444;font-weight:600;">' + stats.subtarefas.atrasadas + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#10b981;font-weight:600;">' + stats.subtarefas.concluidas + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#3b82f6;font-weight:600;">' + stats.subtarefas.emProgresso + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#f59e0b;font-weight:600;">' + stats.subtarefas.pendentes + '</td>';
-    html += '<td style="text-align:center;padding:12px 10px;color:#1e293b;font-weight:700;">' + (stats.subtarefas.atrasadas + stats.subtarefas.concluidas + stats.subtarefas.emProgresso + stats.subtarefas.pendentes) + '</td>';
-    html += '</tr>';
-
-    html += '</tbody></table>';
-    html += '</div>';
+    html += gerarSecao('Tarefas', statsTarefas, 'grafico-estatisticas-tarefas', 'lista-tarefas-estatisticas', todasComuns);
+    html += gerarSecao('Eventos', statsEventos, 'grafico-estatisticas-eventos', 'lista-eventos-estatisticas', todasEventosLista);
 
     container.innerHTML = html;
 
-    // Criar gráfico
+    // Renderizar gráficos com interatividade
     setTimeout(function () {
-        var ctx = document.getElementById('grafico-estatisticas-funcionario');
-        if (!ctx) return;
+        function renderizarGrafico(canvasId, stats, listaId, dadosTarefas) {
+            var ctx = document.getElementById(canvasId);
+            if (!ctx) return;
 
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'],
-                datasets: [
-                    {
-                        label: 'Tarefas',
-                        data: [stats.tarefas.atrasadas, stats.tarefas.concluidas, stats.tarefas.emProgresso, stats.tarefas.pendentes],
+            var chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'],
+                    datasets: [{
+                        data: [stats.atrasadas, stats.concluidas, stats.emProgresso, stats.pendentes],
                         backgroundColor: ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'],
                         borderRadius: 6,
-                        barPercentage: 0.7
-                    },
-                    {
-                        label: 'Subtarefas',
-                        data: [stats.subtarefas.atrasadas, stats.subtarefas.concluidas, stats.subtarefas.emProgresso, stats.subtarefas.pendentes],
-                        backgroundColor: ['#f87171', '#34d399', '#60a5fa', '#fbbf24'],
-                        borderRadius: 6,
-                        barPercentage: 0.7
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 12 }
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 10,
+                            cornerRadius: 6
                         }
                     },
-                    tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.8)',
-                        padding: 12,
-                        cornerRadius: 8,
-                        titleFont: { size: 14 },
-                        bodyFont: { size: 13 }
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { ticks: { font: { size: 12 } }, grid: { display: false } }
+                    }
+                }
+            });
+
+            ctx.addEventListener('click', function (evt) {
+                var points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+                if (points && points.length > 0) {
+                    var index = points[0].index;
+                    var statusMap = ['atrasadas', 'concluidas', 'em_progresso', 'pendentes'];
+                    var statusNomes = ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'];
+                    var statusCores = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'];
+                    var statusFiltro = statusMap[index];
+                    var nomeStatus = statusNomes[index];
+                    var corStatus = statusCores[index];
+
+                    var hojeStr = new Date().toISOString().split('T')[0];
+                    var filtradas = dadosTarefas.filter(function (t) {
+                        if (statusFiltro === 'concluidas') return t.status === 'concluida';
+                        if (statusFiltro === 'em_progresso') return t.status === 'em_progresso';
+                        if (statusFiltro === 'atrasadas') return t.status !== 'concluida' && t.prazo && t.prazo < hojeStr;
+                        return t.status !== 'concluida' && t.status !== 'em_progresso' && (!t.prazo || t.prazo >= hojeStr);
+                    });
+
+                    var listaContainer = document.getElementById(listaId);
+                    if (!listaContainer) return;
+
+                    var listaHtml = '<div style="border:1px solid ' + corStatus + '30;border-radius:8px;padding:12px;background:' + corStatus + '08;">';
+                    listaHtml += '<h5 style="margin:0 0 10px 0;color:' + corStatus + ';font-size:14px;">' + nomeStatus + ' (' + filtradas.length + ')</h5>';
+                    if (filtradas.length === 0) {
+                        listaHtml += '<div style="color:#94a3b8;font-size:13px;">Nenhuma tarefa neste status.</div>';
+                    } else {
+                        listaHtml += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                        filtradas.forEach(function (t) {
+                            var prazoTexto = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
+                            listaHtml += '<div onclick="if(typeof abrirDetalheTarefa === \'function\') abrirDetalheTarefa(\'' + t.id + '\')" style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor=\'#cbd5e1\';this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.05)\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.boxShadow=\'none\'">';
+                            listaHtml += '<div style="font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (t.titulo || 'Sem título') + '</div>';
+                            listaHtml += '<div style="font-size:11px;color:#64748b;margin-top:4px;">Prazo: ' + prazoTexto + '</div>';
+                            listaHtml += '</div>';
+                        });
+                        listaHtml += '</div>';
+                    }
+                    listaHtml += '</div>';
+
+                    listaContainer.innerHTML = listaHtml;
+                    listaContainer.style.display = 'block';
+                }
+            });
+        }
+
+        renderizarGrafico('grafico-estatisticas-tarefas', statsTarefas, 'lista-tarefas-estatisticas', todasComuns);
+        renderizarGrafico('grafico-estatisticas-eventos', statsEventos, 'lista-eventos-estatisticas', todasEventosLista);
+    }, 100);
+
+    // Se o usuário logado for Secretário(a) e o funcionário for Fiscal de Posturas, mostrar relatório de produtividade
+    var cargoUsuario = (window.userProfile && window.userProfile.role) || '';
+    var ehSecretario = cargoUsuario.includes('Secretário') || cargoUsuario.includes('Secretária');
+    if (ehSecretario && cargo && cargo.includes('Fiscal de Posturas')) {
+        try {
+            await adicionarRelatorioFiscalNasEstatisticas(userId, nome);
+        } catch (err) {
+            console.error('Erro ao adicionar relatório fiscal nas estatísticas:', err);
+        }
+    }
+}
+
+// Adiciona relatório de produtividade do fiscal dentro do modal de estatísticas (exclusivo para Secretário)
+async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
+    var container = document.getElementById('estatisticas-conteudo');
+    if (!container) return;
+
+    // 1. Buscar registros do fiscal
+    var { data: regProd } = await supabaseClient
+        .from('registros_produtividade')
+        .select('*')
+        .eq('user_id', fiscalId)
+        .order('created_at', { ascending: false });
+
+    var { data: regCP } = await supabaseClient
+        .from('controle_processual')
+        .select('*')
+        .eq('user_id', fiscalId)
+        .order('created_at', { ascending: false });
+
+    var todosRegs = (regProd || []).concat(regCP || []);
+    var registrosFiltrados = todosRegs.filter(function (r) { return (r.pontuacao || 0) !== 0; });
+
+    var mesesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    var dataObj = new Date();
+    var anoRelatorio = dataObj.getFullYear();
+    var mesIndex = dataObj.getMonth();
+    if (dataObj.getDate() <= 3) {
+        mesIndex -= 1;
+        if (mesIndex < 0) { mesIndex = 11; anoRelatorio -= 1; }
+    }
+    var mesAtual = mesesNome[mesIndex];
+    var anoAtual = anoRelatorio;
+    var pontuacaoTotal = registrosFiltrados.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
+
+    var registrosMes = registrosFiltrados.filter(function (r) {
+        var dt = typeof obterDataReal === 'function' ? obterDataReal(r) : new Date(r.created_at);
+        return dt.getFullYear() === anoAtual && dt.getMonth() === mesIndex;
+    });
+
+    // Dados para gráfico Mês
+    var docPorTipoMes = {};
+    registrosMes.forEach(function (r) {
+        var catId = r.categoria_id || 'outros';
+        var catNome = 'Outros';
+        if (typeof CATEGORIAS !== 'undefined') {
+            var cDef = CATEGORIAS.find(function (c) { return c.id === catId; });
+            if (cDef) catNome = cDef.nome;
+        }
+        docPorTipoMes[catNome] = (docPorTipoMes[catNome] || 0) + 1;
+    });
+
+    // Dados para gráfico Ano (apenas CP)
+    var docPorTipoAno = {};
+    var regCPAno = (regCP || []).filter(function (r) {
+        var dt = new Date(r.created_at);
+        return dt.getFullYear() === anoAtual;
+    });
+    regCPAno.forEach(function (r) {
+        var catId = r.categoria_id || 'outros';
+        var catNome = 'Outros';
+        if (typeof CATEGORIAS !== 'undefined') {
+            var cDef = CATEGORIAS.find(function (c) { return c.id === catId; });
+            if (cDef) catNome = cDef.nome;
+        }
+        docPorTipoAno[catNome] = (docPorTipoAno[catNome] || 0) + 1;
+    });
+
+    // 2. Gerar tabelas por categoria
+    var porCategoria = {};
+    registrosFiltrados.forEach(function (r) {
+        var catId = r.categoria_id || 'outros';
+        var catNome = 'Categoria ' + catId;
+        if (typeof CATEGORIAS !== 'undefined') {
+            var cDef = CATEGORIAS.find(function (c) { return c.id === catId; });
+            if (cDef) catNome = cDef.nome;
+        } else if (r.categoria_nome) {
+            catNome = r.categoria_nome;
+        }
+        if (!porCategoria[catId]) {
+            porCategoria[catId] = { nome: catNome, registros: [] };
+        }
+        porCategoria[catId].registros.push(r);
+    });
+
+    var secoesHTML = '';
+    Object.entries(porCategoria).forEach(function (_ref) {
+        var catId = _ref[0];
+        var cat = _ref[1];
+        var catDef = (typeof CATEGORIAS !== 'undefined') ? CATEGORIAS.find(function (c) { return c.id === catId; }) : null;
+        var temNumero = cat.registros.some(function (r) { return r.numero_sequencial; });
+        var camposDef = catDef && catDef.campos ? catDef.campos.filter(function (c) { return c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco; }) : [];
+
+        var headerCols = '';
+        if (temNumero) headerCols += '<th>N°</th>';
+        headerCols += camposDef.map(function (c) { return '<th>' + c.label + '</th>'; }).join('');
+        headerCols += '<th>Data</th>';
+        headerCols += '<th>Pontos</th>';
+
+        var linhas = cat.registros.map(function (r) {
+            var tds = '';
+            if (temNumero) tds += '<td>' + (r.numero_sequencial || '-') + '</td>';
+            tds += camposDef.map(function (c) {
+                return '<td>' + ((r.campos && r.campos[c.nome]) || '-') + '</td>';
+            }).join('');
+            var dataFormatada = '-';
+            if (typeof obterDataReal === 'function') {
+                dataFormatada = obterDataReal(r).toLocaleDateString('pt-BR');
+            } else {
+                dataFormatada = r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-';
+            }
+            tds += '<td>' + dataFormatada + '</td>';
+            tds += '<td>' + (r.pontuacao || 0) + '</td>';
+            return '<tr>' + tds + '</tr>';
+        }).join('');
+
+        var subtotal = cat.registros.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
+        var colSpanSubtotal = (temNumero ? 1 : 0) + camposDef.length + 1;
+
+        secoesHTML += '<div style="margin-bottom:20px;"><h4 style="margin:0 0 10px 0;color:#1e293b;font-size:15px;">' + (catDef ? catDef.nome : cat.nome) + '</h4>';
+        secoesHTML += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+        secoesHTML += '<thead><tr style="background:#f1f5f9;">' + headerCols + '</tr></thead>';
+        secoesHTML += '<tbody>' + linhas + '</tbody>';
+        secoesHTML += '<tfoot><tr><td colspan="' + colSpanSubtotal + '" style="text-align:right;font-weight:600;background:#f8fafc;">Subtotal:</td><td style="font-weight:600;background:#f8fafc;">' + subtotal + '</td></tr></tfoot>';
+        secoesHTML += '</table></div></div>';
+    });
+
+    // 3. Criar seção do relatório no modal de estatísticas
+    var secaoId = 'secao-relatorio-fiscal-estatisticas';
+    var secaoExistente = document.getElementById(secaoId);
+    if (secaoExistente) secaoExistente.remove();
+
+    var secaoHTML = '<div id="' + secaoId + '" style="margin-top:24px;border-top:2px solid #e2e8f0;padding-top:24px;">';
+    secaoHTML += '<h3 style="margin:0 0 16px 0;color:#1e293b;font-size:20px;text-align:center;">Relatório de Produtividade — ' + mesAtual + '/' + anoAtual + '</h3>';
+    secaoHTML += '<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;margin-bottom:20px;">';
+    secaoHTML += '<div style="background:linear-gradient(135deg,#0c3e2b,#145c40);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:13px;opacity:0.9;">Fiscal</div><div style="font-size:16px;font-weight:700;">' + nomeFiscal + '</div></div>';
+    secaoHTML += '<div style="background:linear-gradient(135deg,#0c3e2b,#145c40);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:13px;opacity:0.9;">Pontuação Total</div><div style="font-size:16px;font-weight:700;">' + pontuacaoTotal + '</div></div>';
+    secaoHTML += '</div>';
+
+    // Gráfico de pizza
+    secaoHTML += '<div style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
+    secaoHTML += '<h4 style="margin:0 0 15px 0;color:#1e293b;font-size:16px;text-align:center;">N° de registros na Produtividade</h4>';
+    secaoHTML += '<div style="display:flex;justify-content:center;gap:10px;margin-bottom:15px;">';
+    secaoHTML += '<button id="btn-grafico-est-mes" onclick="alternarModoGraficoDocsFiscalEstatisticas(\'mes\')" style="padding:6px 14px;border:1px solid #10b981;background:#10b981;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Mês</button>';
+    secaoHTML += '<button id="btn-grafico-est-ano" onclick="alternarModoGraficoDocsFiscalEstatisticas(\'ano\')" style="padding:6px 14px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Ano</button>';
+    secaoHTML += '</div>';
+    secaoHTML += '<div style="position:relative;height:380px;"><canvas id="grafico-pizza-docs-estatisticas"></canvas></div>';
+    secaoHTML += '</div>';
+
+    // Tabelas por categoria
+    secaoHTML += '<div style="background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
+    secaoHTML += '<h4 style="margin:0 0 16px 0;color:#1e293b;font-size:16px;text-align:center;">Registros por Categoria</h4>';
+    secaoHTML += secoesHTML || '<div style="text-align:center;color:#94a3b8;padding:20px;">Nenhum registro encontrado.</div>';
+    secaoHTML += '</div>';
+    secaoHTML += '</div>';
+
+    container.insertAdjacentHTML('beforeend', secaoHTML);
+
+    // 4. Armazenar dados para toggle e renderizar gráfico inicial
+    window.docPorTipoMesFiscalEstatisticas = docPorTipoMes;
+    window.docPorTipoAnoFiscalEstatisticas = docPorTipoAno;
+    window.modoGraficoDocsFiscalEstatisticas = 'mes';
+    renderizarGraficoPizzaDocsEstatisticas(docPorTipoMes);
+}
+
+// Toggle Mês/Ano para o gráfico de pizza dentro das estatísticas
+function alternarModoGraficoDocsFiscalEstatisticas(modo) {
+    window.modoGraficoDocsFiscalEstatisticas = modo;
+    var docPorTipo = modo === 'mes' ? window.docPorTipoMesFiscalEstatisticas : window.docPorTipoAnoFiscalEstatisticas;
+
+    var btnMes = document.getElementById('btn-grafico-est-mes');
+    var btnAno = document.getElementById('btn-grafico-est-ano');
+    if (btnMes) {
+        btnMes.style.background = modo === 'mes' ? '#10b981' : '#f8fafc';
+        btnMes.style.color = modo === 'mes' ? 'white' : '#475569';
+        btnMes.style.borderColor = modo === 'mes' ? '#10b981' : '#e2e8f0';
+    }
+    if (btnAno) {
+        btnAno.style.background = modo === 'ano' ? '#10b981' : '#f8fafc';
+        btnAno.style.color = modo === 'ano' ? 'white' : '#475569';
+        btnAno.style.borderColor = modo === 'ano' ? '#10b981' : '#e2e8f0';
+    }
+
+    renderizarGraficoPizzaDocsEstatisticas(docPorTipo);
+}
+window.alternarModoGraficoDocsFiscalEstatisticas = alternarModoGraficoDocsFiscalEstatisticas;
+
+// Renderiza o gráfico de pizza de documentos dentro do modal de estatísticas
+function renderizarGraficoPizzaDocsEstatisticas(docPorTipo) {
+    var canvas = document.getElementById('grafico-pizza-docs-estatisticas');
+    if (!canvas || typeof Chart === 'undefined' || Object.keys(docPorTipo || {}).length === 0) {
+        if (canvas && typeof Chart !== 'undefined') {
+            var ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        return;
+    }
+
+    if (window.graficoPizzaDocsFiscalEstatisticas) {
+        try { window.graficoPizzaDocsFiscalEstatisticas.destroy(); } catch (e) {}
+        window.graficoPizzaDocsFiscalEstatisticas = null;
+    }
+
+    var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
+    window.graficoPizzaDocsFiscalEstatisticas = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(docPorTipo),
+            datasets: [{
+                data: Object.values(docPorTipo),
+                backgroundColor: cores.slice(0, Object.keys(docPorTipo).length),
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: { size: 10 },
+                        padding: 8,
+                        usePointStyle: true,
+                        boxWidth: 8
                     }
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1,
-                            font: { size: 11 }
-                        },
-                        grid: {
-                            color: 'rgba(0,0,0,0.05)'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            font: { size: 12 }
-                        },
-                        grid: {
-                            display: false
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            var label = context.label || '';
+                            var value = context.parsed || 0;
+                            var total = context.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                            var percentage = Math.round((value / total) * 100);
+                            return label + ': ' + value + ' (' + percentage + '%)';
                         }
                     }
                 }
             }
-        });
-    }, 100);
+        }
+    });
 }
 
 // ==========================================
@@ -6074,18 +6410,63 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
         html += '<div style="background:#fee2e2;border-radius:12px;padding:16px;text-align:center;border:1px solid #fca5a5;"><div style="font-size:24px;font-weight:700;color:#dc2626;">' + stats.atrasadas + '</div><div style="font-size:12px;color:#991b1b;">Atrasadas</div></div>';
         html += '</div>';
 
-        // Gráfico de status
+        // Gráfico de status + lista
         html += '<div style="background:#f8fafc;border-radius:12px;padding:16px;">';
         html += '<canvas id="grafico-status-tarefas-fiscal" style="max-height:200px;"></canvas>';
+        html += '<div id="lista-tarefas-status-fiscal" style="margin-top:16px;display:none;"></div>';
         html += '</div>';
 
         container.innerHTML = html;
+        container._tarefas = todasTarefas;
+
+        // Helper para filtrar tarefas por categoria do gráfico
+        function filtrarTarefasPorStatus(index) {
+            var hoje = new Date().toISOString().split('T')[0];
+            return todasTarefas.filter(function (t) {
+                if (index === 0) return t.status === 'concluida';
+                if (index === 1) return t.status === 'em_progresso';
+                if (index === 3) return t.status !== 'concluida' && t.prazo && t.prazo < hoje;
+                return t.status !== 'concluida' && t.status !== 'em_progresso' && (!t.prazo || t.prazo >= hoje);
+            });
+        }
+
+        // Helper para renderizar lista de tarefas
+        function renderizarListaTarefasPorStatus(index, nomeStatus, cor) {
+            var listaContainer = document.getElementById('lista-tarefas-status-fiscal');
+            if (!listaContainer) return;
+
+            var filtradas = filtrarTarefasPorStatus(index);
+            if (filtradas.length === 0) {
+                listaContainer.style.display = 'none';
+                listaContainer.innerHTML = '';
+                return;
+            }
+
+            var listaHtml = '<h4 style="margin:0 0 10px 0;font-size:14px;color:#1e293b;border-bottom:2px solid ' + cor + ';padding-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+            listaHtml += '<span>Tarefas: ' + nomeStatus + '</span>';
+            listaHtml += '<span style="font-size:12px;color:#64748b;">' + filtradas.length + ' tarefa(s)</span>';
+            listaHtml += '</h4>';
+            listaHtml += '<div style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;">';
+
+            filtradas.forEach(function (t) {
+                var prazoTexto = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
+                var prazoCor = (t.prazo && t.prazo < new Date().toISOString().split('T')[0] && t.status !== 'concluida') ? '#dc2626' : '#64748b';
+                listaHtml += '<div onclick="if(typeof abrirDetalheTarefa === \'function\') abrirDetalheTarefa(\'' + t.id + '\')" style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor=\'#cbd5e1\';this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.05)\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.boxShadow=\'none\'">';
+                listaHtml += '<div style="font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (t.titulo || 'Sem título') + '</div>';
+                listaHtml += '<div style="font-size:11px;color:' + prazoCor + ';margin-top:4px;">Prazo: ' + prazoTexto + '</div>';
+                listaHtml += '</div>';
+            });
+
+            listaHtml += '</div>';
+            listaContainer.innerHTML = listaHtml;
+            listaContainer.style.display = 'block';
+        }
 
         // Criar gráfico
         setTimeout(function () {
             var ctx = document.getElementById('grafico-status-tarefas-fiscal');
             if (ctx && typeof Chart !== 'undefined') {
-                new Chart(ctx, {
+                var chart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
                         labels: ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'],
@@ -6101,6 +6482,19 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
                         plugins: {
                             legend: { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 11 } } }
                         }
+                    }
+                });
+
+                // Event listener direto no canvas para maior compatibilidade
+                ctx.addEventListener('click', function (evt) {
+                    var points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+                    console.log('[Canvas Click] points:', points);
+                    if (points && points.length > 0) {
+                        var index = points[0].index;
+                        var labels = ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'];
+                        var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+                        console.log('[Canvas Click] index:', index, 'label:', labels[index]);
+                        renderizarListaTarefasPorStatus(index, labels[index], cores[index]);
                     }
                 });
             }
@@ -6245,3 +6639,5 @@ window.buscarNovoResponsavelArvore = buscarNovoResponsavelArvore;
 window.abrirEstatisticasComRelatorioFiscal = abrirEstatisticasComRelatorioFiscal;
 window.carregarEstatisticasTarefasParaFiscal = carregarEstatisticasTarefasParaFiscal;
 window.carregarRelatorioProdutividadeParaFiscal = carregarRelatorioProdutividadeParaFiscal;
+window.fecharRelatorioGerente = fecharRelatorioGerente;
+window.renderizarListaTarefasStatusFiscal = renderizarListaTarefasStatusFiscal;
