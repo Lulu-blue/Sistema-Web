@@ -1203,7 +1203,12 @@ function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
 // ==========================================
 let _isSubMode = false;
 let _vincularEventoId = null;
-function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
+let _tarefaEditandoId = null;
+let _responsaveisEditandoIds = [];
+let _subtarefaEditandoId = null;
+let _subtarefaPaiIdEditando = null;
+let _responsaveisSubEditandoIds = [];
+function abrirModalNovaTarefa(isSub = false, vincularEventoId = null, editarTarefaId = null) {
     // Verificação de segurança: Diretor, Gerente e Secretario podem criar tarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
@@ -1226,17 +1231,23 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
     }
     
     // Gerentes não podem criar tarefas dentro de projetos (apenas tarefas avulsas)
-    if (ehGerente && vincularEventoId) {
+    if (ehGerente && vincularEventoId && !editarTarefaId) {
         Swal.fire('Acesso Negado', 'Gerentes não podem inserir tarefas em projetos. Apenas Diretor e Secretário podem.', 'error');
         return;
     }
 
     _isSubMode = isSub;
     _vincularEventoId = vincularEventoId;
+    _tarefaEditandoId = editarTarefaId;
+    _responsaveisEditandoIds = [];
     arquivosTemporariosTarefa = []; // Reset arquivos tarefa ao abrir
+
+    var tituloModal = _tarefaEditandoId ? 'Editando Tarefa' : 'Nova Tarefa';
+    var textoBotao = _tarefaEditandoId ? 'Salvar Alterações' : 'Criar Tarefa';
+
     var html = '<div class="modal-overlay ativo" id="modal-nova-tarefa" onclick="if(event.target===this)fecharModal(\'modal-nova-tarefa\')">';
     html += '<div class="modal-container" style="max-width:520px;">';
-    html += '<div class="modal-header"><h2>Nova Tarefa</h2>';
+    html += '<div class="modal-header"><h2>' + tituloModal + '</h2>';
     html += '<button class="modal-close" onclick="fecharModal(\'modal-nova-tarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Tarefa</label><input type="text" id="tarefa-titulo" placeholder="Ex: Vistoria no Bairro Centro"></div>';
@@ -1252,16 +1263,21 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null) {
     html += '<div class="campo-grupo"><label>Prazo</label><input type="date" id="tarefa-prazo"></div>';
     html += '<div class="campo-grupo"><label>Responsáveis</label><div id="tarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer"><button class="btn-cancelar" onclick="fecharModal(\'modal-nova-tarefa\')">Cancelar</button>';
-    html += '<button class="btn-salvar" onclick="salvarTarefa()">Criar Tarefa</button></div></div></div>';
+    html += '<button class="btn-salvar" onclick="salvarTarefa()">' + textoBotao + '</button></div></div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
-    carregarListaResponsaveis();
+
+    if (_tarefaEditandoId) {
+        carregarDadosTarefaParaEdicao();
+    } else {
+        carregarListaResponsaveis();
+    }
 }
 
 // Variável global para armazenar a lista completa de responsáveis
 var _responsaveisCache = [];
 
-async function carregarListaResponsaveis() {
+async function carregarListaResponsaveis(responsaveisPreSelecionados) {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
     
@@ -1361,7 +1377,7 @@ async function carregarListaResponsaveis() {
         });
 
         // Renderizar com campo de pesquisa
-        renderizarListaResponsaveisComPesquisa('');
+        renderizarListaResponsaveisComPesquisa('', responsaveisPreSelecionados);
         
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
@@ -1372,12 +1388,13 @@ async function carregarListaResponsaveis() {
 var _pesquisaResponsavelValor = '';
 
 // Função para renderizar a lista de responsáveis com campo de pesquisa
-function renderizarListaResponsaveisComPesquisa(filtro) {
+function renderizarListaResponsaveisComPesquisa(filtro, preSelecionados) {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
     
     _pesquisaResponsavelValor = filtro || '';
     var filtroLower = _pesquisaResponsavelValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var preSelSet = preSelecionados || _responsaveisEditandoIds || [];
     
     // Na primeira renderização, cria a estrutura completa
     if (!document.getElementById('pesquisa-responsavel')) {
@@ -1428,7 +1445,7 @@ function renderizarListaResponsaveisComPesquisa(filtro) {
         html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
     } else {
         usuariosFiltrados.forEach(function(u) {
-            var checked = u.isProprioUsuario ? ' checked' : '';
+            var checked = u.isProprioUsuario || (preSelSet.indexOf(u.id) !== -1) ? ' checked' : '';
             html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
             html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
             html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
@@ -1464,6 +1481,39 @@ function filtrarResponsaveis(valor) {
             input.setSelectionRange(len, len);
         }
     }, 0);
+}
+
+// Carrega dados de uma tarefa existente para edição no modal
+async function carregarDadosTarefaParaEdicao() {
+    if (!_tarefaEditandoId) return;
+    try {
+        var { data: tarefa, error } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .eq('id', _tarefaEditandoId)
+            .maybeSingle();
+        if (error) throw error;
+
+        var { data: responsaveis } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('user_id')
+            .eq('tarefa_id', _tarefaEditandoId);
+
+        if (tarefa) {
+            var inputTitulo = document.getElementById('tarefa-titulo');
+            var inputDesc = document.getElementById('tarefa-descricao');
+            var inputPrazo = document.getElementById('tarefa-prazo');
+            if (inputTitulo) inputTitulo.value = tarefa.titulo || '';
+            if (inputDesc) inputDesc.value = tarefa.descricao || '';
+            if (inputPrazo && tarefa.prazo) inputPrazo.value = tarefa.prazo.substring(0, 10);
+        }
+
+        _responsaveisEditandoIds = (responsaveis || []).map(function(r) { return r.user_id; });
+        carregarListaResponsaveis(_responsaveisEditandoIds);
+    } catch (err) {
+        console.error('Erro ao carregar dados para edição:', err);
+        carregarListaResponsaveis();
+    }
 }
 
 // Função para atualizar o contador de selecionados
@@ -1551,6 +1601,61 @@ async function salvarTarefa() {
             return;
         }
 
+        if (_tarefaEditandoId) {
+            // ==========================================
+            // MODO EDIÇÃO
+            // ==========================================
+            var { error: updError } = await supabaseClient
+                .from('tarefas')
+                .update({
+                    titulo: titulo,
+                    descricao: descricao,
+                    prazo: prazo ? prazo + 'T23:59:59' : null
+                })
+                .eq('id', _tarefaEditandoId);
+
+            if (updError) throw updError;
+
+            // Atualizar responsáveis: remover antigos e inserir novos
+            await supabaseClient.from('tarefa_responsaveis').delete().eq('tarefa_id', _tarefaEditandoId);
+            if (responsaveis.length > 0) {
+                var resps = responsaveis.map(function (r) {
+                    return { tarefa_id: _tarefaEditandoId, user_id: r.user_id, user_name: r.user_name };
+                });
+                await supabaseClient.from('tarefa_responsaveis').insert(resps);
+            }
+
+            // Upload de novos anexos em paralelo
+            if (arquivos.length > 0) {
+                var uploadPromises = [];
+                for (var i = 0; i < arquivos.length; i++) {
+                    var file = arquivos[i];
+                    var filePath = _tarefaEditandoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
+                    uploadPromises.push((async function (f, fPath) {
+                        var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(fPath, f);
+                        if (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
+                        var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(fPath).data.publicUrl;
+                        return { tarefa_id: _tarefaEditandoId, nome_arquivo: f.name, url: publicUrl };
+                    })(file, filePath));
+                }
+
+                var resultadosUploads = await Promise.all(uploadPromises);
+                var anexosValidos = resultadosUploads.filter(function (r) { return r !== null; });
+
+                if (anexosValidos.length > 0) {
+                    anexosValidos.forEach(function(a) { a.uploaded_by = userIdGlobal; });
+                    await supabaseClient.from('tarefa_anexos').insert(anexosValidos);
+                }
+            }
+
+            fecharModal('modal-nova-tarefa');
+            carregarTarefas();
+            return;
+        }
+
+        // ==========================================
+        // MODO CRIAÇÃO
+        // ==========================================
         var { data: novaTarefa, error } = await supabaseClient
             .from('tarefas')
             .insert({
@@ -1600,7 +1705,7 @@ async function salvarTarefa() {
         fecharModal('modal-nova-tarefa');
         carregarTarefas();
     } catch (err) {
-        alert('Erro ao criar tarefa: ' + err.message);
+        alert('Erro ao ' + (_tarefaEditandoId ? 'atualizar' : 'criar') + ' tarefa: ' + err.message);
     } finally {
         if (btnSalvar) {
             btnSalvar.textContent = oldText;
@@ -1971,6 +2076,11 @@ async function abrirDetalheTarefa(id) {
                         html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc</span>';
                     }
                 }
+                // Botão editar subtarefa - apenas quem criou, e só dentro de 24h
+                var horasCriacaoSub = s.created_at ? ((new Date() - new Date(s.created_at)) / (1000 * 60 * 60)) : 999;
+                if (s.criado_por === userIdGlobal && horasCriacaoSub < 24) {
+                    html += '<button onclick="editarSubtarefaExistente(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#0284c7; cursor:pointer; font-size:14px;" title="Editar subtarefa">✎</button>';
+                }
                 // Botão excluir subtarefa - Diretor, Secretário e Gerente (se criou a tarefa pai)
                 if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
                     html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
@@ -2065,9 +2175,10 @@ async function abrirDetalheTarefa(id) {
         html += '</div>';
         html += '</div>';
 
-        // Botão excluir tarefa — apenas quem criou pode excluir, e só dentro de 24h
+        // Botões editar/excluir tarefa — apenas quem criou pode, e só dentro de 24h
         var horasCriacao = tarefa.created_at ? ((new Date() - new Date(tarefa.created_at)) / (1000 * 60 * 60)) : 999;
         if (tarefa.criado_por === userIdGlobal && horasCriacao < 24) {
+            html += '<button onclick="editarTarefaExistente(\'' + id + '\')" style="margin-top:8px; background:#e0f2fe; color:#0284c7; border:1px solid #7dd3fc; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar Tarefa</button>';
             html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
         }
 
@@ -2216,13 +2327,32 @@ async function excluirTarefa(id) {
     }
 }
 
+// Abre o modal de nova tarefa preenchido com dados da tarefa existente
+function editarTarefaExistente(id) {
+    fecharModal('modal-detalhe-tarefa');
+    abrirModalNovaTarefa(false, null, id);
+}
+
+// Abre o modal de nova subtarefa preenchido com dados da subtarefa existente
+function editarSubtarefaExistente(subId, tarefaPaiId) {
+    fecharModal('modal-detalhe-tarefa');
+    abrirCriarSubtarefa(tarefaPaiId, subId);
+}
+
 // ==========================================
 // SUBTAREFAS
 // ==========================================
-function abrirCriarSubtarefa(tarefaPaiId) {
+function abrirCriarSubtarefa(tarefaPaiId, editarSubtarefaId = null) {
+    _subtarefaEditandoId = editarSubtarefaId;
+    _subtarefaPaiIdEditando = tarefaPaiId;
+    _responsaveisSubEditandoIds = [];
+
+    var tituloModal = _subtarefaEditandoId ? 'Editando Subtarefa' : 'Nova Subtarefa';
+    var textoBotao = _subtarefaEditandoId ? 'Salvar' : 'Criar';
+
     var html = '<div class="modal-overlay ativo" id="modal-nova-subtarefa" onclick="if(event.target===this)fecharModal(\'modal-nova-subtarefa\')">';
     html += '<div class="modal-container" style="max-width:420px;">';
-    html += '<div class="modal-header"><h2>Nova Subtarefa</h2>';
+    html += '<div class="modal-header"><h2>' + tituloModal + '</h2>';
     html += '<button class="modal-close" onclick="fecharModal(\'modal-nova-subtarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Subtarefa</label><input type="text" id="subtarefa-titulo" placeholder="Ex: Verificar documentos"></div>';
@@ -2231,17 +2361,22 @@ function abrirCriarSubtarefa(tarefaPaiId) {
     html += '<div class="campo-grupo"><label>Responsáveis</label><div id="subtarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer">';
     html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-nova-subtarefa\')">Cancelar</button>';
-    html += '<button class="btn-salvar" onclick="confirmarSubtarefa(\'' + tarefaPaiId + '\')">Criar</button>';
+    html += '<button class="btn-salvar" onclick="confirmarSubtarefa(\'' + tarefaPaiId + '\')">' + textoBotao + '</button>';
     html += '</div></div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
-    carregarListaResponsaveisSubtarefa();
+
+    if (_subtarefaEditandoId) {
+        carregarDadosSubtarefaParaEdicao();
+    } else {
+        carregarListaResponsaveisSubtarefa();
+    }
 }
 
 // Variável global para cache de responsáveis de subtarefa
 var _responsaveisSubCache = [];
 
-async function carregarListaResponsaveisSubtarefa() {
+async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
     var container = document.getElementById('subtarefa-responsaveis-list');
     if (!container) return;
     try {
@@ -2315,7 +2450,7 @@ async function carregarListaResponsaveisSubtarefa() {
         });
 
         // Renderizar com pesquisa
-        renderizarListaResponsaveisSubComPesquisa('');
+        renderizarListaResponsaveisSubComPesquisa('', responsaveisPreSelecionados);
         
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
@@ -2326,12 +2461,13 @@ async function carregarListaResponsaveisSubtarefa() {
 var _pesquisaResponsavelSubValor = '';
 
 // Função para renderizar a lista de responsáveis da subtarefa com campo de pesquisa
-function renderizarListaResponsaveisSubComPesquisa(filtro) {
+function renderizarListaResponsaveisSubComPesquisa(filtro, preSelecionados) {
     var container = document.getElementById('subtarefa-responsaveis-list');
     if (!container) return;
     
     _pesquisaResponsavelSubValor = filtro || '';
     var filtroLower = _pesquisaResponsavelSubValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var preSelSet = preSelecionados || _responsaveisSubEditandoIds || [];
     
     // Na primeira renderização, cria a estrutura completa
     if (!document.getElementById('pesquisa-responsavel-sub')) {
@@ -2382,8 +2518,9 @@ function renderizarListaResponsaveisSubComPesquisa(filtro) {
         html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
     } else {
         usuariosFiltrados.forEach(function(u) {
+            var checked = (preSelSet.indexOf(u.id) !== -1) ? ' checked' : '';
             html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
-            html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '" style="width:16px; height:16px; accent-color:#10b981;">';
+            html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
             html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
         });
     }
@@ -2402,6 +2539,37 @@ function renderizarListaResponsaveisSubComPesquisa(filtro) {
     checkboxes.forEach(function(cb) {
         cb.addEventListener('change', atualizarContadorSelecionadosSub);
     });
+}
+
+// Carrega dados de uma subtarefa existente para edição no modal
+async function carregarDadosSubtarefaParaEdicao() {
+    if (!_subtarefaEditandoId) return;
+    try {
+        var { data: subtarefa, error } = await supabaseClient
+            .from('tarefas')
+            .select('*')
+            .eq('id', _subtarefaEditandoId)
+            .maybeSingle();
+        if (error) throw error;
+
+        var { data: responsaveis } = await supabaseClient
+            .from('tarefa_responsaveis')
+            .select('user_id')
+            .eq('tarefa_id', _subtarefaEditandoId);
+
+        if (subtarefa) {
+            var inputTitulo = document.getElementById('subtarefa-titulo');
+            var inputDesc = document.getElementById('subtarefa-descricao');
+            if (inputTitulo) inputTitulo.value = subtarefa.titulo || '';
+            if (inputDesc) inputDesc.value = subtarefa.descricao || '';
+        }
+
+        _responsaveisSubEditandoIds = (responsaveis || []).map(function(r) { return r.user_id; });
+        carregarListaResponsaveisSubtarefa(_responsaveisSubEditandoIds);
+    } catch (err) {
+        console.error('Erro ao carregar dados da subtarefa para edição:', err);
+        carregarListaResponsaveisSubtarefa();
+    }
 }
 
 // Função para filtrar responsáveis da subtarefa
@@ -2444,7 +2612,7 @@ async function confirmarSubtarefa(tarefaPaiId) {
         gerentePodeCriar = tarefaPai && tarefaPai.criado_por === userIdGlobal;
     }
     
-    if (!ehDiretor && !ehSecretario && !gerentePodeCriar) {
+    if (!ehDiretor && !ehSecretario && !gerentePodeCriar && !_subtarefaEditandoId) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem criar subtarefas.', 'error');
         return;
     }
@@ -2465,6 +2633,52 @@ async function confirmarSubtarefa(tarefaPaiId) {
     fecharModal('modal-nova-subtarefa');
 
     try {
+        if (_subtarefaEditandoId) {
+            // ==========================================
+            // MODO EDIÇÃO DE SUBTAREFA
+            // ==========================================
+            var { error: updError } = await supabaseClient
+                .from('tarefas')
+                .update({
+                    titulo: titulo,
+                    descricao: descricao || null
+                })
+                .eq('id', _subtarefaEditandoId);
+            if (updError) throw updError;
+
+            // Atualizar responsáveis: remover antigos e inserir novos
+            await supabaseClient.from('tarefa_responsaveis').delete().eq('tarefa_id', _subtarefaEditandoId);
+            if (responsaveis.length > 0) {
+                var resps = responsaveis.map(function (r) {
+                    return { tarefa_id: _subtarefaEditandoId, user_id: r.user_id, user_name: r.user_name };
+                });
+                await supabaseClient.from('tarefa_responsaveis').insert(resps);
+            }
+
+            // Upload de novo anexo se houver
+            if (anexoFile) {
+                var filePath = _subtarefaEditandoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(anexoFile.name);
+                var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, anexoFile);
+                if (!uploadErr) {
+                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+                    await supabaseClient.from('tarefa_anexos').insert({
+                        tarefa_id: _subtarefaEditandoId,
+                        nome_arquivo: anexoFile.name,
+                        url: publicUrl,
+                        uploaded_by: userIdGlobal
+                    });
+                }
+            }
+
+            fecharModal('modal-detalhe-tarefa');
+            abrirDetalheTarefa(tarefaPaiId);
+            carregarTarefas();
+            return;
+        }
+
+        // ==========================================
+        // MODO CRIAÇÃO DE SUBTAREFA
+        // ==========================================
         async function criarSubtarefaComAnexo(r) {
             var { data: nova, error: errSub } = await supabaseClient.from('tarefas').insert({
                 titulo: titulo,
@@ -3833,6 +4047,8 @@ window.salvarEventoAvancado = salvarEventoAvancado;
 window.abrirModalNovaTarefa = abrirModalNovaTarefa;
 window.salvarTarefa = salvarTarefa;
 window.excluirTarefa = excluirTarefa;
+window.editarTarefaExistente = editarTarefaExistente;
+window.editarSubtarefaExistente = editarSubtarefaExistente;
 window.abrirDetalheTarefa = abrirDetalheTarefa;
 window.alterarStatusTarefa = alterarStatusTarefa;
 window.abrirCriarSubtarefa = abrirCriarSubtarefa;

@@ -241,10 +241,12 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 - **Anexos**: seção para upload de PDF + listagem com link clicável e botão de excluir.
 - **Comentários**: chat interno na tarefa. Qualquer responsável ou criador pode comentar, com suporte a **múltiplos anexos por comentário**.
 - **Visualizações**: indicador "✓ Visualizou [dd/mm/aaaa, hh:mm]" mostra quando cada responsável abriu a tarefa ou subtarefa.
+- **Editar tarefa**: botão visível **apenas para o criador** e **somente dentro de 24h** após a criação. Abre o mesmo modal de criação preenchido com os dados salvos (título, descrição, prazo, responsáveis), permitindo adicionar novos anexos. Após o prazo, o botão some automaticamente.
 - **Excluir tarefa**: botão visível **apenas para o criador** e **somente dentro de 24h** após a criação. Após esse prazo, o botão não aparece mais.
 
 ### Subtarefas
 - **Criar subtarefa** (gerente): mini-modal com título, seletor de responsável, descrição opcional e anexo opcional.
+- **Editar subtarefa**: botão visível **apenas para o criador** da subtarefa e **somente dentro de 24h** após a criação. Abre o mesmo modal de criação preenchido com os dados salvos (título, descrição, responsáveis), permitindo adicionar um novo anexo.
 - Cada subtarefa pode ter:
   - **Múltiplos responsáveis** (exibido com ícone SVG).
   - **Anexo PDF** (botão de upload direto na subtarefa).
@@ -272,6 +274,8 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 | Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
 | Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
 | Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Editar tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
+| Editar subtarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | ✗ |
 | Excluir tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
 | Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
 | Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
@@ -811,7 +815,8 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Visualizações**: indicador de "✓ Visualizou" com data/hora para tarefas e subtarefas.
 - **Criador visível**: nome de quem criou a tarefa aparece no card do Kanban e no modal de detalhes.
 
-### Regras de Exclusão e Anexos
+### Regras de Edição, Exclusão e Anexos
+- **Edição dentro de 24h**: apenas o criador pode editar sua própria tarefa ou subtarefa, e somente dentro de 24h após a criação. O modal de edição reutiliza o modal de criação, preenchendo todos os campos salvos (título, descrição, prazo, responsáveis) e permitindo adicionar novos anexos. Após o prazo, o botão de editar some automaticamente.
 - **Exclusão dentro de 24h**: apenas o criador pode excluir sua própria tarefa, e somente dentro de 24h após a criação. Após esse prazo, o botão de excluir some automaticamente.
 - **Sanitização de nomes de arquivo**: acentos e espaços são removidos/normalizados antes do upload para o Supabase Storage, corrigindo erros de `Invalid key`.
 - **Status automático**: anexar um arquivo a uma tarefa pendente muda seu status automaticamente para **em_progresso**.
@@ -933,3 +938,45 @@ A função `gerarNumeroSequencial()` em `produtividade.js` foi refatorada para u
 - `devolver_numero_sequencial(p_numero, p_categoria_id, p_ano)` → devolve um número cancelado para a fila global.
 
 > 📋 O SQL completo está documentado na seção **"Tabela e Funções RPC para Fila de Números Sequenciais"** do arquivo `PERMISSOES_SETUP.md`.
+
+### Correções de Sincronização em Tempo Real (Produtividade)
+Corrigidos **3 bugs críticos** onde a pontuação total, o gráfico de produtividade e o badge "Meta 2000" não atualizavam automaticamente após certas operações, forçando o usuário a recarregar a página (F5):
+
+1. **Documentos WYSIWYG (Baixar Word)**: ao finalizar o download de um documento oficial (Auto de Infração, Ofício, Relatório, Réplica, Dívida Ativa), o sistema atualizava o banco com o anexo e a pontuação, mas não recarregava o histórico na interface. A pontuação só aparecia após F5.  
+   → `baixarDocumentoWord()` agora chama `carregarHistorico()` após salvar, atualizando todos os cards e o gráfico instantaneamente.
+
+2. **Edição no Histórico Geral**: ao salvar alterações em um registro pelo Histórico Geral (ex: resposta do fiscal, datas, anexos), a tabela do histórico geral era re-renderizada, mas a pontuação total pessoal permanecia desatualizada.  
+   → `salvarDetalhesHist()` agora chama `carregarHistorico()` após salvar.
+
+3. **Exclusão no Histórico Geral**: ao excluir um registro pelo Histórico Geral, ele sumia da tabela, mas os cards de pontuação e o gráfico continuavam com os valores antigos.  
+   → `excluirRegistroHistGeral()` agora chama `carregarHistorico()` após excluir.
+
+**O que `carregarHistorico()` atualiza em tempo real:**
+- Cards de pontuação (Home, Histórico e Produtividade)
+- Total de registros
+- Gráfico de produtividade por dia (Chart.js)
+- Badge "🏆 META ATINGIDA" quando a soma atinge 2000 pontos
+
+---
+
+## 🆕 Atualizações Recentes (24/04/2026) — Edição de Tarefas e Subtarefas
+
+### Edição de Tarefas
+- **Disponibilidade**: botão "Editar Tarefa" visível no modal de detalhes exclusivamente para o **criador** da tarefa e **somente dentro de 24h** após a criação (mesma regra da exclusão).
+- **Modal reutilizado**: ao clicar em editar, o sistema fecha o modal de detalhes e abre o modal de "Nova Tarefa" preenchido com todos os dados salvos:
+  - Título, descrição e prazo preenchidos automaticamente.
+  - Responsáveis já marcados nos checkboxes.
+  - Permite alterar qualquer campo e adicionar novos anexos.
+- **Título e botão adaptativos**: em modo edição, o modal exibe **"Editando Tarefa"** e o botão de ação exibe **"Salvar Alterações"**.
+- **Persistência**: ao salvar, o sistema executa `UPDATE` na tabela `tarefas`, remove os responsáveis antigos em `tarefa_responsaveis`, insere os novos, faz upload de novos anexos e mantém intactos o `status`, `criado_por`, `evento_id` e `created_at`.
+- **Funções alteradas em `tarefas.js`**: `abrirModalNovaTarefa()` (novo parâmetro `editarTarefaId`), `salvarTarefa()` (suporte a update), `carregarListaResponsaveis()` / `renderizarListaResponsaveisComPesquisa()` (pré-seleção), `carregarDadosTarefaParaEdicao()` (nova), `editarTarefaExistente()` (nova).
+
+### Edição de Subtarefas
+- **Disponibilidade**: botão "Editar Subtarefa" (ícone ✎) visível ao lado do botão de excluir em cada subtarefa, exclusivamente para o **criador** da subtarefa e **somente dentro de 24h** após a criação.
+- **Modal reutilizado**: o modal de "Nova Subtarefa" é aberto preenchido com os dados da subtarefa:
+  - Título e descrição preenchidos automaticamente.
+  - Responsáveis já marcados nos checkboxes.
+  - Permite adicionar um novo anexo (o anexo anterior é preservado).
+- **Título e botão adaptativos**: em modo edição, o modal exibe **"Editando Subtarefa"** e o botão exibe **"Salvar"**.
+- **Persistência**: ao salvar, o sistema executa `UPDATE` na tabela `tarefas`, sincroniza os responsáveis em `tarefa_responsaveis`, faz upload de novo anexo se houver e mantém intactos o `status`, `criado_por`, `tarefa_pai_id` e `created_at`.
+- **Funções alteradas em `tarefas.js`**: `abrirCriarSubtarefa()` (novo parâmetro `editarSubtarefaId`), `confirmarSubtarefa()` (suporte a update), `carregarListaResponsaveisSubtarefa()` / `renderizarListaResponsaveisSubComPesquisa()` (pré-seleção), `carregarDadosSubtarefaParaEdicao()` (nova), `editarSubtarefaExistente()` (nova).

@@ -2512,6 +2512,7 @@ async function salvarDetalhesHist(id) {
             carregarNPAIHome();
         }
 
+        await carregarHistorico(); // atualiza pontuação e gráfico em tempo real
         alert('Alterações salvas com sucesso!');
     } catch (err) {
         console.error("Erro ao salvar detalhes:", err);
@@ -2566,6 +2567,7 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         registrosGeralAtual = registrosGeralAtual.filter(r => r.id !== id);
         renderizarTabelaGeral(registrosGeralAtual, categoriaId);
 
+        await carregarHistorico(); // atualiza pontuação e gráfico em tempo real
         alert('Registro excluído com sucesso.');
     } catch (err) {
         console.error('Erro ao excluir registro:', err);
@@ -3980,6 +3982,7 @@ async function baixarDocumentoWord() {
         }
         fecharEditorDocumento(); // fecha o frame do documento
         fecharModalProdutividade(); // fecha o formulário pai imediatamente
+        await carregarHistorico(); // atualiza pontuação, gráfico e meta em tempo real
     } catch (err) {
         console.error(err);
         alert('O DOCX/PDF foi gerado, mas ocorreu um erro ao salvar o Histórico e Storage.');
