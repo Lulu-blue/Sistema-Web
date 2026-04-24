@@ -517,6 +517,7 @@ function obterIdVisual(categoriaId) {
 
 // --- VARIÁVEIS GLOBAIS ---
 let categoriaAtual = null;
+let rascunhoDocumento = null; // { id, numero_sequencial, categoria_id, campos }
 
 // --- RENDERIZAR BOTÕES DE CATEGORIAS ---
 function renderizarCategorias() {
@@ -706,8 +707,8 @@ function abrirFormulario(categoria) {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorAutoInfracao();
     } else if (categoria.id === '11') {
-        btnSalvarForm.textContent = 'Gerar Número';
-        btnSalvarForm.onclick = () => salvarRegistro();
+        btnSalvarForm.textContent = 'Gerar Documento';
+        btnSalvarForm.onclick = () => abrirEditorDividaAtiva();
     } else if (categoria.id === '1.4') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorOficio();
@@ -730,6 +731,7 @@ function fecharModalProdutividade() {
     const overlay = document.getElementById('modal-produtividade');
     overlay.classList.remove('ativo');
     categoriaAtual = null;
+    rascunhoDocumento = null;
 }
 
 // --- FUNÇÃO PARA ADICIONAR CAMPO DE LICENÇA (CATEGORIA 19) ---
@@ -1523,7 +1525,23 @@ async function gerarNumeroSequencial(categoriaId) {
     const anoAtual = new Date().getFullYear(); // ex: 2026
     const digitos = categoriaId === '1.4' ? 4 : 3; // Ofício = 4 dígitos, resto = 3
 
-    // Buscar o maior número do ano atual nessa categoria
+    // Ofício (1.4) usa RPC atômica no PostgreSQL com fila global de reutilização
+    if (categoriaId === '1.4') {
+        const { data: numeroSeq, error } = await supabaseClient
+            .rpc('reservar_numero_sequencial', {
+                p_categoria_id: categoriaId,
+                p_ano: anoAtual
+            });
+
+        if (error) {
+            console.error('Erro ao reservar número sequencial:', error);
+            throw new Error('Falha ao gerar número sequencial: ' + error.message);
+        }
+
+        return numeroSeq;
+    }
+
+    // Demais categorias: busca o maior número do ano (1 registro apenas)
     const { data: registros } = await supabaseClient
         .from('controle_processual')
         .select('numero_sequencial')
@@ -3084,6 +3102,123 @@ function extrairDadosProtocoloWord(texto) {
     return dados;
 }
 
+// =============================================
+// FUNÇÕES DE RASCUNHO PARA DOCUMENTOS WYSIWYG
+// =============================================
+
+async function criarRascunhoControleProcessual(campos, categoriaId, numeroSeq) {
+    const { data: { user } } = await getAuthUser();
+    if (!user) throw new Error('Sessão expirada');
+
+    const { data: perfil } = await supabaseClient
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+    const fiscalNome = perfil?.full_name || 'Fiscal';
+
+    const catDef = CATEGORIAS.find(c => c.id === categoriaId);
+
+    const { data, error } = await supabaseClient
+        .from('controle_processual')
+        .insert({
+            user_id: user.id,
+            fiscal_nome: fiscalNome,
+            categoria_id: categoriaId,
+            categoria_nome: catDef ? catDef.nome : 'Documento',
+            numero_sequencial: numeroSeq,
+            pontuacao: 0,
+            campos: campos
+        })
+        .select();
+
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
+}
+
+async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
+    if (!rascunhoDocumento) {
+        throw new Error('Nenhum rascunho ativo para finalizar.');
+    }
+
+    const { data: { user } } = await getAuthUser();
+    if (!user) throw new Error('Sessão expirada');
+
+    const registroId = rascunhoDocumento.id;
+    const catDef = CATEGORIAS.find(c => c.id === rascunhoDocumento.categoria_id);
+
+    // Calcular pontuação final
+    let pontos = catDef ? catDef.pontos : 0;
+
+    // Upload do PDF
+    let nomeAnexoLimpo = filenameSafe
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_\-\.]/g, '');
+
+    const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
+    const caminho = `${user.id}/${nomeArquivo}`;
+
+    const { error: uploadError } = await supabaseClient.storage
+        .from('anexos')
+        .upload(caminho, blobPdf, { upsert: true });
+
+    if (uploadError) {
+        console.error('Erro no upload:', uploadError);
+        alert('Documento baixado, mas erro ao anexar PDF: ' + uploadError.message);
+        throw uploadError;
+    }
+
+    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
+    const camposAtualizados = {
+        ...rascunhoDocumento.campos,
+        anexo_pdf: urlData.publicUrl
+    };
+
+    // Atualizar registro com pontuação e anexo
+    const { error: updateError } = await supabaseClient
+        .from('controle_processual')
+        .update({
+            pontuacao: pontos,
+            campos: camposAtualizados
+        })
+        .eq('id', registroId);
+
+    if (updateError) throw updateError;
+
+    // Limpar rascunho
+    rascunhoDocumento = null;
+}
+
+async function cancelarRascunhoDocumento() {
+    if (!rascunhoDocumento) return;
+
+    const registroId = rascunhoDocumento.id;
+    const categoriaId = rascunhoDocumento.categoria_id;
+    const numeroSeq = rascunhoDocumento.numero_sequencial;
+    const anoAtual = new Date().getFullYear();
+    rascunhoDocumento = null;
+
+    try {
+        // Ofício (1.4): devolve o número para a fila global no banco
+        if (categoriaId === '1.4' && numeroSeq) {
+            await supabaseClient.rpc('devolver_numero_sequencial', {
+                p_numero: numeroSeq,
+                p_categoria_id: categoriaId,
+                p_ano: anoAtual
+            });
+        }
+
+        await supabaseClient
+            .from('controle_processual')
+            .delete()
+            .eq('id', registroId);
+    } catch (e) {
+        console.error('Erro ao excluir rascunho:', e);
+    }
+}
+
 // --- GERADOR DE AUTO DE INFRAÇÃO (WYSIWYG) ---
 async function abrirEditorAutoInfracao() {
     // 1. Coleta e valida dados
@@ -3119,9 +3254,18 @@ async function abrirEditorAutoInfracao() {
     }
 
     try {
-        // Puxa do Banco de Dados offline o provável sequencial desse documento e injeta
+        // Gera número sequencial online e cria rascunho no banco para reservar o número
         const numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
-        const tituloDoc = categoriaAtual.id === '11' ? 'DÍVIDA ATIVA Nº' : 'AUTO DE INFRAÇÃO Nº';
+        const tituloDoc = 'AUTO DE INFRAÇÃO Nº';
+
+        // Salva rascunho sem pontuação e sem anexo (reserva o número)
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
 
         // 2. Prepara HTML do Documento
         const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
@@ -3260,8 +3404,17 @@ async function abrirEditorOficio() {
     }
 
     try {
-        // Puxa do Banco de Dados offline o provável sequencial desse Ofício e injeta
+        // Gera número sequencial online e cria rascunho no banco para reservar o número
         const numSequencial = await gerarNumeroSequencial('1.4');
+
+        // Salva rascunho sem pontuação e sem anexo (reserva o número)
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
 
         // Pegar informações do Fiscal (Nome logado e Matrícula) e Data de Hoje para Assinatura
         const { data: { user } } = await getAuthUser();
@@ -3382,8 +3535,17 @@ async function abrirEditorRelatorio() {
     }
 
     try {
-        // Puxa do Banco de Dados offline o provável sequencial
+        // Gera número sequencial online e cria rascunho no banco para reservar o número
         const numSequencial = await gerarNumeroSequencial('1.5');
+
+        // Salva rascunho sem pontuação e sem anexo (reserva o número)
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
 
         // Pegar informações do Fiscal (Nome logado e Matrícula) e Data de Hoje para Assinatura
         const { data: { user } } = await getAuthUser();
@@ -3503,7 +3665,17 @@ async function abrirEditorReplica() {
     }
 
     try {
+        // Gera número sequencial online e cria rascunho no banco para reservar o número
         const numSequencial = await gerarNumeroSequencial('1.7');
+
+        // Salva rascunho sem pontuação e sem anexo (reserva o número)
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
 
         // Pegar informações do Fiscal (Nome logado e Matrícula)
         const { data: { user } } = await getAuthUser();
@@ -3595,7 +3767,126 @@ async function abrirEditorReplica() {
     }
 }
 
-function fecharEditorDocumento() {
+async function abrirEditorDividaAtiva() {
+    const campos = {};
+    let todosPreenchidos = true;
+
+    categoriaAtual.campos.forEach(campo => {
+        if (campo.tipo === 'file') return;
+        const input = document.getElementById(`campo-${campo.nome}`);
+        let valor = input ? input.value.trim() : '';
+        if (campo.obrigatorio && !valor) {
+            todosPreenchidos = false;
+            if (input) input.style.borderColor = '#ef4444';
+        } else if (input) {
+            input.style.borderColor = '#e2e8f0';
+        }
+        campos[campo.nome] = valor || '';
+    });
+
+    if (!todosPreenchidos) {
+        alert('Preencha os dados obrigatórios da Dívida Ativa antes de gerar o documento.');
+        return;
+    }
+
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvarForm ? btnSalvarForm.textContent : 'Gerar Documento';
+    if (btnSalvarForm) {
+        btnSalvarForm.textContent = 'Carregando...';
+        btnSalvarForm.disabled = true;
+    }
+
+    try {
+        const numSequencial = await gerarNumeroSequencial('11');
+
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
+
+        const { data: { user } } = await getAuthUser();
+        let nomeFiscal = 'Nome do Fiscal';
+        let matriculaFiscal = 'XXXXXXXX';
+        if (user) {
+            const { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('full_name, matricula')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
+        }
+
+        const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
+        const dataFormatada = campos.data ? `${dataPartes[2]}/${dataPartes[1]}/${dataPartes[0]}` : '';
+
+        const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+        const hoje = new Date();
+        const diaHoje = hoje.getDate();
+        const mesHoje = meses[hoje.getMonth()];
+        const anoHoje = hoje.getFullYear();
+        const dataPorExtenso = `Divinópolis, ${diaHoje} de ${mesHoje} de ${anoHoje}.`;
+
+        const imgBase64 = await obterBase64Cabecalho();
+
+        const htmlTemplate = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
+        
+        <div style="text-align: center; margin-bottom: 25px;">
+            <p style="font-weight: bold; font-size: 14pt; margin: 10px 0;">FISCALIZAÇÃO DE POSTURAS AMBIENTAL</p>
+            <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">PROCESSO DE DÍVIDA ATIVA Nº ${numSequencial}</p>
+        </div>
+        
+        <p style="margin-top: 20px; line-height: 1.5;">
+            <strong>Auto de Infração de Referência:</strong> ${campos.n_auto}<br>
+            <strong>Data do Processo:</strong> ${dataFormatada}
+        </p>
+
+        <p style="text-indent: 30px; margin-top: 20px; line-height: 1.5;">
+            Processo de encaminhamento para inscrição em dívida ativa referente ao Auto de Infração nº ${campos.n_auto}, 
+            conforme determinação legal vigente.
+        </p>
+
+        <div style="margin-top: 60px; text-align: center;">
+            <p style="margin: 0;">_________________________________________</p>
+            <p style="margin: 5px 0 0 0;"><strong>${nomeFiscal}</strong></p>
+            <p style="margin: 2px 0 0 0;">Fiscalização de Posturas</p>
+            <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
+        </div>
+    `;
+
+        const editor = document.getElementById('editor-texto');
+        editor.innerHTML = htmlTemplate;
+
+        document.getElementById('modal-produtividade').classList.remove('ativo');
+        document.getElementById('modal-editor-documento').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Erro ao preparar Dívida Ativa:', error);
+        alert('Ocorreu um erro ao processar os dados do documento.');
+    } finally {
+        if (btnSalvarForm) {
+            btnSalvarForm.textContent = oldTexto;
+            btnSalvarForm.disabled = false;
+        }
+    }
+}
+
+async function fecharEditorDocumento() {
+    if (rascunhoDocumento) {
+        const confirmar = confirm('Você tem um documento em andamento. Se voltar ao formulário, o registro será cancelado e o número não será reservado. Deseja continuar?');
+        if (!confirmar) return;
+        await cancelarRascunhoDocumento();
+    }
     document.getElementById('modal-editor-documento').style.display = 'none';
     document.getElementById('modal-produtividade').classList.add('ativo');
 }
@@ -3628,6 +3919,9 @@ async function baixarDocumentoWord() {
         } else if (catId === '1.7') {
             tipoNome = 'Replica';
             catNome = 'Réplica Fiscal';
+        } else if (catId === '11') {
+            tipoNome = 'Divida_Ativa';
+            catNome = 'Dívida Ativa';
         }
 
         // Adiciona as Metatags da Microsoft Office para interpretar o HTML como Word Nativo
@@ -3640,7 +3934,10 @@ async function baixarDocumentoWord() {
         const footer = "</body></html>";
         const sourceHTML = header + editor.innerHTML + footer;
 
-        const numSeqDownload = await gerarNumeroSequencial(catId);
+        // Usa o número do rascunho se existir; senão, gera um novo (compatibilidade com Ofício)
+        const numSeqDownload = (rascunhoDocumento && rascunhoDocumento.categoria_id === catId)
+            ? rascunhoDocumento.numero_sequencial
+            : await gerarNumeroSequencial(catId);
         let nomeArquivo = `${tipoNome}_${numSeqDownload.replace('/', '-')}`;
 
         // Tratamento para caracteres UTF-8 no Blob MS-WORD
@@ -3675,8 +3972,12 @@ async function baixarDocumentoWord() {
         const blobPdf = await html2pdf().set(opt).from(editor).output('blob');
         const filenameSafe = `${nomeArquivo}.pdf`;
 
-        // Executa lógica de banco de dados completa (incluindo Storage)
-        await salvarRegistro(blobPdf, filenameSafe);
+        // Se há rascunho ativo, finaliza-o (anexo + pontuação). Senão, usa fluxo antigo.
+        if (rascunhoDocumento && rascunhoDocumento.categoria_id === catId) {
+            await finalizarDocumentoComAnexo(blobPdf, filenameSafe);
+        } else {
+            await salvarRegistro(blobPdf, filenameSafe);
+        }
         fecharEditorDocumento(); // fecha o frame do documento
         fecharModalProdutividade(); // fecha o formulário pai imediatamente
     } catch (err) {

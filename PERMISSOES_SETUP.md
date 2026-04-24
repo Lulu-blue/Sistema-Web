@@ -25,45 +25,24 @@ Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental
 Gerente → pode excluir: Fiscal, Equipe Ambiental
 ```
 
----
 
-## 🚀 Opção 1: SQL Simples (Legado)
-
-Execute no SQL Editor do Supabase:
-
-1. Acesse seu projeto no Supabase Dashboard
-2. Vá em "SQL Editor"
-3. Cole o conteúdo do arquivo
-4. Clique em "Run"
-
-Isso vai:
-- ✅ Habilitar exclusão na tabela `profiles` para Gerente+
-- ✅ Criar função de "soft delete" (desativar usuário)
-- ✅ Adicionar colunas para controle de ativação
-
----
-
-## 🔧 Opção 2: Edge Function (Exclusão Completa)
-
-Para deletar completamente o usuário do sistema (incluindo auth.users):
-
-### Passo 1: Instalar Supabase CLI
+### Instalar Supabase CLI
 ```bash
 npm install -g supabase
 ```
 
-### Passo 2: Login e Link
+### Login e Link
 ```bash
 supabase login
 supabase link --project-ref seu-project-ref-aqui
 ```
 
-### Passo 3: Criar a Edge Function
+### Criar a Edge Function
 ```bash
 supabase functions new delete-user
 ```
 
-### Passo 4: Criar o arquivo da função
+### Criar o arquivo da função
 
 Crie o arquivo `supabase/functions/delete-user/index.ts`:
 
@@ -271,20 +250,10 @@ async function executarExclusaoFiscal(fiscalId, nomeFiscal) {
 
 ---
 
-## 🔐 Opção 3: Permissões Especiais do Secretário e Desenvolvedores
+## Permissões Especiais do Secretário e Desenvolvedores
 
 Para permitir que **Secretários** e **Desenvolvedores** possam **criar e excluir qualquer usuário** no sistema:
 
-### Executar o SQL
-
-Execute o arquivo `setup_permissoes_secretario.sql` no SQL Editor do Supabase:
-
-```sql
--- 1. Isso cria funções para verificar se é Secretário ou Dev
--- 2. Adiciona políticas RLS para DELETE/UPDATE em qualquer perfil
--- 3. Cria funções seguras para criar/desativar/excluir usuários
--- 4. Adiciona colunas 'ativo' e 'data_desativacao' na tabela profiles
-```
 
 ### Uso das Funções
 
@@ -674,7 +643,7 @@ As seguintes tabelas existem no banco mas **estão sem dados** e/ou **foram subs
 
 ## 🛡️ Anexo D: SQL de Criação das Tabelas do Módulo de Tarefas
 
-Execute este bloco no SQL Editor do Supabase para recriar/atualizar as tabelas e políticas de segurança do módulo de Tarefas:
+recriar/atualizar as tabelas e políticas de segurança do módulo de Tarefas:
 
 ```sql
 -- =====================================================
@@ -805,4 +774,95 @@ FOR INSERT TO authenticated WITH CHECK (bucket_id = 'tarefa_anexos');
 DROP POLICY IF EXISTS "tarefa_anexos_delete_authenticated" ON storage.objects;
 CREATE POLICY "tarefa_anexos_delete_authenticated" ON storage.objects
 FOR DELETE TO authenticated USING (bucket_id = 'tarefa_anexos');
+```
+
+---
+
+## 🎯 Tabela e Funções RPC para Fila de Números Sequenciais
+
+> **Quando usar:** Execute esta seção para criar a infraestrutura de fila global de reutilização de números cancelados (resolve race condition, isolamento entre navegadores e ordenação numérica correta).
+
+### Tabela `numeros_disponiveis`
+
+```sql
+-- Tabela para guardar números cancelados que podem ser reutilizados globalmente
+CREATE TABLE IF NOT EXISTS numeros_disponiveis (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    numero_sequencial TEXT NOT NULL,
+    ano INTEGER NOT NULL,
+    categoria_id TEXT NOT NULL DEFAULT '1.4',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(numero_sequencial, ano, categoria_id)
+);
+
+-- Habilitar RLS
+ALTER TABLE numeros_disponiveis ENABLE ROW LEVEL SECURITY;
+
+-- Política: qualquer usuário autenticado pode manipular a fila
+DROP POLICY IF EXISTS "numeros_disponiveis_acesso_total" ON public.numeros_disponiveis;
+CREATE POLICY "numeros_disponiveis_acesso_total" ON public.numeros_disponiveis
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+### Função RPC: `reservar_numero_sequencial`
+
+Retorna o próximo número disponível de forma **atômica** (sem race condition):
+1. Verifica a fila global (`numeros_disponiveis`) e retorna o menor número
+2. Se a fila estiver vazia, calcula o próximo via `MAX(...::integer)` em `controle_processual`
+3. Usa `FOR UPDATE SKIP LOCKED` para evitar concorrência na fila
+
+```sql
+CREATE OR REPLACE FUNCTION reservar_numero_sequencial(p_categoria_id TEXT, p_ano INTEGER)
+RETURNS TEXT AS $$
+DECLARE
+    v_numero TEXT;
+    v_digitos INTEGER;
+    v_proximo INTEGER;
+BEGIN
+    v_digitos := CASE WHEN p_categoria_id = '1.4' THEN 4 ELSE 3 END;
+
+    -- 1. Tentar pegar da fila de disponíveis (menor número, com lock de linha)
+    SELECT numero_sequencial INTO v_numero
+    FROM numeros_disponiveis
+    WHERE ano = p_ano AND categoria_id = p_categoria_id
+    ORDER BY LPAD(split_part(numero_sequencial, '/', 1), 10, '0')
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED;
+
+    IF v_numero IS NOT NULL THEN
+        DELETE FROM numeros_disponiveis
+        WHERE numero_sequencial = v_numero
+          AND ano = p_ano
+          AND categoria_id = p_categoria_id;
+        RETURN v_numero;
+    END IF;
+
+    -- 2. Fila vazia: calcular próximo número via MAX numérico (ignora padding/zeros)
+    SELECT COALESCE(
+        MAX(split_part(numero_sequencial, '/', 1)::integer),
+        0
+    ) + 1
+    INTO v_proximo
+    FROM controle_processual
+    WHERE categoria_id = p_categoria_id
+      AND numero_sequencial LIKE '%/' || p_ano;
+
+    RETURN LPAD(v_proximo::TEXT, v_digitos, '0') || '/' || p_ano;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### Função RPC: `devolver_numero_sequencial`
+
+Devolve um número cancelado para a fila global, permitindo que qualquer usuário o reutilize:
+
+```sql
+CREATE OR REPLACE FUNCTION devolver_numero_sequencial(p_numero TEXT, p_categoria_id TEXT, p_ano INTEGER)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO numeros_disponiveis (numero_sequencial, ano, categoria_id)
+    VALUES (p_numero, p_ano, p_categoria_id)
+    ON CONFLICT (numero_sequencial, ano, categoria_id) DO NOTHING;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```

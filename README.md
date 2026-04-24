@@ -885,3 +885,51 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 
 ### UX do Modal de Estatísticas
 - **Clique fora fecha**: o modal agora fecha ao clicar no overlay escuro (`onclick` no fundo do modal), comportamento padrão dos demais modais do sistema.
+
+---
+
+## 🆕 Atualizações Recentes (24/04/2026)
+
+### Fluxo de Rascunho para Documentos Oficiais WYSIWYG
+Implementado sistema de **rascunho com reserva de número** para as categorias geradoras de documentos oficiais, eliminando race conditions e garantindo integridade sequencial:
+
+**Categorias afetadas:**
+- **1.2° (16.2°) Auto de Infração**
+- **1.4° (16.4°) Ofício**
+- **1.5° (16.5°) Relatório**
+- **1.7° (16.7°) Réplica**
+- **11° Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa**
+
+**Como funciona o novo fluxo:**
+1. **Ao clicar em "Gerar Documento"**: o sistema gera o número sequencial **online** e imediatamente cria um registro na tabela `controle_processual` com:
+   - `pontuacao: 0` (ainda não conta pontos)
+   - Sem anexo
+   - Número sequencial já reservado
+2. **Ao clicar em "Baixar Word (.doc)"**: o documento `.doc` é baixado, o PDF é gerado em background e o sistema **atualiza o rascunho existente** com o anexo PDF e a pontuação correta.
+3. **Se cancelar antes de baixar**: ao clicar em "Voltar ao Formulário" ou no X do editor, aparece uma confirmação; se o usuário confirmar, o rascunho é **excluído automaticamente** do banco e o número é liberado.
+
+**Novas funções em `produtividade.js`:**
+- `criarRascunhoControleProcessual()` — cria o registro temporário no banco.
+- `finalizarDocumentoComAnexo()` — faz upload do PDF e atualiza pontuação.
+- `cancelarRascunhoDocumento()` — remove o registro temporário.
+- `abrirEditorDividaAtiva()` — nova função que transformou a categoria 11 de "Gerar Número" direto para editor WYSIWYG completo, no mesmo padrão das demais categorias de documento.
+
+### Ofício (1.4° / 16.4°) — Rascunho + Fila Global de Reutilização
+A categoria **Ofício** agora também utiliza o fluxo de rascunho WYSIWYG, com mecanismos adicionais para garantir **sequencialidade perfeita** e **reutilização de números cancelados**:
+
+- **Fila global no banco**: ao cancelar um Ofício antes de baixar o Word, o número é devolvido para a tabela `numeros_disponiveis` no Supabase via função RPC `devolver_numero_sequencial()`. Qualquer usuário, em qualquer computador, pode reutilizar esse número.
+- **Reutilização automática**: na próxima geração, a função RPC `reservar_numero_sequencial()` verifica primeiro a fila global. Se houver números pendentes, reutiliza **sempre o menor** (ordenado numericamente). Só gera um número novo quando a fila está vazia.
+
+### Numeração Sequencial Robusta (via RPC Atômica)
+A função `gerarNumeroSequencial()` em `produtividade.js` foi refatorada para usar **funções RPC no PostgreSQL**, resolvendo definitivamente os 3 principais pontos de falha:
+
+1. **Limite de 1000 linhas do Supabase**: eliminado. A RPC calcula o próximo número diretamente no banco via `MAX(split_part(..., '/', 1)::integer)`, sem trazer registros para o cliente.
+2. **Legado sem Padding**: eliminado. A ordenação é puramente numérica (`::integer`), então registros antigos como `"5/2026"` ou `"005/2026"` são tratados corretamente.
+3. **Race Condition**: eliminada. A função RPC `reservar_numero_sequencial()` é atômica no PostgreSQL. Ela usa `FOR UPDATE SKIP LOCKED` na fila e o cálculo de `MAX` ocorre dentro da mesma transação, garantindo que dois usuários nunca recebam o mesmo número.
+4. **Desempenho**: otimizado. Zero transferência de dados desnecessária — apenas o número final é retornado ao cliente.
+
+**Novas funções RPC (adicionar ao Supabase via SQL Editor):**
+- `reservar_numero_sequencial(p_categoria_id, p_ano)` → retorna o próximo número único (da fila ou calculado).
+- `devolver_numero_sequencial(p_numero, p_categoria_id, p_ano)` → devolve um número cancelado para a fila global.
+
+> 📋 O SQL completo está documentado na seção **"Tabela e Funções RPC para Fila de Números Sequenciais"** do arquivo `PERMISSOES_SETUP.md`.
