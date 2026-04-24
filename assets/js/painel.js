@@ -1825,7 +1825,7 @@ function gerarRaminhos() {
             var y = lin * celula + Math.random() * (celula - tamanho * 0.5);
 
             var img = document.createElement('img');
-            img.src = 'raminho.png';
+            img.src = 'assets/img/raminho.png';
             img.className = 'raminho-bg';
             img.style.width = tamanho + 'px';
             img.style.left = x + 'px';

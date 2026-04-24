@@ -81,7 +81,7 @@ async function obterBase64Cabecalho() {
         return CABECALHO_BASE64;
     }
     // Fallback caso o arquivo cabecalho_img.js fale por algum motivo
-    return 'Cabeçalho.png';
+    return 'assets/img/Cabeçalho.png';
 }
 
 // --- DEFINIÇÃO DAS CATEGORIAS ---

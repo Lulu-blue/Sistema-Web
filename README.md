@@ -6,25 +6,35 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 
 ## 📂 Estrutura de Arquivos
 
+### Entry Points (raiz)
 | Arquivo | Descrição |
 |---------|-----------|
 | `index.html` | Página de login (CPF com formatação em tempo real + senha) |
-| `style.css` | Estilos do login e fundo dinâmico de padrões (raminhos) |
-| `script.js` | Lógica de autenticação via Supabase e geração do fundo da tela de login |
 | `painel.html` | Dashboard principal (Home, sidebar + abas Produtividade/Históricos/Tarefas) |
-| `style_painel.css` | Estilos comuns do painel e sidebar |
-| `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento das Tarefas de Eventos na Home |
-| `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
-| `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
-| `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
-| `gerente.js` | **Gestão de Fiscais e Hierarquia Visual**: Ranking de desempenho, gráficos de pontuação, cadastro/exclusão de fiscais, visualização de documentos por tipo, e **árvore hierárquica completa da SEMAC** para Secretários |
-| `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
-| `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
-| `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
 | `redefinir-senha.html` | Página de redefinição de senha via token de segurança (válido por 1h) |
-| `cabecalho_img.js` | Módulo com a imagem do cabeçalho em Base64 para geração de documentos oficiais |
-| `PERMISSOES_SETUP.md` | **Guia definitivo** de permissões hierárquicas e políticas RLS (Row Level Security) do Supabase. Substitui todos os antigos arquivos `.sql` soltos. |
+
+### Assets
+| Pasta | Arquivos | Descrição |
+|-------|----------|-----------|
+| `assets/css/` | `style.css` | Estilos do login e fundo dinâmico de padrões (raminhos) |
+| | `style_painel.css` | Estilos comuns do painel e sidebar |
+| | `style_produtividade.css` | Estilo dos modais, gráficos, badge meta, tabela de relatórios e histórico |
+| `assets/js/` | `script.js` | Lógica de autenticação via Supabase e geração do fundo da tela de login |
+| | `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
+| | `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento das Tarefas de Eventos na Home |
+| | `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
+| | `gerente.js` | **Gestão de Fiscais e Hierarquia Visual**: Ranking de desempenho, gráficos de pontuação, cadastro/exclusão de fiscais, visualização de documentos por tipo, e **árvore hierárquica completa da SEMAC** para Secretários |
+| | `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
+| | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
+| | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
+| | `cabecalho_img.js` | Módulo com a imagem do cabeçalho em Base64 para geração de documentos oficiais |
+| `assets/img/` | `logoSemac.png`, `Cabeçalho.png`, `raminho.png`, `folhas.jpg` | Imagens e logos do sistema |
+
+### Bibliotecas e Documentação
+| Pasta/Arquivo | Descrição |
+|---------------|-----------|
 | `lib/` | **Pasta de Bibliotecas Locais**: Contém Supabase, Chart.js, SweetAlert2, html2pdf.js, JSZip, SheetJS (XLSX), Mammoth.js e outras dependências para garantir funcionamento offline ou em redes com restrição de DNS. |
+| `PERMISSOES_SETUP.md` | **Guia definitivo** de permissões hierárquicas e políticas RLS (Row Level Security) do Supabase. Substitui todos os antigos arquivos `.sql` soltos. |
 
 ---
 
@@ -980,3 +990,28 @@ Corrigidos **3 bugs críticos** onde a pontuação total, o gráfico de produtiv
 - **Título e botão adaptativos**: em modo edição, o modal exibe **"Editando Subtarefa"** e o botão exibe **"Salvar"**.
 - **Persistência**: ao salvar, o sistema executa `UPDATE` na tabela `tarefas`, sincroniza os responsáveis em `tarefa_responsaveis`, faz upload de novo anexo se houver e mantém intactos o `status`, `criado_por`, `tarefa_pai_id` e `created_at`.
 - **Funções alteradas em `tarefas.js`**: `abrirCriarSubtarefa()` (novo parâmetro `editarSubtarefaId`), `confirmarSubtarefa()` (suporte a update), `carregarListaResponsaveisSubtarefa()` / `renderizarListaResponsaveisSubComPesquisa()` (pré-seleção), `carregarDadosSubtarefaParaEdicao()` (nova), `editarSubtarefaExistente()` (nova).
+
+### Reorganização de Pastas do Projeto
+O projeto foi completamente reorganizado em pastas específicas para melhor manutenibilidade e clareza:
+
+**Nova estrutura:**
+```
+SEMAC/
+├── index.html, painel.html, redefinir-senha.html   ← entry points (raiz)
+├── lib/                                              ← bibliotecas de terceiros (inalterado)
+├── assets/
+│   ├── css/     ← style.css, style_painel.css, style_produtividade.css
+│   ├── js/      ← script.js, protecao.js, painel.js, produtividade.js,
+│   │              gerente.js, tarefas.js, projetos.js, fechamento.js,
+│   │              cabecalho_img.js
+│   └── img/     ← logoSemac.png, Cabeçalho.png, raminho.png, folhas.jpg
+└── README.md, PERMISSOES_SETUP.md
+```
+
+**Mudanças aplicadas:**
+- Todos os arquivos CSS movidos para `assets/css/`
+- Todos os arquivos JS próprios movidos para `assets/js/`
+- Todas as imagens movidas para `assets/img/`
+- A pasta `lib/` permaneceu na raiz para evitar quebra de múltiplas importações nos HTMLs
+- Todas as referências em `index.html`, `painel.html`, `style.css`, `painel.js` e `produtividade.js` foram atualizadas para refletir os novos caminhos
+- Os entry points (`index.html`, `painel.html`, `redefinir-senha.html`) e as navegações por `window.location.href` permanecem inalterados na raiz

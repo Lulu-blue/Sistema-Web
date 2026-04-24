@@ -27,7 +27,7 @@ body {
 /* --- LADO DA IMAGEM --- */
 .image-section {
     flex: 1.2;
-    background-image: url('folhas.jpg');
+    background-image: url('../img/folhas.jpg');
     /* Use o nome da imagem que você baixar */
     background-size: cover;
     background-position: center;
@@ -57,7 +57,7 @@ body {
     align-items: center;
     justify-content: center;
     /* O fundo aqui é a continuação da imagem, mas com desfoque */
-    background-image: url('folhas.jpg');
+    background-image: url('../img/folhas.jpg');
     background-size: cover;
     background-position: left;
 }
