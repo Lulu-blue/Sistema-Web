@@ -932,6 +932,37 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         campos: campos
                     })
                     .select());
+
+                // AUTOMÁTICO: Gerar a categoria 14 (Notificação Preliminar expedidos - id visual 13) - 20 pts
+                if (categoriaAtual.id === '1.1' && !error) {
+                    const hoje = new Date();
+                    const ano = hoje.getFullYear();
+                    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+                    const dia = String(hoje.getDate()).padStart(2, '0');
+                    const dataAtual = `${ano}-${mes}-${dia}`;
+
+                    const campos14 = {
+                        n_notificacao: campos.n_notificacao || '',
+                        descricao: campos.motivo || 'Expedição Automática',
+                        data: dataAtual
+                    };
+
+                    const { error: err14 } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert({
+                            user_id: user.id,
+                            categoria_id: '14',
+                            categoria_nome: 'Notificação Preliminar expedidos',
+                            pontuacao: 20,
+                            campos: campos14
+                        });
+
+                    if (!err14) {
+                        pontos += 20; // Para mostrar os 25 pontos no alerta de sucesso
+                    } else {
+                        console.error('Erro ao gerar Notificação Preliminar expedidos (14):', err14);
+                    }
+                }
             } else {
                 // NÃO É CP (Registros Produtividade)
                 if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
@@ -1022,11 +1053,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 alert('Registro atualizado com sucesso!');
             } else if (categoriaAtual.id === '11' && data && data.length > 0) {
                 // Para Dívida Ativa, o usuário precisa ver o número gerado para anotar no processo físico
-                alert(`✅ Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
+                alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
             } else if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
-                alert(`✅ ${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
+                alert(`${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
+            } else if (categoriaAtual.id === '1.1') {
+                alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
             } else {
-                alert('✅ Registro salvo com sucesso! (' + pontos + ' pontos)');
+                alert('Registro salvo com sucesso! (' + pontos + ' pontos)');
             }
 
             // Fechar modal DEPOIS do alerta (pois zera a categoriaAtual)
