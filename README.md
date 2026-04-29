@@ -1101,3 +1101,8 @@ SEMAC/
 ### ⚙️ Lógica e Segurança
 - **Filtro de Hierarquia**: A função `carregarMinhasTarefasHome` foi aprimorada para detectar o cargo de Diretor e concatenar IDs de gerentes e fiscais na busca de tarefas.
 - **Persistência de Filtro**: Uso de inputs ocultos para manter o estado do filtro de tipo entre recarregamentos de dados.
+
+### 💬 Respostas em Subtarefas
+- **Campo de Resposta**: Adicionada a opção de inserir uma resposta textual diretamente nas subtarefas, permitindo que o responsável relate o andamento sem a necessidade de anexar um arquivo.
+- **Flexibilização da Conclusão**: A regra de conclusão foi alterada para aceitar **Anexo OU Resposta**. Subtarefas agora podem ser finalizadas se houver pelo menos uma dessas informações registradas.
+- **Visualização Estilizada**: Respostas salvas são exibidas em um card destacado (verde claro) com identificação visual, facilitando o acompanhamento por outros membros da equipe.

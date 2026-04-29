@@ -1867,6 +1867,37 @@ async function salvarTarefa() {
     }
 }
 
+async function salvarRespostaSubtarefa(subId, tarefaPaiId) {
+    var area = document.getElementById('resposta-sub-' + subId);
+    if (!area) return;
+    var texto = area.value.trim();
+    if (!texto) {
+        Swal.fire('Campo Vazio', 'Por favor, digite uma resposta antes de salvar.', 'warning');
+        return;
+    }
+    
+    try {
+        var { error } = await supabaseClient.from('tarefas').update({ resposta: texto }).eq('id', subId);
+        if (error) throw error;
+        
+        Swal.fire({
+            icon: 'success',
+            title: 'Resposta Salva',
+            text: 'Sua resposta foi registrada com sucesso.',
+            timer: 1500,
+            showConfirmButton: false
+        });
+        
+        // Recarregar detalhe para mostrar a resposta atualizada (mantém o modal aberto)
+        abrirDetalheTarefa(tarefaPaiId);
+    } catch (err) {
+        console.error('Erro ao salvar resposta:', err);
+        Swal.fire('Erro', 'Não foi possível salvar a resposta.', 'error');
+    }
+}
+
+window.salvarRespostaSubtarefa = salvarRespostaSubtarefa;
+
 // ==========================================
 // DETALHE DA TAREFA (MODAL COMPLETO)
 // ==========================================
@@ -2226,21 +2257,48 @@ async function abrirDetalheTarefa(id) {
                 });
                 if (s.descricao) html += '<div style="font-size:13px; color:#64748b; margin-top:3px; background:#f8fafc; padding:4px 6px; border-radius:4px;">' + escapeHtmlTarefa(s.descricao).replace(/\n/g, '<br>') + '</div>';
                 html += '</div>';
-                if (podeConcluirSub) {
-                    html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar arquivo"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
-                    if (!subTemAnexo && !subJaConcluida) {
-                        html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc</span>';
+                // Campo de Resposta (opção responder em campo de texto)
+                if (podeConcluirSub || s.resposta) {
+                    html += '<div style="margin-left:24px; margin-top:8px; margin-bottom:12px;">';
+                    if (podeConcluirSub && s.status !== 'concluida') {
+                        html += '<div style="display:flex; gap:8px; align-items:flex-end;">';
+                        html += '<div style="flex:1;">';
+                        html += '<label style="font-size:12px; color:#64748b; font-weight:600; display:block; margin-bottom:2px;">Sua Resposta:</label>';
+                        html += '<textarea id="resposta-sub-' + s.id + '" rows="1" placeholder="Digite sua resposta..." style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; resize:vertical; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'">' + (s.resposta || '') + '</textarea>';
+                        html += '</div>';
+                        html += '<button onclick="salvarRespostaSubtarefa(\'' + s.id + '\', \'' + id + '\')" style="background:#10b981; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; height:32px; transition:background 0.2s;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">Salvar</button>';
+                        html += '</div>';
+                    } else if (s.resposta) {
+                        html += '<div style="font-size:13px; color:#1e293b; background:#f0fdf4; padding:10px; border-radius:8px; border:1px solid #dcfce7; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">';
+                        html += '<div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">';
+                        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+                        html += '<strong style="font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.05em;">Resposta registrada</strong>';
+                        html += '</div>';
+                        html += '<div style="line-height:1.5;">' + escapeHtmlTarefa(s.resposta).replace(/\n/g, '<br>') + '</div>';
+                        html += '</div>';
                     }
+                    html += '</div>';
                 }
-                // Botão editar subtarefa - apenas quem criou, e só dentro de 24h
+                if (podeConcluirSub) {
+                    html += '<div style="display:flex; align-items:center; gap:6px; margin-top:5px; margin-left:24px;">';
+                    html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar arquivo"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
+                    if (!subTemAnexo && !subJaConcluida && !s.resposta) {
+                        html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc ou responda</span>';
+                    }
+                    html += '</div>';
+                }
+                
+                // Botões de ação da subtarefa (Editar/Excluir)
+                html += '<div style="display:flex; align-items:center; gap:8px; margin-top:5px; margin-left:24px;">';
                 var horasCriacaoSub = s.created_at ? ((new Date() - new Date(s.created_at)) / (1000 * 60 * 60)) : 999;
                 if (s.criado_por === userIdGlobal && horasCriacaoSub < 24) {
                     html += '<button onclick="editarSubtarefaExistente(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#0284c7; cursor:pointer; font-size:14px;" title="Editar subtarefa">✎</button>';
                 }
-                // Botão excluir subtarefa - Diretor, Secretário e Gerente (se criou a tarefa pai)
                 if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
-                    html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;">✕</button>';
+                    html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;" title="Excluir subtarefa">✕</button>';
                 }
+                html += '</div>';
+
                 html += '</div>';
                 // Mostrar anexos da subtarefa
                 if (subAnx.length > 0) {
@@ -2938,14 +2996,21 @@ async function toggleSubtarefa(subId, checked) {
             return;
         }
         
-        // Se marcando como concluída, verificar se tem anexo
+        // Se marcando como concluída, verificar se tem anexo OU resposta
         if (checked) {
             var { data: anexos } = await supabaseClient
                 .from('tarefa_anexos')
                 .select('id')
                 .eq('tarefa_id', subId);
-            if (!anexos || anexos.length === 0) {
-                Swal.fire('Ação Bloqueada', 'Anexe pelo menos um documento antes de concluir esta subtarefa.', 'warning');
+            
+            var { data: subData } = await supabaseClient
+                .from('tarefas')
+                .select('resposta')
+                .eq('id', subId)
+                .maybeSingle();
+
+            if ((!anexos || anexos.length === 0) && (!subData || !subData.resposta)) {
+                Swal.fire('Ação Bloqueada', 'Para concluir esta subtarefa, é obrigatório anexar um documento ou inserir uma resposta detalhada.', 'warning');
                 if (subInfo.tarefa_pai_id) {
                     fecharModal('modal-detalhe-tarefa');
                     abrirDetalheTarefa(subInfo.tarefa_pai_id);
@@ -4477,6 +4542,7 @@ window.abrirCriarSubtarefa = abrirCriarSubtarefa;
 window.confirmarSubtarefa = confirmarSubtarefa;
 window.excluirSubtarefa = excluirSubtarefa;
 window.toggleSubtarefa = toggleSubtarefa;
+window.salvarRespostaSubtarefa = salvarRespostaSubtarefa;
 window.uploadAnexo = uploadAnexo;
 window.excluirAnexo = excluirAnexo;
 window.enviarComentarioTarefa = enviarComentarioTarefa;
