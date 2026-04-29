@@ -12,7 +12,8 @@ Este guia documenta as permissões reais do banco de dados Supabase do SEMAC, co
 Secretário(a) (nível 4)
  ├── Diretor(a) de Meio Ambiente (nível 3)
  │    ├── Gerente de Posturas (nível 2) → Fiscal (nível 1)
- │    └── Gerente de Regularização Ambiental (nível 2) → Equipe Ambiental (nível 1)
+ │    ├── Gerente de Regularização Ambiental (nível 2) → Equipe Ambiental (nível 1)
+ │    └── Consórcio (nível 2) → Analista do Consórcio (nível 1)
  ├── Diretor(a) do Cuidado Animal (nível 3)
  │    └── Gerente do Cuidado Animal (nível 2)
  │         └── Coordenador(a) do Cuidado Animal (nível 1)
@@ -20,9 +21,10 @@ Secretário(a) (nível 4)
  └── Agente de Administração (Cargo Especial)
 
 Permissões de exclusão:
-Secretário(a) → pode excluir: Diretor, Gerente, Fiscal, Equipe Ambiental
-Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental
+Secretário(a) → pode excluir: Diretor, Gerente, Fiscal, Equipe Ambiental, Consórcio, Analista do Consórcio
+Diretor(a) → pode excluir: Gerente, Fiscal, Equipe Ambiental, Consórcio, Analista do Consórcio
 Gerente → pode excluir: Fiscal, Equipe Ambiental
+Consórcio → pode excluir: Analista do Consórcio
 ```
 
 
@@ -866,3 +868,101 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+
+---
+
+## 🆕 Atualizações para Cargos de Consórcio (Abril/2026)
+
+### Novos Cargos
+- **Consórcio** — cargo de gestão (nível hierárquico 1, igual a Gerente)
+- **Analista do Consórcio** — cargo de equipe (nível hierárquico 0, igual a Fiscal/Equipe Ambiental)
+
+### Hierarquia Atualizada
+```
+Secretário(a) (nível 4)
+ ├── Diretor(a) de Meio Ambiente (nível 3)
+ │    └── Gerente de Regularização Ambiental (nível 2)
+ │         ├── Equipe Ambiental (nível 1)
+ │         └── Consórcio (nível 2) → Analista do Consórcio (nível 1)
+```
+
+### SQLs a Executar no Supabase
+
+#### 1. Atualizar `get_nivel_hierarquico()`
+Adicionar reconhecimento do cargo "Consórcio" como nível 1:
+
+> ⚠️ **NÃO use DROP!** Esta função é usada por políticas RLS do banco. Use `CREATE OR REPLACE` mantendo o nome do parâmetro **exatamente igual** ao original (`user_id`).
+
+```sql
+CREATE OR REPLACE FUNCTION get_nivel_hierarquico(user_id UUID)
+RETURNS INTEGER AS $$
+DECLARE
+    v_role TEXT;
+BEGIN
+    SELECT role INTO v_role FROM profiles WHERE id = user_id;
+    IF v_role IS NULL THEN RETURN 0; END IF;
+    
+    v_role := lower(v_role);
+    IF v_role LIKE '%secretário%' OR v_role LIKE '%secretario%' THEN RETURN 4; END IF;
+    IF v_role LIKE '%diretor%' THEN RETURN 3; END IF;
+    IF v_role LIKE '%gerente%' THEN RETURN 2; END IF;
+    IF v_role LIKE '%consorcio%' AND v_role NOT LIKE '%analista%' THEN RETURN 2; END IF;
+    RETURN 1; -- Fiscal, Equipe Ambiental, Analista do Consórcio, etc.
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+> **Nota:** Ajuste o valor retornado conforme a escala numérica real usada no projeto (algumas versões usam 0-3, outras 1-4).
+
+#### 2. Atualizar `pode_gerenciar_usuario()`
+Garantir que Consórcio possa gerenciar apenas Analistas do Consórcio (nível 0):
+
+> ⚠️ **NÃO use DROP!** Mantenha os nomes dos parâmetros exatamente iguais aos originais para evitar quebrar as políticas RLS.
+
+```sql
+CREATE OR REPLACE FUNCTION pode_gerenciar_usuario(gerente_id UUID, alvo_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_manager_role TEXT;
+    v_target_role TEXT;
+    v_manager_nivel INTEGER;
+    v_target_nivel INTEGER;
+BEGIN
+    SELECT role INTO v_manager_role FROM profiles WHERE id = gerente_id;
+    SELECT role INTO v_target_role FROM profiles WHERE id = alvo_id;
+    
+    IF v_manager_role IS NULL OR v_target_role IS NULL THEN RETURN FALSE; END IF;
+    
+    v_manager_nivel := get_nivel_hierarquico(gerente_id);
+    v_target_nivel := get_nivel_hierarquico(alvo_id);
+    
+    -- Consórcio só pode gerenciar Analistas do Consórcio (nível inferior)
+    IF lower(v_manager_role) LIKE '%consorcio%' AND lower(v_manager_role) NOT LIKE '%analista%' THEN
+        RETURN lower(v_target_role) LIKE '%analista%' AND lower(v_target_role) LIKE '%consorcio%';
+    END IF;
+    
+    RETURN v_manager_nivel > v_target_nivel;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+#### 3. Atualizar Edge Function `delete-user`
+Incluir os novos cargos no array `allowedRoles`:
+
+```typescript
+const allowedRoles = [
+  'Gerente de Posturas', 'Gerente', 'gerente', 'gerente de posturas',
+  'Diretor(a) de Meio Ambiente', 'Diretor(a)', 'diretor', 'diretor de meio ambiente',
+  'Secretário(a)', 'secretário', 'secretario',
+  'Consórcio', 'consorcio'
+]
+```
+
+### Resumo de Permissões dos Novos Cargos
+
+| Cargo | Nível | Pode Gerenciar | Pode Ser Gerenciado Por |
+|-------|-------|----------------|------------------------|
+| Consórcio | 1 (ou 2)* | Analista do Consórcio | Secretário, Diretor |
+| Analista do Consórcio | 0 (ou 1)* | — | Secretário, Diretor, Consórcio |
+
+> \* Depende da escala numérica adotada na função SQL `get_nivel_hierarquico()` do projeto.

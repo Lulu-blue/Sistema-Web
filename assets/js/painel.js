@@ -59,9 +59,11 @@ async function getAuthUser() {
 function getNivelHierarquico(role) {
     if (!role) return 0;
     const roleLower = role.toLowerCase();
+    const roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (roleLower.includes('secretário') || roleLower.includes('secretario')) return 3;
     if (roleLower.includes('diretor')) return 2;
     if (roleLower.includes('gerente')) return 1;
+    if (roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista')) return 1;
     return 0;
 }
 
@@ -173,7 +175,8 @@ async function carregarDadosIniciais() {
             var isGerente = roleLower.includes('gerente') && !isCargoEspecial;  // Excluir cargos especiais
             var isDiretor = roleLower.includes('diretor');
             var isSecretario = roleLower.includes('secretário') || roleLower.includes('secretario') || roleLower.includes('secretaria') || roleLower.includes('secretária');
-            var isCargoGerencia = isGerente || isDiretor || isSecretario;
+            var isConsorcio = roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista');
+            var isCargoGerencia = isGerente || isDiretor || isSecretario || isConsorcio;
 
             console.log("DEBUG - Cargo:", roleLower, "| Normalizado:", roleLowerNorm, "| Gerencia:", isCargoGerencia, "| Especial:", isCargoEspecial);
             console.log("DEBUG - isGerenteInterfaceJuridica:", isGerenteInterfaceJuridica, "| isAgenteAdmin:", isAgenteAdmin);
@@ -189,7 +192,7 @@ async function carregarDadosIniciais() {
 
                 // Apenas Gerente (puro) vê menus standalone
                 // Diretor e Secretário têm seus próprios menus estruturados
-                var isGerentePuro = isGerente && !isDiretor && !isSecretario;
+                var isGerentePuro = (isGerente || isConsorcio) && !isDiretor && !isSecretario;
 
                 if (isGerentePuro) {
                     console.log("DEBUG - Gerente puro detectado, ativando container");
@@ -209,6 +212,7 @@ async function carregarDadosIniciais() {
                         isGerenteAmbiental,
                         isGerentePosturas,
                         isCargoEspecial,
+                        isConsorcio,
                         roleLower
                     });
 
@@ -276,6 +280,17 @@ async function carregarDadosIniciais() {
                         }
                     }
 
+                    // Para Consórcio, mostra container específico
+                    if (isConsorcio) {
+                        var hgc = document.getElementById('home-gerente-container');
+                        if (hgc) hgc.style.display = 'none';
+                        var hc = document.getElementById('home-consorcio-container');
+                        if (hc) {
+                            hc.style.display = 'block';
+                            if (typeof carregarDashboardConsorcio === 'function') carregarDashboardConsorcio();
+                        }
+                    }
+
                     // Mostra o wrapper comum de minhas tarefas (todos os gerentes)
                     var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
                     if (mtWrapper) mtWrapper.style.display = 'block';
@@ -287,13 +302,13 @@ async function carregarDadosIniciais() {
                 }
 
                 // Mostra botões de criar evento/tarefa (todos os cargos de gerência)
-                // EXCETO cargos especiais (Gerente Interface Juridica e Agente Admin)
+                // EXCETO cargos especiais (Gerente Interface Juridica e Agente Admin) e Consórcio
                 var roleLowerNorm3 = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 var isGerenteInterfaceJuridica = roleLowerNorm3.includes('gerente') && roleLowerNorm3.includes('interface') && roleLowerNorm3.includes('juridica');
                 var isAgenteAdmin = roleLowerNorm3.includes('agente') && roleLowerNorm3.includes('administracao');
                 var isCargoEspecial = isGerenteInterfaceJuridica || isAgenteAdmin;
 
-                if (!isCargoEspecial) {
+                if (!isCargoEspecial && !isConsorcio) {
                     var btnEvento = document.getElementById('btn-novo-evento-diretor');
                     if (btnEvento) btnEvento.style.display = 'inline-block';
                 }
@@ -614,7 +629,11 @@ function mudarAba(idAba) {
         var hdc = document.getElementById('home-diretor-container');
         var hsc = document.getElementById('home-secretario-container');
         var hEsp = document.getElementById('home-especial-container');
+        var hc = document.getElementById('home-consorcio-container');
         var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+
+        // Garante que container do Consórcio comece oculto (só ativado pelo bloco específico)
+        if (hc) hc.style.display = 'none';
 
         // Verificar cargos especiais (normalizar para remover acentos)
         var roleLower = (window.userRoleGlobal || '').toLowerCase();
@@ -925,6 +944,19 @@ function mudarAba(idAba) {
                 hga.style.display = 'block';
                 if (typeof carregarDashboardGerenteAmbiental === 'function') carregarDashboardGerenteAmbiental();
             }
+        }
+        // CONSÓRCIO: só vê minhas tarefas + equipe
+        else if (roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista')) {
+            console.log('DEBUG - Consorcio detectado');
+            if (hgc) hgc.style.display = 'none';
+            if (hdc) hdc.style.display = 'none';
+            if (hsc) hsc.style.display = 'none';
+            if (mtWrapper) mtWrapper.style.display = 'block';
+            var hc = document.getElementById('home-consorcio-container');
+            if (hc) {
+                hc.style.display = 'block';
+                if (typeof carregarDashboardConsorcio === 'function') carregarDashboardConsorcio();
+            }
         } else {
             console.log('DEBUG - Cargo padrão ou fiscal. Exibindo minhas tarefas. userRoleGlobal:', window.userRoleGlobal);
             if (mtWrapper) mtWrapper.style.display = 'block';
@@ -994,7 +1026,9 @@ window.addEventListener('modoTarefasMudou', function (e) {
         var hdc = document.getElementById('home-diretor-container');
         var hsc = document.getElementById('home-secretario-container');
         var hEsp = document.getElementById('home-especial-container');
+        var hc = document.getElementById('home-consorcio-container');
         var mtWrapper = document.getElementById('minhas-tarefas-wrapper');
+        if (hc) hc.style.display = 'none';
 
         // Verificar se é Gerente de Cuidado Animal
         var isGerenteCuidadoAnimal = roleLower.includes('gerente') && roleLower.includes('cuidado') && roleLower.includes('animal');
@@ -1323,10 +1357,12 @@ function atualizarHomeDiretor() {
     var hga = document.getElementById('home-gerente-ambiental-container');
     var hgca = document.getElementById('home-diretor-cuidado-animal-container');
     var hdc = document.getElementById('home-diretor-container');
+    var hc = document.getElementById('home-consorcio-container');
 
     if (hgc) hgc.style.display = 'none';
     if (hga) hga.style.display = 'none';
     if (hgca) hgca.style.display = 'none';
+    if (hc) hc.style.display = 'none';
     if (hdc) {
         hdc.style.display = 'block';
         if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
@@ -1418,6 +1454,106 @@ async function carregarDashboardGerenteAmbiental() {
         }
     }
 }
+
+// --- FUNÇÃO PARA CARREGAR DASHBOARD DO CONSÓRCIO ---
+async function carregarDashboardConsorcio() {
+    console.log('DEBUG - carregarDashboardConsorcio chamado');
+
+    var totalAnalistas = document.getElementById('consorcio-total-analistas');
+    var containerLista = document.getElementById('consorcio-equipe-lista');
+
+    try {
+        var { data: equipe, error } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, role, ativo')
+            .in('role', ['Analista do Consórcio', 'analista do consorcio'])
+            .eq('ativo', true);
+
+        if (error) throw error;
+
+        var membros = equipe || [];
+
+        var membrosComStats = await Promise.all(membros.map(async function (m) {
+            var { data: tarefas } = await supabaseClient
+                .from('tarefas')
+                .select('status')
+                .eq('criado_por', m.id);
+
+            var stats = { total: 0, concluidas: 0, pendentes: 0 };
+            if (tarefas) {
+                stats.total = tarefas.length;
+                stats.concluidas = tarefas.filter(t => t.status === 'concluida').length;
+                stats.pendentes = tarefas.filter(t => t.status !== 'concluida').length;
+            }
+            return { ...m, stats };
+        }));
+
+        var countAnalistas = membros.filter(m => m.role && m.role.includes('Analista')).length;
+
+        if (totalAnalistas) totalAnalistas.textContent = countAnalistas;
+
+        if (containerLista) {
+            if (membros.length === 0) {
+                containerLista.innerHTML = '<p style="color:#94a3b8; text-align:center; padding: 40px;">Nenhum membro da equipe encontrado.</p>';
+            } else {
+                var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+                membrosComStats.forEach(function (m) {
+                    html += '<div onclick="if(typeof abrirEstatisticasFuncionario === \'function\') abrirEstatisticasFuncionario(\'' + m.id + '\', \'' + (m.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (m.role || 'Sem cargo').replace(/'/g, "\\'") + '\'); else mostrarTarefasFuncionario(\'' + m.id + '\', \'' + (m.full_name || 'Sem nome') + '\');" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; transition:all 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'">';
+                    html += '<div style="display:flex; align-items:center; gap:12px;">';
+                    html += '<div style="width:40px; height:40px; background:linear-gradient(135deg, #d97706, #b45309); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:600; font-size:16px;">' + (m.full_name ? m.full_name.charAt(0).toUpperCase() : '?') + '</div>';
+                    html += '<div>';
+                    html += '<div style="font-weight:600; color:#1e293b; font-size:15px;">' + (m.full_name || 'Sem nome') + '</div>';
+                    html += '<div style="font-size:13px; color:#64748b;">' + (m.role || 'Sem cargo') + '</div>';
+                    html += '</div>';
+                    html += '</div>';
+                    html += '<button onclick="event.stopPropagation(); desativarFuncionarioConsorcio(\'' + m.id + '\')" style="background:#fee2e2; color:#ef4444; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Desativar</button>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                containerLista.innerHTML = html;
+            }
+        }
+
+    } catch (err) {
+        console.error('Erro ao carregar dashboard do consorcio:', err);
+        if (containerLista) {
+            containerLista.innerHTML = '<p style="color:#ef4444; text-align:center; padding: 40px;">Erro ao carregar equipe.</p>';
+        }
+    }
+}
+window.carregarDashboardConsorcio = carregarDashboardConsorcio;
+
+// Função para desativar funcionário do consórcio
+async function desativarFuncionarioConsorcio(userId) {
+    var result = await Swal.fire({
+        title: 'Desativar Funcionário?',
+        text: 'O funcionário será marcado como inativo e não aparecerá mais na lista.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, desativar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+        var { error } = await supabaseClient
+            .from('profiles')
+            .update({ ativo: false, role: 'inativo' })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        Swal.fire('Desativado!', 'O funcionário foi desativado.', 'success');
+        if (typeof carregarDashboardConsorcio === 'function') carregarDashboardConsorcio();
+        if (typeof carregarHierarquiaCompletaSecretario === 'function') carregarHierarquiaCompletaSecretario();
+    } catch (err) {
+        console.error('Erro ao desativar funcionário do consórcio:', err);
+        Swal.fire('Erro', 'Não foi possível desativar o funcionário.', 'error');
+    }
+}
+window.desativarFuncionarioConsorcio = desativarFuncionarioConsorcio;
 
 // Função para mostrar tarefas de um funcionário específico
 async function mostrarTarefasFuncionario(userId, userName) {
@@ -1617,6 +1753,11 @@ function irParaHome() {
     // Gerente de Regularização Ambiental: vai para modo gerencia_ambiental
     else if (roleLower.includes('regularizacao') || roleLower.includes('regularização')) {
         if (typeof configurarModoTarefas === 'function') configurarModoTarefas('gerencia_ambiental');
+        mudarAba('home');
+    }
+    // Consórcio: modo consorcio
+    else if (roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista')) {
+        if (typeof configurarModoTarefas === 'function') configurarModoTarefas('consorcio');
         mudarAba('home');
     }
     // Fiscal e outros: modo normal

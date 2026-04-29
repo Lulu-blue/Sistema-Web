@@ -48,7 +48,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 
 ### Perfis de Usuário (Roles)
 
-O sistema possui **8+ cargos distintos** com permissões específicas:
+O sistema possui **10+ cargos distintos** com permissões específicas:
 
 | Cargo | Permissões Principais |
 |-------|----------------------|
@@ -57,11 +57,13 @@ O sistema possui **8+ cargos distintos** com permissões específicas:
 | **Fiscal de Posturas** | Mesmas permissões do Fiscal (variação de cargo) |
 | **Gerente Fiscal** | Histórico Geral, Bairros, visão de gestão de fiscais |
 | **Gerente de Posturas** | Projetos, Bairros, Tarefas, Calendário de Eventos |
-| **Gerente de Regularização Ambiental** | Gestão de equipe ambiental (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares), Tarefas, Calendário |
+| **Gerente de Regularização Ambiental** | Gestão de equipe ambiental (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares), gestão do Consórcio, Tarefas, Calendário |
 | **Administrativo de Posturas** | Acesso ao Histórico Geral (visor apenas) |
 | **Diretor de Meio Ambiente** | Acesso total com menus expansíveis "Gerência de Posturas" e "Gerência de Regularização Ambiental", alternância entre modos Direção e Gerência |
 | **Secretário(a)** | Acesso total com menu expansível "Direção de Meio Ambiente", gestão de Diretores, criação de tarefas para qualquer usuário |
 | **Gerente de Interface Jurídica** | Tarefas próprias (criar/ver apenas onde é responsável), visualização de projetos, **sem** gestão de equipe |
+| **Consórcio** | Criação e visualização de tarefas, atribuição para Analistas do Consórcio, criação de subtarefas em tarefas próprias, **sem** acesso a Eventos |
+| **Analista do Consórcio** | Tarefas atribuídas pelo Consórcio, visualização de tarefas onde é responsável, **sem** gestão de equipe |
 | **Agente de Administração** | Tarefas próprias (criar/ver apenas onde é responsável), visualização de projetos, **sem** gestão de equipe |
 
 ### Aba de Configurações (Meu Perfil)
@@ -157,6 +159,7 @@ Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projeto
 | Diretor | Todos os eventos | ✓ | ✓ |
 | Fiscal | Todos os eventos | ✗ | ✗ |
 | Gerente | Eventos onde é responsável ou tem tarefa vinculada | ✗ | ✗ |
+| Consórcio | ✗ (sem acesso) | ✗ | ✗ |
 | Cargos Especiais* | Apenas onde é responsável (Tarefas de Eventos) | ✗ | ✗ |
 
 \* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
@@ -277,25 +280,25 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 
 ### Permissões por Role
 
-| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) | Gerente RA | Cargos Especiais* |
-|------|--------|---------------|--------------------------|---------------|------------|-------------------|
-| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas | Só da equipe RA | Só onde é responsável |
-| Alterar status | Apenas das suas | Todas | Todas | Todas | Todas | Apenas das suas |
-| Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
-| Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
-| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
-| Editar tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
-| Editar subtarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | ✗ |
-| Excluir tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
-| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
-| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ |
-| Comentar em tarefa | Só nas suas | Todas | Todas | Todas | Todas | Só nas suas |
-| Ver eventos/projetos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (onde é responsável) |
-| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
-| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Gerenciar Equipe Ambiental | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ |
-| Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
-| Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| Ação | Fiscal | Gerente/Admin | Diretor de Meio Ambiente | Secretário(a) | Gerente RA | Consórcio | Cargos Especiais* |
+|------|--------|---------------|--------------------------|---------------|------------|-----------|-------------------|
+| Ver tarefas no Kanban | Só as suas | Todas | Todas | Todas | Só da equipe RA | Próprias + Analistas | Só onde é responsável |
+| Alterar status | Apenas das suas | Todas | Todas | Todas | Todas | Próprias + Analistas | Apenas das suas |
+| Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
+| Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (só nas próprias) | ✗ |
+| Editar tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
+| Editar subtarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | ✗ | ✗ |
+| Excluir tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
+| Marcar subtarefa como concluída | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ | ✗ |
+| Anexar PDF em subtarefa | Só nas suas tarefas | Todas | Todas | Todas | Todas | ✗ | ✗ |
+| Comentar em tarefa | Só nas suas | Todas | Todas | Todas | Todas | Só nas suas | Só nas suas |
+| Ver eventos/projetos | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ (onde é responsável) |
+| Gerenciar Gerentes | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Gerenciar Diretores | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| Gerenciar Equipe Ambiental | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
 
 \* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
 
@@ -422,24 +425,29 @@ O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveita
 #### Estrutura da Árvore Hierárquica (Visualização Secretário):
 
 ```
-                    SEMAC
-                      │
-    ┌─────────────────┼─────────────────┐
-    │                 │                 │
-Diretor MA      Diretor CA      [Cargos Especiais]
-    │                 │              (embaixo)
-┌───┴───┐             │
-│       │             │
-Post.  Amb.      Gerente CA
-│       │             │
-Fisc.  Equipe    Coordenadores
+                         SEMAC
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+   Diretor MA         Diretor CA      [Cargos Especiais]
+         │                 │              (embaixo)
+    ┌────┴────┐            │
+    │         │            │
+ Post.      Amb.      Gerente CA
+    │         │            │
+ Fisc.   ┌───┴───┐    Coordenadores
+         │       │
+      Equipe  Consórcio
+         │       │
+                Analistas
 ```
 
 **Características da visualização:**
 - **Diretor de Meio Ambiente**: Expandido horizontalmente com duas colunas internas (Posturas e Ambiental)
 - **Gerência de Posturas**: Coluna com Gerentes → Fiscais (grid 2 colunas)
-- **Gerência Ambiental**: Coluna com Gerentes → Equipe RA (grid 2 colunas)
+- **Gerência Ambiental**: Coluna com Gerentes → Equipe RA (grid 2 colunas) + Consórcio + Analistas do Consórcio
 - **Diretor do Cuidado Animal**: Coluna única com Gerente → Coordenadores
+- **Consórcio e Analistas**: Coluna à direita dentro da Gerência Ambiental, com linha horizontal azul conectora
 - **Cargos Especiais (RH/ADM e Jurídico)**: Seção separada embaixo de toda a hierarquia
 - **Cores por hierarquia**:
   - Secretário: `#1e3a5f` (azul escuro)
@@ -448,6 +456,8 @@ Fisc.  Equipe    Coordenadores
   - Fiscais: `#b45309` (laranja)
   - Gerência Ambiental: `#1e3a5f` (azul)
   - Equipe RA: `#065f46` (verde)
+  - Consórcio: `#d97706` (âmbar)
+  - Analistas do Consórcio: `#f59e0b` (âmbar claro)
   - Diretor CA: `#db2777` (rosa)
   - Gerente CA: `#be185d` (rosa escuro)
   - Coordenadores: `#c026d3` (magenta)
@@ -477,7 +487,10 @@ Fisc.  Equipe    Coordenadores
 Secretário(a) (nível 4)
  ├── Diretor(a) de Meio Ambiente (nível 3)
  │    ├── Gerente de Posturas (nível 2) → Fiscal (nível 1)
- │    └── Gerente de Regularização Ambiental (nível 2) → Equipe Ambiental (nível 1)
+ │    └── Gerente de Regularização Ambiental (nível 2)
+ │         ├── Equipe Ambiental (nível 1)
+ │         ├── Consórcio (nível 1)
+ │         └── Analista do Consórcio (nível 1)
  │
  ├── Diretor(a) do Cuidado Animal (nível 3)
  │    └── Gerente do Cuidado Animal (nível 2)
@@ -547,7 +560,7 @@ Secretário(a) (nível 4)
 
 #### Gerente de Regularização Ambiental
 - Vê tarefas que **criou** OU onde é **responsável**
-- Pode criar tarefas para qualquer membro da equipe ambiental
+- Pode criar tarefas para qualquer membro da equipe ambiental e para o Consórcio
 - **Não pode** criar projetos/eventos (apenas Diretor/Secretário)
 
 ### Storage Buckets
@@ -570,6 +583,8 @@ O Gerente de Regularização Ambiental possui visão específica para gestão da
 | **Engenheiro(a) Civil** | Especialista em regularização urbanística |
 | **Analista Ambiental** | Análise de processos ambientais |
 | **Auxiliar de Serviços II** | Suporte operacional à equipe |
+| **Consórcio** | Parceiro externo para execução de serviços ambientais |
+| **Analista do Consórcio** | Analista vinculado ao Consórcio para tarefas específicas |
 
 ### Funcionalidades:
 - **Dashboard de Equipe**: Contadores por cargo (4 cards coloridos)
@@ -788,7 +803,7 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Layout em Duas Colunas**: Árvore hierárquica (60%) + Dashboards (40%) para melhor aproveitamento de espaço
 - **Árvore Hierárquica Visual**: Organograma completo da SEMAC com cards transparentes, bordas coloridas por cargo e conectores entre níveis
 - **Contadores Discretos**: Removidos os cards grandes de totais do topo; agora exibidos como textos sutis embaixo de cada cargo ("3 diretores", "5 fiscais")
-- **Botões "+ Novo" por Nível**: Cadastro rápido de funcionários em cada nível hierárquico (Diretores, Gerentes, Fiscais, Equipe Ambiental)
+- **Botões "+ Novo" por Nível**: Cadastro rápido de funcionários em cada nível hierárquico (Diretores, Gerentes, Fiscais, Equipe Ambiental, Consórcio, Analistas do Consórcio)
 - **Desativação com Transferência**: Ícone de lixeira em cada card permite desativar funcionário com opção de transferir tarefas para outro
 
 ### Novos Dashboards na Sidebar
@@ -797,8 +812,8 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Calendário de Projetos**: Mini-calendário mensal com dias destacados conforme eventos, lista dos 3 próximos eventos e navegação rápida para aba Projetos
 
 ### Gestão Hierárquica Completa
-- Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal e Gerente RA/Equipe Ambiental
-- Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal), Verde (Equipe)
+- Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal, Gerente RA/Equipe Ambiental/Consórcio/Analistas
+- Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal), Verde (Equipe), Âmbar (Consórcio), Âmbar claro (Analistas do Consórcio)
 - Modal combinado para Fiscais: Estatísticas de tarefas + relatório de produtividade lado a lado
 
 ### Nova Hierarquia: Cuidado Animal
@@ -990,6 +1005,55 @@ Corrigidos **3 bugs críticos** onde a pontuação total, o gráfico de produtiv
 - **Título e botão adaptativos**: em modo edição, o modal exibe **"Editando Subtarefa"** e o botão exibe **"Salvar"**.
 - **Persistência**: ao salvar, o sistema executa `UPDATE` na tabela `tarefas`, sincroniza os responsáveis em `tarefa_responsaveis`, faz upload de novo anexo se houver e mantém intactos o `status`, `criado_por`, `tarefa_pai_id` e `created_at`.
 - **Funções alteradas em `tarefas.js`**: `abrirCriarSubtarefa()` (novo parâmetro `editarSubtarefaId`), `confirmarSubtarefa()` (suporte a update), `carregarListaResponsaveisSubtarefa()` / `renderizarListaResponsaveisSubComPesquisa()` (pré-seleção), `carregarDadosSubtarefaParaEdicao()` (nova), `editarSubtarefaExistente()` (nova).
+
+## 🆕 Atualizações Recentes (25/04/2026) — Árvore Hierárquica do Secretário
+
+### Consórcio e Analistas do Consórcio na Hierarquia Visual
+- **Consórcio** adicionado como nova coluna dentro da **Gerência Ambiental**, ao lado da Equipe RA.
+- **Analistas do Consórcio** aparecem como subnível abaixo do Consórcio (igual aos Fiscais abaixo dos Gerentes de Posturas).
+- **Linha horizontal azul** (`#1e3a5f`) conecta a Gerência Ambiental às duas colunas internas (Equipe RA + Consórcio).
+- **Cores**:
+  - Consórcio: `#d97706` (âmbar)
+  - Analistas do Consórcio: `#f59e0b` (âmbar claro)
+- **Dropdown "+ Novo"** para Equipe RA com opções: Eng. Agrônomo, Eng. Civil, Analista Ambiental, Auxiliar.
+- **Botão "+ Novo"** separado para Consórcio e para Analista do Consórcio.
+
+### Correção de Estrutura HTML (Divs Mal Fechadas)
+- Corrigido bug crítico na `carregarHierarquiaCompletaSecretario()` onde o **wrapper interno do Diretor MA** e o **flex de GP+GA** não eram fechados.
+- Esse bug fazia o Diretor MA "engolir" o Diretor CA e os Cargos Especiais, quebrando o layout inteiro da árvore.
+- Após a correção, cada nível da hierarquia fecha suas próprias tags corretamente.
+
+### Ajustes de Espaçamento e Layout
+| Elemento | Valor Anterior | Valor Atual |
+|----------|---------------|-------------|
+| Gap entre Diretor MA e Diretor CA | 10px | **60px** |
+| Gap entre Gerência Posturas e Gerência Ambiental | 45px | **65px** |
+| Largura coluna Gerência Posturas (GP) | 220px | **290px** |
+| Largura coluna Equipe RA | 270px | **210px** |
+| Largura coluna Consórcio | 140px | **130px** |
+
+- **Fiscais**: permanecem em grid de **2 colunas**, com cada card aproveitando a nova largura da GP (~142px por card).
+- **Consórcio**: permanece em **1 coluna** (fila), alinhado com a linha horizontal azul.
+
+### Linha Horizontal Azul Estendida
+- A linha que conecta a Gerência Ambiental às colunas internas (Equipe + Consórcio) agora se estende:
+  - **10px para a esquerda**
+  - **30px para a direita**
+- Implementado com `width: calc(100% + 40px)` e `margin-left: -10px`, sem quebrar o container pai.
+
+### Comportamento Responsivo (Wrap)
+- O nível 2 (Diretores) voltou a usar **`flex-wrap: wrap`**.
+- Em telas grandes: Diretor MA e Diretor CA ficam **lado a lado**.
+- Em telas pequenas: Diretor CA **desce sozinho** para a linha de baixo, permanecendo centralizado.
+- O Diretor MA permanece centralizado em cima, independente do wrap.
+
+### Regras de Tarefas para Consórcio
+- **Gerente de Regularização Ambiental** pode atribuir tarefas ao Consórcio (mas não aos Analistas do Consórcio diretamente).
+- **Consórcio** pode criar tarefas, visualizar tarefas, atribuir tarefas aos Analistas do Consórcio e criar subtarefas em suas próprias tarefas.
+- **Detecção por normalização**: todas as verificações de cargo usam `.normalize('NFD').replace(/[\u0300-\u036f]/g, '')` para garantir compatibilidade com "Consórcio" acentuado no banco de dados.
+
+### Correção de Data Inválida em Tarefas
+- `formatarDataBRTarefa()` agora extrai `substring(0, 10)` antes de converter a string em `Date`, evitando o erro `"Invalid Date"` em campos de prazo.
 
 ### Reorganização de Pastas do Projeto
 O projeto foi completamente reorganizado em pastas específicas para melhor manutenibilidade e clareza:

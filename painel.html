@@ -225,8 +225,8 @@
 
                     <!-- Botão Toggle Gerência de Regularização Ambiental -->
                     <button class="nav-btn" onclick="toggleGerenciaAmbiental()" id="btn-toggle-gerencia-ambiental">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 5v14M5 12h14"></path>
                         </svg>
                         Gerência de Regularização Ambiental
@@ -243,8 +243,8 @@
 
                     <!-- Botão Toggle Cuidado Animal -->
                     <button class="nav-btn" onclick="toggleCuidadoAnimal()" id="btn-toggle-cuidado-animal">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 5v14M5 12h14"></path>
                         </svg>
                         Cuidado Animal
@@ -262,8 +262,7 @@
 
                 <!-- Seção exclusiva para Secretário(a) -->
                 <div id="secretario-options" style="display: none;">
-                    <button class="nav-btn"
-                        onclick="mudarAba('tarefas');">
+                    <button class="nav-btn" onclick="mudarAba('tarefas');">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M9 11l3 3L22 4" />
@@ -288,14 +287,14 @@
                         <button class="nav-btn"
                             onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao'); mudarAba('tarefas');"
                             style="font-size: 0.85rem;">
-                            Tarefas (Direção)
+                            Tarefas (Diretoria)
                         </button>
                         <!-- Botão Toggle Gerência de Posturas (sub-submenu) -->
                         <button class="nav-btn" onclick="toggleGerenciaPosturasSecretario()"
                             id="btn-toggle-gerencia-secretario"
                             style="font-size: 0.85rem; background: rgba(0,0,0,0.03);">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" style="margin-right: 6px;">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; margin-right: 2px;">
                                 <path d="M12 5v14M5 12h14"></path>
                             </svg>
                             Gerência de Posturas
@@ -321,7 +320,7 @@
                             id="btn-toggle-gerencia-ambiental-secretario"
                             style="font-size: 0.85rem; background: rgba(0,0,0,0.03); margin-top: 4px;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" style="margin-right: 6px;">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; margin-right: 2px;">
                                 <path d="M12 5v14M5 12h14"></path>
                             </svg>
                             Gerência de Regularização Ambiental
@@ -554,9 +553,9 @@
                         </div>
                         <div class="grafico-container" style="flex: 0.7; min-width: 240px; max-width: 350px;">
                             <h3>Controle Processual</h3>
-                            <div
-                                style="position: relative; height: 380px; width: 100%; overflow: visible;">
-                                <canvas id="grafico-docs-tipo" style="width: 100% !important; height: 100% !important;"></canvas>
+                            <div style="position: relative; height: 380px; width: 100%; overflow: visible;">
+                                <canvas id="grafico-docs-tipo"
+                                    style="width: 100% !important; height: 100% !important;"></canvas>
                             </div>
                         </div>
                         <div class="grafico-container" style="flex: 1; min-width: 280px;">
@@ -668,7 +667,8 @@
                         </div>
                     </div>
 
-                    <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
+                    <div
+                        style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
                         <!-- Coluna Gerentes de Cuidado Animal -->
                         <div class="grafico-container" style="width: 100%;">
                             <div
@@ -702,6 +702,38 @@
                                 </button>
                             </div>
                             <div id="diretor-cuidado-animal-coordenadores-lista" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Container exclusivo do CONSÓRCIO: Gestão de Equipe -->
+                <div id="home-consorcio-container" style="display:none; margin-top: 24px;">
+                    <div class="pontuacao-resumo"
+                        style="margin-top: 2rem; display: grid; grid-template-columns: repeat(1, 1fr); gap: 16px; max-width: 300px;">
+                        <div class="pontuacao-card"
+                            style="background: linear-gradient(135deg, #d97706, #b45309); color: white;">
+                            <h3>Analistas do Consórcio</h3>
+                            <div class="valor" id="consorcio-total-analistas">0</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="grafico-container" style="width: 100%;">
+                            <div
+                                style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin: 0; color: #d97706;">Equipe do Consórcio</h3>
+                                <button onclick="abrirFormNovoFuncionarioPorCargo('Analista do Consórcio')"
+                                    style="background: linear-gradient(135deg, #d97706, #b45309); color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                    Novo Analista
+                                </button>
+                            </div>
+                            <div id="consorcio-equipe-lista" style="padding: 10px 0;">
                                 <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
                             </div>
                         </div>
@@ -886,7 +918,7 @@
                 <!-- Container exclusivo do DIRETOR: Gestão de Gerentes -->
                 <div id="home-diretor-container" style="display:none; margin-top: 24px;">
                     <div class="pontuacao-resumo"
-                        style="margin-top: 2rem; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        style="margin-top: 2rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
                         <div class="pontuacao-card"
                             style="background: linear-gradient(135deg, #0c3e2b, #062117); color: white;">
                             <h3>Gerentes de Posturas</h3>
@@ -897,9 +929,15 @@
                             <h3>Gerentes de Regularização Ambiental</h3>
                             <div class="valor" id="diretor-total-gerentes-ambiental">0</div>
                         </div>
+                        <div class="pontuacao-card"
+                            style="background: linear-gradient(135deg, #d97706, #b45309); color: white;">
+                            <h3>Consórcios</h3>
+                            <div class="valor" id="diretor-total-consorcios">0</div>
+                        </div>
                     </div>
 
-                    <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
+                    <div
+                        style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
                         <!-- Coluna Gerentes de Posturas -->
                         <div class="grafico-container" style="width: 100%;">
                             <div style="margin-bottom: 16px;">
@@ -915,6 +953,15 @@
                                 <h3 style="margin: 0; color: #1e3a5f;">Gerentes de Regularização Ambiental</h3>
                             </div>
                             <div id="diretor-gerentes-ambiental-hierarquia" style="padding: 10px 0;">
+                                <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
+                            </div>
+                        </div>
+                        <!-- Coluna Consórcios -->
+                        <div class="grafico-container" style="width: 100%;">
+                            <div style="margin-bottom: 16px;">
+                                <h3 style="margin: 0; color: #d97706;">Consórcios</h3>
+                            </div>
+                            <div id="diretor-consorcios-hierarquia" style="padding: 10px 0;">
                                 <div style="text-align: center; color: #94a3b8; padding: 40px;">Carregando...</div>
                             </div>
                         </div>

@@ -2794,6 +2794,7 @@ async function carregarDashboardDiretor() {
     try {
         await carregarGerentesHierarquiaDiretor();
         await carregarGerentesAmbientalHierarquiaDiretor();
+        await carregarConsorciosHierarquiaDiretor();
         // Carregar tarefas do diretor
         if (typeof carregarMinhasTarefasHome === 'function') {
             carregarMinhasTarefasHome('diretor-minhas-tarefas');
@@ -2942,6 +2943,97 @@ async function carregarGerentesAmbientalHierarquiaDiretor() {
         console.error("Erro ao carregar gerentes de regularização ambiental:", err);
         container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar gerentes.</div>';
     }
+}
+
+// Carrega a lista de Consórcios
+async function carregarConsorciosHierarquiaDiretor() {
+    var container = document.getElementById('diretor-consorcios-hierarquia');
+    if (!container) return;
+
+    try {
+        var { data: consorciosLista, error: errConsorcios } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, email_real, matricula')
+            .in('role', ['Consórcio', 'consorcio']);
+
+        if (errConsorcios) throw errConsorcios;
+
+        var elTotal = document.getElementById('diretor-total-consorcios');
+        if (elTotal) elTotal.innerText = consorciosLista ? consorciosLista.length : 0;
+
+        if (!consorciosLista || consorciosLista.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">Nenhum consórcio cadastrado.</div>';
+            return;
+        }
+
+        var html = '';
+        var cores = ['#d97706', '#f59e0b', '#b45309', '#fbbf24', '#78350f'];
+
+        consorciosLista.forEach(function (cons, index) {
+            var cor = cores[index % cores.length];
+
+            var fotoHtml = '';
+            if (cons.avatar_url) {
+                fotoHtml = '<img src="' + cons.avatar_url + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:3px solid ' + cor + '">';
+            } else {
+                fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + '">' + (cons.full_name ? cons.full_name.charAt(0).toUpperCase() : 'C') + '</div>';
+            }
+
+            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + cons.id + '\', \'' + (cons.full_name || '').replace(/'/g, "\\'") + '\', \'Consórcio\')">';
+
+            html += '<div style="display:flex;align-items:center;gap:12px;">';
+            html += fotoHtml;
+            html += '<div style="flex:1;">';
+            html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (cons.full_name || 'Sem Nome') + '</div>';
+            html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (cons.matricula || '---') + '</div>';
+            if (cons.email_real) {
+                html += '<div style="font-size:11px;color:#94a3b8;">' + cons.email_real + '</div>';
+            }
+            html += '</div>';
+
+            html += '<div style="display:flex;gap:8px;" onclick="event.stopPropagation();">';
+            html += '<button onclick="abrirExcluirConsorcioDiretor(\'' + cons.id + '\', \'' + (cons.full_name || '').replace(/'/g, "\\'") + '\')" title="Excluir" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;color:#dc2626;font-weight:600;">Excluir</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        html += '<div style="margin-top:16px;text-align:center;">';
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Consórcio\')" style="background:transparent;border:2px dashed #d97706;color:#d97706;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:100%;transition:all 0.2s;" onmouseover="this.style.background=\'#d97706\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#d97706\'">+ Novo Consórcio</button>';
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Erro ao carregar consórcios:", err);
+        container.innerHTML = '<div style="text-align:center; color:#ef4444; padding:40px;">Erro ao carregar consórcios.</div>';
+    }
+}
+
+// Modal de confirmação para desativar Consórcio
+function abrirExcluirConsorcioDiretor(userId, nome) {
+    Swal.fire({
+        title: 'Desativar ' + nome + '?',
+        text: 'O usuário será marcado como inativo.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, desativar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444'
+    }).then(async function (result) {
+        if (!result.isConfirmed) return;
+        try {
+            var { error } = await supabaseClient.from('profiles').update({ ativo: false, role: 'inativo' }).eq('id', userId);
+            if (error) throw error;
+            Swal.fire('Desativado!', nome + ' foi desativado.', 'success');
+            if (typeof carregarConsorciosHierarquiaDiretor === 'function') carregarConsorciosHierarquiaDiretor();
+            if (typeof carregarHierarquiaCompletaSecretario === 'function') carregarHierarquiaCompletaSecretario();
+        } catch (err) {
+            console.error('Erro ao desativar consórcio:', err);
+            Swal.fire('Erro', 'Não foi possível desativar.', 'error');
+        }
+    });
 }
 
 // Abre modal para criar novo Gerente
@@ -3572,6 +3664,8 @@ async function carregarHierarquiaCompletaSecretario() {
         var fiscais = [];
         var equipeAmbiental = [];
         var equipeCuidadoAnimal = [];
+        var consorcios = [];
+        var analistasConsorcio = [];
 
         funcionarios.forEach(function (f) {
             var roleRaw = (f.role || '').toLowerCase();
@@ -3605,6 +3699,14 @@ async function carregarHierarquiaCompletaSecretario() {
             } else if (roleNorm.includes('fiscal') || roleNorm.includes('administrativo')) {
                 fiscais.push(f);
             }
+            // CONSÓRCIO
+            else if (roleNorm.includes('consorcio') && !roleNorm.includes('analista')) {
+                consorcios.push(f);
+            }
+            // ANALISTAS DO CONSÓRCIO
+            else if (roleNorm.includes('analista') && roleNorm.includes('consorcio')) {
+                analistasConsorcio.push(f);
+            }
             // EQUIPE DE REGULARIZAÇÃO AMBIENTAL
             else if (roleNorm.includes('agronomo') || roleNorm.includes('agrônomo') ||
                      roleNorm.includes('engenheiro') || roleNorm.includes('engenheira') ||
@@ -3622,7 +3724,9 @@ async function carregarHierarquiaCompletaSecretario() {
             gerentesAmbiental: gerentesAmbiental.length,
             fiscais: fiscais.length,
             equipeAmbiental: equipeAmbiental.length,
-            equipeCuidadoAnimal: equipeCuidadoAnimal.length
+            equipeCuidadoAnimal: equipeCuidadoAnimal.length,
+            consorcios: consorcios.length,
+            analistasConsorcio: analistasConsorcio.length
         });
 
         // Criar árvore visual hierárquica com linhas de conexão
@@ -3637,27 +3741,27 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '<div style="width: 2px; height: 15px; background: #1e3a5f; margin: 0 auto;"></div>';
         
         // ===== NÍVEL 2: DIRETORES E CARGOS =====
-        html += '<div style="display: flex; justify-content: center; gap: 35px; width: 100%; margin-top: 5px; flex-wrap: wrap; align-items: flex-start;">';
+        html += '<div style="display: flex; justify-content: center; gap: 60px; width: 100%; margin-top: 5px; flex-wrap: wrap; align-items: flex-start;">';
         
         // === DIRETOR DE MEIO AMBIENTE ===
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 700px; flex: 1;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center;">';
         html += '<span style="background: #7c3aed; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) DE MEIO AMBIENTE</span>';
         diretoresMA.forEach(function (d) { html += renderizarCardArvore(d, '#7c3aed', 'diretor'); });
         if (diretoresMA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) de Meio Ambiente\')" style="margin-top: 10px; background: #7c3aed15; border: 1px dashed #7c3aed; color: #7c3aed; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
         
-        // Linha vertical para subníveis
-        html += '<div style="width: 2px; height: 15px; background: #7c3aed; margin: 8px 0 0 0;"></div>';
+        // Linha vertical saindo do Diretor MA
+        html += '<div style="width: 2px; height: 10px; background: #7c3aed; margin: 8px 0 0 0;"></div>';
         
-        // Container das duas gerências lado a lado
-        html += '<div style="display: flex; justify-content: center; gap: 45px; width: 100%; align-items: flex-start; padding: 0 10px; box-sizing: border-box;">';
+        // Wrapper que contém a linha horizontal + as duas colunas (largura = conteúdo)
+        html += '<div style="display: flex; flex-direction: column; align-items: stretch;">';
+        html += '<div style="width: 100%; height: 2px; background: #7c3aed; margin: 0 0 4px 0;"></div>';
+        html += '<div style="display: flex; justify-content: center; gap: 65px; align-items: flex-start;">';
         
         // Gerência de Posturas
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 280px; flex: 0 0 auto;">';
-        html += '<div style="width: 2px; height: 15px; background: #0c3e2b;"></div>';
-        html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERÊNCIA POSTURAS</span>';
-        html += '<div style="width: 2px; height: 10px; background: #0c3e2b; margin: 2px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 290px; flex: 0 0 auto;">';
+        html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA POSTURAS</span>';
+        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
         gerentesPosturas.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#0c3e2b', 'gerente_posturas'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Posturas\')" style="margin-top: 8px; background: #0c3e2b15; border: 1px dashed #0c3e2b; color: #0c3e2b; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
@@ -3674,19 +3778,24 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>';
         
         // Gerência Ambiental
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 280px; flex: 0 0 auto;">';
-        html += '<div style="width: 2px; height: 15px; background: #1e3a5f;"></div>';
-        html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERÊNCIA AMBIENTAL</span>';
-        html += '<div style="width: 2px; height: 10px; background: #1e3a5f; margin: 2px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">';
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 340px; flex: 0 0 auto;">';
+        html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA AMBIENTAL</span>';
+        html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
         gerentesAmbiental.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#1e3a5f', 'gerente_ambiental'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Regularização Ambiental\')" style="margin-top: 8px; background: #1e3a5f15; border: 1px dashed #1e3a5f; color: #1e3a5f; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
         
-        // Equipe RA
+        // Linha horizontal conectando EQUIPE e CONSÓRCIO
+        html += '<div style="width: 2px; height: 10px; background: #1e3a5f; margin: 4px 0 0 0;"></div>';
+        html += '<div style="width: calc(100% + 40px); height: 2px; background: #1e3a5f; margin: 0 0 4px -10px;"></div>';
+        
+        // Container lado a lado: EQUIPE RA | CONSÓRCIO + ANALISTAS
+        html += '<div style="display: flex; justify-content: center; gap: 20px; width: 100%; align-items: flex-start;">';
+        
+        // Coluna da esquerda: EQUIPE RA
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 210px; flex: 0 0 auto;">';
+        html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">EQUIPE (' + equipeAmbiental.length + ')</span>';
         if (equipeAmbiental.length > 0) {
-            html += '<div style="width: 2px; height: 10px; background: #065f46; margin: 4px 0 2px 0;"></div>';
-            html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">EQUIPE (' + equipeAmbiental.length + ')</span>';
             html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
             equipeAmbiental.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#065f46', 'equipe_ambiental'); });
             html += '</div>';
@@ -3701,9 +3810,33 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Auxiliar de Serviços II\')">Auxiliar</div>';
         html += '</div>';
         html += '</div>';
-        html += '</div>';
+        html += '</div>'; // Fim coluna EQUIPE RA
         
-        html += '</div>'; // Fim container das duas gerências
+        // Coluna da direita: CONSÓRCIO + ANALISTAS
+        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 130px; flex: 0 0 auto;">';
+        html += '<span style="background: #d97706; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">CONSÓRCIO (' + consorcios.length + ')</span>';
+        if (consorcios.length > 0) {
+            html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
+            consorcios.forEach(function (c) { html += renderizarCardArvoreCompacto(c, '#d97706', 'consorcio'); });
+            html += '</div>';
+        }
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Consórcio\')" style="margin-top: 8px; background: #d9770615; border: 1px dashed #d97706; color: #d97706; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        
+        // Analistas do Consórcio
+        if (analistasConsorcio.length > 0) {
+            html += '<div style="width: 2px; height: 10px; background: #f59e0b; margin: 4px 0 2px 0;"></div>';
+            html += '<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">ANALISTAS (' + analistasConsorcio.length + ')</span>';
+            html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
+            analistasConsorcio.forEach(function (a) { html += renderizarCardArvoreCompacto(a, '#f59e0b', 'analista_consorcio'); });
+            html += '</div>';
+        }
+        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Analista do Consórcio\')" style="margin-top: 8px; background: #f59e0b15; border: 1px dashed #f59e0b; color: #f59e0b; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        html += '</div>'; // Fim coluna CONSÓRCIO
+        
+        html += '</div>'; // Fim container lado a lado (Equipe + Consorcio)
+        html += '</div>'; // Fim GA
+        html += '</div>'; // Fim flex GP+GA
+        html += '</div>'; // Fim wrapper (linha horizontal + colunas)
         html += '</div>'; // Fim Diretor MA
         
         // === DIRETOR CUIDADO ANIMAL ===
@@ -3715,8 +3848,7 @@ async function carregarHierarquiaCompletaSecretario() {
         
         html += '<div style="width: 2px; height: 15px; background: #db2777; margin: 8px 0 0 0;"></div>';
         html += '<span style="background: #be185d; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERENTE CA</span>';
-        html += '<div style="width: 2px; height: 10px; background: #be185d; margin: 2px 0;"></div>';
-        html += '<div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px; width: 100%; margin-top: 4px;">';
         gerentesCuidadoAnimal.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#be185d', 'gerente_ca'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente do Cuidado Animal\')" style="margin-top: 8px; background: #be185d15; border: 1px dashed #be185d; color: #be185d; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';

@@ -22,6 +22,8 @@ var idsGerentesCAGlobal = [];
 var idsCuidadoAnimalGlobal = []; // Coordenadores/Equipe básica
 var idsJuridicoGlobal = [];
 var idsRHGlobal = [];
+var idsConsorcioGlobal = []; // Consórcio (gestão)
+var idsAnalistasConsorcioGlobal = []; // Analistas do Consórcio
 var moduloIniciado = false;
 var inicializacaoPromise = null;
 
@@ -61,7 +63,9 @@ async function carregarModuloTarefas() {
                                         roleLowerRaw.includes('agronomo') ||
                                         roleLowerRaw.includes('analista ambiental') ||
                                         roleLowerRaw.includes('auxiliar de serviços');
-                if (isFiscal || isAdminPostura || isEquipeAmbiental) {
+                var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                var isAnalistaConsorcio = roleLowerRawNorm.includes('analista') && roleLowerRawNorm.includes('consorcio');
+                if (isFiscal || isAdminPostura || isEquipeAmbiental || isAnalistaConsorcio) {
                     btnTabAtribuidas.parentElement.style.display = 'none';
                 } else {
                     btnTabAtribuidas.parentElement.style.display = 'flex';
@@ -72,17 +76,20 @@ async function carregarModuloTarefas() {
             var btnNovoEvento = document.getElementById('btn-novo-evento-diretor');
             var btnNovaTarefa = document.getElementById('btn-nova-tarefa');
             var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+            var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             // Verificação flexível para Diretor (qualquer variação)
             var ehDiretor = roleLowerRaw.includes('diretor');
             var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
             // Gerentes podem criar tarefas, mas não projetos/eventos
             var ehGerente = roleLowerRaw.includes('gerente');
+            // Consórcio também pode criar tarefas
+            var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
 
             if (btnNovoEvento) {
                 btnNovoEvento.style.display = (ehDiretor || ehSecretario) ? 'block' : 'none';
             }
             if (btnNovaTarefa) {
-                btnNovaTarefa.style.display = (ehDiretor || ehSecretario || ehGerente) ? 'block' : 'none';
+                btnNovaTarefa.style.display = (ehDiretor || ehSecretario || ehGerente || ehConsorcio) ? 'block' : 'none';
             }
 
             // Mapear IDs para filtros hierárquicos via normalização
@@ -138,12 +145,24 @@ async function carregarModuloTarefas() {
                         return n.includes('diretor') && !n.includes('cuidado animal');
                     }).map(p => p.id);
 
+                    // Consórcio
+                    idsConsorcioGlobal = profiles.filter(p => {
+                        var n = normalizeStr(p.role);
+                        return n.includes('consorcio') && !n.includes('analista');
+                    }).map(p => p.id);
+                    idsAnalistasConsorcioGlobal = profiles.filter(p => {
+                        var n = normalizeStr(p.role);
+                        return n.includes('analista') && n.includes('consorcio');
+                    }).map(p => p.id);
+
                     console.log('[Tarefas] IDs Mapeados:', {
                         CA: idsEquipeCAGlobal.length,
                         Ambiental: idsEquipeAmbientalGlobal.length,
                         Diretores: idsDiretoresGlobal.length,
                         GerentesPosturas: idsGerentesGlobal.length,
-                        FiscaisPosturas: idsFiscaisPosturasGlobal.length
+                        FiscaisPosturas: idsFiscaisPosturasGlobal.length,
+                        Consorcio: idsConsorcioGlobal.length,
+                        AnalistasConsorcio: idsAnalistasConsorcioGlobal.length
                     });
                 }
             } catch (e) {
@@ -211,6 +230,8 @@ async function carregarEventos() {
                          roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
                          roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
                          isCargoEspecial);
+        var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
 
         // Determinar IDs de interesse baseado no modo
         var idsInteresse = [userIdGlobal];
@@ -594,6 +615,7 @@ function tarefaVisivelParaUsuario(t) {
     var ehCriador = t.criado_por === userIdGlobal;
     var ehResponsavel = (t._respUserIds && t._respUserIds.indexOf(userIdGlobal) !== -1) || t._ehMinhaViaSub;
     var roleFiltro = (userRoleGlobal || '').toLowerCase();
+    var roleFiltroNorm = roleFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var isDiretor = roleFiltro.includes('diretor');
     var isSecretario = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
 
@@ -616,7 +638,8 @@ function tarefaVisivelParaUsuario(t) {
                 return vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsDiretoresGlobal.indexOf(uid) !== -1; }));
             }
         } else if (secMode === 'gerencia_ambiental') {
-            return vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeAmbientalGlobal.indexOf(uid) !== -1; }));
+            var idsAmbientalCompleto = idsEquipeAmbientalGlobal.concat(idsConsorcioGlobal).concat(idsAnalistasConsorcioGlobal);
+            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function(uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
         } else if (secMode === 'cuidado_animal') {
             return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
         } else if (secMode === 'juridico') {
@@ -630,13 +653,18 @@ function tarefaVisivelParaUsuario(t) {
         if (diretorModoVisualizacao === 'direcao' || !diretorModoVisualizacao) {
             return ehCriador || ehResponsavel;
         } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
-            return vinculadaAoGrupo(t, idsEquipeAmbientalGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeAmbientalGlobal.indexOf(uid) !== -1; }));
+            var idsAmbientalCompleto = idsEquipeAmbientalGlobal.concat(idsConsorcioGlobal).concat(idsAnalistasConsorcioGlobal);
+            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function(uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
         } else if (diretorModoVisualizacao === 'cuidado_animal') {
             return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
         } else {
             var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
             return vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(function(uid) { return idsPosturas.indexOf(uid) !== -1; }));
         }
+    }
+    else if (roleFiltroNorm.includes('consorcio') && !roleFiltroNorm.includes('analista')) {
+        // Consórcio vê tarefas que criou ou onde seus analistas são responsáveis
+        return vinculadaAoGrupo(t, idsAnalistasConsorcioGlobal.concat([userIdGlobal]));
     }
     else if (roleFiltro.includes('gerente')) {
         var roleNorm = roleFiltro.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -1069,7 +1097,9 @@ function renderizarTarefasDoDia(dataStr) {
 
 function formatarDataBRTarefa(dataStr) {
     if (!dataStr) return '-';
-    var d = new Date(dataStr + 'T00:00:00');
+    // Garante que só usamos a parte da data (YYYY-MM-DD) para evitar Invalid Date
+    var dataLimpa = dataStr.substring(0, 10);
+    var d = new Date(dataLimpa + 'T00:00:00');
     return d.toLocaleDateString('pt-BR');
 }
 
@@ -1224,8 +1254,9 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null, editarTare
                      isCargoEspecial);
                      
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-    console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario);
-    if (!ehDiretor && !ehGerente && !ehSecretario) {
+    var ehConsorcio = roleLowerNormFilter.includes('consorcio') && !roleLowerNormFilter.includes('analista');
+    console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario, 'ehConsorcio:', ehConsorcio);
+    if (!ehDiretor && !ehGerente && !ehSecretario && !ehConsorcio) {
         Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Cargos Especiais podem criar tarefas.', 'error');
         return;
     }
@@ -1299,6 +1330,8 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
         var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
         var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
+        var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
         // Cargos que podem ser atribuídos em tarefas
         var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'Secretário(a) do Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
         // Cargos da equipe do Gerente de Regularização Ambiental
@@ -1308,6 +1341,7 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
         
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
+            var roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             if (roleLower === 'inativo') return;
 
             // Se for Diretor, pode atribuir tarefas para qualquer pessoa na hierarquia:
@@ -1324,12 +1358,13 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
                 var isFiscalPostura = roleLower.includes('fiscal') && roleLower.includes('postura');
                 var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura');
                 var isGerentePostura = roleLower.includes('gerente') && roleLower.includes('postura') && u.id === userIdGlobal;
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
                 // Só mostra se for ele mesmo, Fiscal ou Administrativo de Posturas
-                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura) return;
+                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura && !isSecDoSec) return;
                 console.log('[Tarefas] Gerente Posturas - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo);
             }
 
-            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo ou para sua equipe
+            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo, sua equipe ou Consórcio
             if (ehGerenteAmbiental) {
                 // Verifica se é ele mesmo
                 var isEleMesmo = u.id === userIdGlobal;
@@ -1340,10 +1375,22 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
                                         roleLower.includes('agronomo') ||
                                         roleLower.includes('analista ambiental') ||
                                         roleLower.includes('auxiliar de serviços');
-                // Só mostra se for ele mesmo ou da sua equipe
-                if (!isEleMesmo && !isEquipeAmbiental) return;
+                // Verifica se é Consórcio (cargo de gestão, não analista)
+                var isConsorcioCargo = roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista');
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
+                // Só mostra se for ele mesmo, da sua equipe ou Consórcio
+                if (!isEleMesmo && !isEquipeAmbiental && !isConsorcioCargo && !isSecDoSec) return;
                 // Debug: mostra quem está sendo incluído
-                console.log('[Tarefas] Gerente R.A. - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo);
+                console.log('[Tarefas] Gerente R.A. - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo, 'isConsorcioCargo:', isConsorcioCargo);
+            }
+
+            // Se for Consórcio, pode atribuir apenas para si mesmo ou para Analistas do Consórcio
+            if (ehConsorcio) {
+                var isEleMesmo = u.id === userIdGlobal;
+                var isAnalistaConsorcio = roleLowerNorm.includes('analista') && roleLowerNorm.includes('consorcio');
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
+                if (!isEleMesmo && !isAnalistaConsorcio && !isSecDoSec) return;
+                console.log('[Tarefas] Consórcio - Responsável incluído:', u.full_name, u.role, 'isEleMesmo:', isEleMesmo);
             }
 
             // Verifica se é um cargo válido (comparação case-insensitive)
@@ -1355,7 +1402,8 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
                               roleLower.includes('secretário') ||
                               roleLower.includes('secretario') ||
                               roleLower.includes('coordenador') ||
-                              roleLower.includes('agente');
+                              roleLower.includes('agente') ||
+                              roleLowerNorm.includes('consorcio');
             // Verifica se é da equipe do Gerente de Regularização Ambiental
             var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
                                     roleLower.includes('engenheiro') || 
@@ -1908,12 +1956,14 @@ async function abrirDetalheTarefa(id) {
         var coments = comentarios || [];
 
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw.includes('diretor'));
         var ehResponsavel = resps.some(function (r) { return r.user_id === userIdGlobal; });
         var ehDiretor = roleLowerRaw.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         var gerenteCriouTarefa = roleLowerRaw.includes('gerente') && tarefa.criado_por === userIdGlobal;
-        var podeEditar = ehDiretor || ehSecretario || gerenteCriouTarefa || ehResponsavel;
+        var consorcioCriouTarefa = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista') && tarefa.criado_por === userIdGlobal;
+        var podeEditar = ehDiretor || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa || ehResponsavel;
 
         var html = '<div class="modal-overlay ativo" id="modal-detalhe-tarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-tarefa\')">';
         html += '<div class="modal-container" style="max-width:600px;">';
@@ -1930,8 +1980,8 @@ async function abrirDetalheTarefa(id) {
         // Verificar se todas as subtarefas estão concluídas
         var todasSubConcluidas = subs.length === 0 || subs.every(function (s) { return s.status === 'concluida'; });
 
-        // Status — Diretor, Secretário, Gerente que criou a tarefa ou responsáveis podem alterar
-        if (ehDiretor || ehSecretario || gerenteCriouTarefa || ehResponsavel) {
+        // Status — Diretor, Secretário, Gerente/Consórcio que criou a tarefa ou responsáveis podem alterar
+        if (ehDiretor || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa || ehResponsavel) {
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
             var statusOpts = [
                 { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
@@ -2006,13 +2056,15 @@ async function abrirDetalheTarefa(id) {
         html += '<div>';
         html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
         html += '<strong style="font-size:15px; color:#1e293b;">Subtarefas (' + subs.length + ')</strong>';
-        // Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
+        // Diretor, Secretário, Gerente ou Consórcio (se criou a tarefa pai) podem criar subtarefas
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+        var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var ehDiretorReal = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         var ehGerente = roleLowerRaw.includes('gerente');
         var gerenteCriouTarefa = ehGerente && tarefa.criado_por === userIdGlobal;
-        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
+        var consorcioCriouTarefa = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista') && tarefa.criado_por === userIdGlobal;
+        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa) {
             html += '<button onclick="abrirCriarSubtarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer;">+ Subtarefa</button>';
         }
         html += '</div>';
@@ -2392,6 +2444,8 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
         var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
         var ehGerentePosturas = roleLowerRaw.includes('gerente') && (roleLowerRaw.includes('postura') || roleLowerRaw.includes('posturas'));
+        var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
         var validRoles = ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'Administrativo de Posturas', 'Administrativo de Postura', 'Gerente de Posturas', 'Gerente de Postura', 'Gerente de Regularização Ambiental', 'Diretor(a)', 'Diretor(a) de Meio Ambiente', 'Secretário(a)', 'Secretário(a) do Secretário(a)', 'secretário(a)', 'Secretario(a)', 'secretario(a)'];
         // Cargos da equipe do Gerente de Regularização Ambiental
         var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
@@ -2400,6 +2454,7 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
         
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
+            var roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             if (roleLower === 'inativo') return;
 
             // Se for Diretor, pode atribuir para qualquer pessoa na hierarquia (inclusive ele mesmo)
@@ -2410,10 +2465,11 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
                 var isFiscalPostura = roleLower.includes('fiscal') && roleLower.includes('postura');
                 var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura');
                 var isGerentePostura = roleLower.includes('gerente') && roleLower.includes('postura') && u.id === userIdGlobal;
-                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura) return;
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
+                if (!isEleMesmo && !isFiscalPostura && !isAdminPostura && !isGerentePostura && !isSecDoSec) return;
             }
 
-            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo ou para sua equipe
+            // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo, sua equipe ou Consórcio
             if (ehGerenteAmbiental) {
                 var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
                                         roleLower.includes('engenheiro') || 
@@ -2421,7 +2477,17 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
                                         roleLower.includes('agronomo') ||
                                         roleLower.includes('analista ambiental') ||
                                         roleLower.includes('auxiliar de serviços');
-                if (u.id !== userIdGlobal && !isEquipeAmbiental) return;
+                var isConsorcioCargo = roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista');
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
+                if (u.id !== userIdGlobal && !isEquipeAmbiental && !isConsorcioCargo && !isSecDoSec) return;
+            }
+
+            // Se for Consórcio, pode atribuir apenas para si mesmo ou para Analistas do Consórcio
+            if (ehConsorcio) {
+                var isEleMesmo = u.id === userIdGlobal;
+                var isAnalistaConsorcio = roleLowerNorm.includes('analista') && roleLowerNorm.includes('consorcio');
+                var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
+                if (!isEleMesmo && !isAnalistaConsorcio && !isSecDoSec) return;
             }
 
             // Verifica se é um cargo válido (comparação case-insensitive)
@@ -2431,7 +2497,8 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
                               roleLower.includes('administrativo') ||
                               roleLower.includes('diretor') ||
                               roleLower.includes('secretário') ||
-                              roleLower.includes('secretario');
+                              roleLower.includes('secretario') ||
+                              roleLowerNorm.includes('consorcio');
             // Verifica se é da equipe do Gerente de Regularização Ambiental
             var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
                                     roleLower.includes('engenheiro') || 
@@ -2599,21 +2666,23 @@ function atualizarContadorSelecionadosSub() {
 }
 
 async function confirmarSubtarefa(tarefaPaiId) {
-    // Verificação de segurança: Diretor, Secretário e Gerente (se criou a tarefa pai) podem criar subtarefas
+    // Verificação de segurança: Diretor, Secretário e Gerente/Consórcio (se criou a tarefa pai) podem criar subtarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var ehDiretor = roleLowerRaw.includes('diretor');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehGerente = roleLowerRaw.includes('gerente');
+    var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
     
-    // Se for Gerente, verificar se criou a tarefa pai
+    // Se for Gerente ou Consórcio, verificar se criou a tarefa pai
     var gerentePodeCriar = false;
-    if (ehGerente && !ehDiretor && !ehSecretario) {
+    if ((ehGerente || ehConsorcio) && !ehDiretor && !ehSecretario) {
         var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
         gerentePodeCriar = tarefaPai && tarefaPai.criado_por === userIdGlobal;
     }
     
     if (!ehDiretor && !ehSecretario && !gerentePodeCriar && !_subtarefaEditandoId) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem criar subtarefas.', 'error');
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou quem criou a tarefa pode criar subtarefas.', 'error');
         return;
     }
     
@@ -2805,20 +2874,22 @@ async function toggleSubtarefa(subId, checked) {
 
 async function excluirSubtarefa(subId, tarefaPaiId) {
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
+    var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehGerente = roleLowerRaw.includes('gerente');
+    var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
     
-    // Se for Gerente, verificar se criou a tarefa pai
+    // Se for Gerente ou Consórcio, verificar se criou a tarefa pai
     var gerentePodeExcluir = false;
-    if (ehGerente && !ehDiretor && !ehSecretario) {
+    if ((ehGerente || ehConsorcio) && !ehDiretor && !ehSecretario) {
         var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
         gerentePodeExcluir = tarefaPai && tarefaPai.criado_por === userIdGlobal;
     }
     
-    // Apenas Diretor, Secretário e Gerente (se criou a tarefa pai) podem excluir subtarefas
+    // Apenas Diretor, Secretário e quem criou a tarefa pai podem excluir subtarefas
     if (!ehDiretor && !ehSecretario && !gerentePodeExcluir) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou o Gerente que criou a tarefa podem excluir subtarefas.', 'error'); 
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou quem criou a tarefa pode excluir subtarefas.', 'error'); 
         return; 
     }
 

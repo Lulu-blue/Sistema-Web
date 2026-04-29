@@ -252,6 +252,10 @@ h1 {
     outline: none;
 }
 
+.nav-btn svg {
+    flex-shrink: 0;
+}
+
 /* Efeito ao passar o mouse */
 .nav-btn:hover {
     background: rgba(255, 255, 255, 0.12);
