@@ -987,6 +987,37 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         console.error('Erro ao gerar Notificação Preliminar expedidos (14):', err14);
                     }
                 }
+
+                // AUTOMÁTICO: Gerar a categoria 16 (Autos de Infração expedidos - id visual 15) - 30 pts
+                if (categoriaAtual.id === '1.2' && !error) {
+                    const hoje = new Date();
+                    const ano = hoje.getFullYear();
+                    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+                    const dia = String(hoje.getDate()).padStart(2, '0');
+                    const dataAtual = `${ano}-${mes}-${dia}`;
+
+                    const campos16 = {
+                        n_auto: numeroSeq || '',
+                        descricao: campos.motivo || 'Expedição Automática',
+                        data: dataAtual
+                    };
+
+                    const { error: err16 } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert({
+                            user_id: user.id,
+                            categoria_id: '16',
+                            categoria_nome: 'Autos de Infração expedidos',
+                            pontuacao: 30,
+                            campos: campos16
+                        });
+
+                    if (!err16) {
+                        pontos += 30; // Para mostrar os 35 pontos no alerta de sucesso
+                    } else {
+                        console.error('Erro ao gerar Autos de Infração expedidos (16):', err16);
+                    }
+                }
             } else {
                 // NÃO É CP (Registros Produtividade)
                 if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
@@ -1082,6 +1113,8 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 alert(`${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
             } else if (categoriaAtual.id === '1.1') {
                 alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
+            } else if (categoriaAtual.id === '1.2') {
+                alert('Registros salvos com sucesso!\n\n• Auto de Infração (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
             } else {
                 alert('Registro salvo com sucesso! (' + pontos + ' pontos)');
             }
@@ -3247,6 +3280,93 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
 
     if (updateError) throw updateError;
 
+    // AUTOMÁTICO: Gerar a categoria 16 (Autos de Infração expedidos - id visual 15) - 30 pts
+    if (rascunhoDocumento.categoria_id === '1.2') {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        const dataAtual = `${ano}-${mes}-${dia}`;
+
+        const campos16 = {
+            n_auto: rascunhoDocumento.numero_sequencial || '',
+            descricao: rascunhoDocumento.campos?.motivo || 'Expedição Automática',
+            data: dataAtual
+        };
+
+        const { error: err16 } = await supabaseClient
+            .from('registros_produtividade')
+            .insert({
+                user_id: user.id,
+                categoria_id: '16',
+                categoria_nome: 'Autos de Infração expedidos',
+                pontuacao: 30,
+                campos: campos16
+            });
+
+        if (err16) {
+            console.error('Erro ao gerar Autos de Infração expedidos (16):', err16);
+        }
+    }
+
+    // AUTOMÁTICO: Gerar a categoria 8 (Elaboração de Ofícios - id visual 7°) - 15 pts
+    if (rascunhoDocumento.categoria_id === '1.4') {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        const dataAtual = `${ano}-${mes}-${dia}`;
+
+        const campos8 = {
+            n_oficio: rascunhoDocumento.numero_sequencial || '',
+            descricao: rascunhoDocumento.campos?.assunto || 'Expedição Automática',
+            data: dataAtual
+        };
+
+        const { error: err8 } = await supabaseClient
+            .from('registros_produtividade')
+            .insert({
+                user_id: user.id,
+                categoria_id: '8',
+                categoria_nome: 'Elaboração de Ofícios',
+                pontuacao: 15,
+                campos: campos8
+            });
+
+        if (err8) {
+            console.error('Erro ao gerar Elaboração de Ofícios (8):', err8);
+        }
+    }
+
+    // AUTOMÁTICO: Gerar a categoria 7 (Elaboração de Certidão de Arquivamento e Relatório Fiscal - id visual 6°) - 50 pts
+    if (rascunhoDocumento.categoria_id === '1.5') {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        const dataAtual = `${ano}-${mes}-${dia}`;
+
+        const campos7 = {
+            tipo: 'Relatório Fiscal',
+            descricao: rascunhoDocumento.numero_sequencial || '',
+            data: dataAtual
+        };
+
+        const { error: err7 } = await supabaseClient
+            .from('registros_produtividade')
+            .insert({
+                user_id: user.id,
+                categoria_id: '7',
+                categoria_nome: 'Elaboração de Certidão de Arquivamento e Relatório Fiscal',
+                pontuacao: 50,
+                campos: campos7
+            });
+
+        if (err7) {
+            console.error('Erro ao gerar Elaboração de Relatório (7):', err7);
+        }
+    }
+
     // Limpar rascunho
     rascunhoDocumento = null;
 }
@@ -4161,14 +4281,31 @@ async function baixarDocumentoWord() {
         const filenameSafe = `${nomeArquivo}.pdf`;
 
         // Se há rascunho ativo, finaliza-o (anexo + pontuação). Senão, usa fluxo antigo.
+        let usouRascunho = false;
         if (rascunhoDocumento && rascunhoDocumento.categoria_id === catId) {
             await finalizarDocumentoComAnexo(blobPdf, filenameSafe);
+            usouRascunho = true;
         } else {
             await salvarRegistro(blobPdf, filenameSafe);
         }
         fecharEditorDocumento(); // fecha o frame do documento
         fecharModalProdutividade(); // fecha o formulário pai imediatamente
         await carregarHistorico(); // atualiza pontuação, gráfico e meta em tempo real
+
+        if (usouRascunho) {
+            if (catId === '1.2') {
+                alert('Registros salvos com sucesso!\n\n• Auto de Infração (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
+            } else if (catId === '1.4') {
+                alert('Registros salvos com sucesso!\n\n• Ofício (10 pontos)\n• Elaboração de Ofícios (15 pontos)\n\n 25 pontos salvos no total!');
+            } else if (catId === '1.5') {
+                alert('Registros salvos com sucesso!\n\n• Relatório (10 pontos)\n• Elaboração de Relatório Fiscal (50 pontos)\n\n 60 pontos salvos no total!');
+            } else if (catId === '11') {
+                alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${numSeqDownload}`);
+            } else {
+                const pts = CATEGORIAS.find(c => c.id === catId)?.pontos || 0;
+                alert('Registro salvo com sucesso! (' + pts + ' pontos)');
+            }
+        }
     } catch (err) {
         console.error(err);
         alert('O DOCX/PDF foi gerado, mas ocorreu um erro ao salvar o Histórico e Storage.');
