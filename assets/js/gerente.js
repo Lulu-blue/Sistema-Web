@@ -429,13 +429,14 @@ async function carregarGraficoDocumentos() {
             '1.4': 'Ofício',
             '1.5': 'Relatório',
             '1.6': 'Protocolo',
-            '1.7': 'Réplica'
+            '1.7': 'Réplica',
+            '1.8': 'Certidão'
         };
 
         // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7'];
+        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8'];
 
         for (var i = 0; i < categoriasCP.length; i++) {
             var cat = categoriasCP[i];
@@ -4216,13 +4217,14 @@ async function carregarGraficoDocumentosSecretario() {
             '1.4': 'Ofício',
             '1.5': 'Relatório',
             '1.6': 'Protocolo',
-            '1.7': 'Réplica'
+            '1.7': 'Réplica',
+            '1.8': 'Certidão'
         };
 
         // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7'];
+        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8'];
 
         for (var i = 0; i < categoriasCP.length; i++) {
             var cat = categoriasCP[i];

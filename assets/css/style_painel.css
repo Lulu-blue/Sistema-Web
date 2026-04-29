@@ -417,3 +417,49 @@ h1 {
     text-shadow: 0 0 8px rgba(57, 255, 20, 0.7);
     transform: scale(1.05);
 }
+
+/* ==========================================
+   RESPONSIVIDADE - TELA EVENTOS
+   ========================================== */
+
+/* Tela média: calendário e lista de eventos empilham */
+@media (max-width: 1100px) {
+    #aba-projetos > div:nth-child(2) {
+        flex-direction: column !important;
+    }
+
+    #aba-projetos .calendario-container {
+        min-width: unset !important;
+        flex: unset !important;
+        width: 100% !important;
+    }
+
+    /* Painel de lista de eventos */
+    #aba-projetos > div:nth-child(2) > div:nth-child(2) {
+        min-width: unset !important;
+        flex: unset !important;
+        width: 100% !important;
+    }
+}
+
+/* Tela pequena: ajustes finos nos cards e detalhes */
+@media (max-width: 768px) {
+    /* Cabeçalho Eventos: título + botão */
+    #aba-projetos h1 {
+        font-size: 1.6rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Botão Novo Evento não ser cortado */
+    #btn-novo-evento-diretor {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.8rem !important;
+        padding: 6px 12px !important;
+    }
+
+    /* Conteúdo principal com menos padding */
+    .main-content {
+        padding: 1.5rem !important;
+    }
+}

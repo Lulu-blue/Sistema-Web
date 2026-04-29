@@ -2,34 +2,61 @@
 // Lógica para consolidar anexos do ano em um arquivo ZIP
 
 const safeSwalUpdate = (options) => {
-    if (Swal.isVisible()) {
-        Swal.update(options);
+    try {
+        if (Swal.isVisible()) {
+            Swal.update(options);
+        }
+    } catch (e) {
+        // Ignora aviso de popup fechando durante animação
     }
 };
+
+window.flagCancelarFechamento = false;
+function cancelarFechamento() {
+    window.flagCancelarFechamento = true;
+    const btn = document.getElementById('btn-cancelar-fechamento');
+    if (btn) {
+        btn.textContent = 'Cancelando...';
+        btn.disabled = true;
+    }
+}
 
 async function executarFechamentoAnual() {
     console.log("[Fechamento] Iniciando execução anual...");
     const anoAtual = new Date().getFullYear();
 
-    // 1. Mostrar feedback de carregamento
-    Swal.fire({
-        title: 'Gerando Fechamento ' + anoAtual,
-        html: 'Buscando registros e preparando documentos...<br><b>Aguarde, isso pode demorar um pouco.</b>',
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
+    // 1. Ocultamos o popup do SweetAlert e atualizamos a barra de progresso do HTML
+    const txtProgressoMain = document.getElementById('progresso-fechamento-texto');
+    if (txtProgressoMain) txtProgressoMain.textContent = 'Iniciando fechamento...';
 
     try {
         // 2. Buscar todos os registros de controle_processual do ano atual
         // Nota: A coluna de data real pode variar, usaremos created_at como base se obterDataReal não filtrar no banco
         // Mas o ideal é carregar tudo e filtrar no JS para garantir paridade com as regras do sistema
-        const { data: registros, error } = await supabaseClient
-            .from('controle_processual')
-            .select('*');
+        let todosRegistros = [];
+        let from = 0;
+        const pageSize = 1000;
+        let buscarMais = true;
 
-        if (error) throw error;
+        while (buscarMais) {
+            const { data: chunk, error } = await supabaseClient
+                .from('controle_processual')
+                .select('*')
+                .range(from, from + pageSize - 1);
+
+            if (error) throw error;
+            
+            if (chunk && chunk.length > 0) {
+                todosRegistros = todosRegistros.concat(chunk);
+                from += pageSize;
+                if (chunk.length < pageSize) {
+                    buscarMais = false; // Acabou
+                }
+            } else {
+                buscarMais = false;
+            }
+        }
+        const registros = todosRegistros;
 
         // Filtrar pelo ano atual usando a lógica do sistema (obterDataReal)
         const registrosDoAno = registros.filter(reg => {
@@ -54,38 +81,68 @@ async function executarFechamentoAnual() {
 
         let processados = 0;
         let falhas = 0;
+        
+        // Exibir Barra de Progresso no painel
+        const divProgresso = document.getElementById('progresso-fechamento');
+        const txtProgresso = document.getElementById('progresso-fechamento-texto');
+        const barraProgresso = document.getElementById('progresso-fechamento-barra');
+        if (divProgresso) divProgresso.style.display = 'block';
+        if (txtProgresso) txtProgresso.textContent = 'Calculando...';
+
+        const totalRegistros = registrosDoAno.length;
+        let registrosProcessados = 0;
+
+        window.flagCancelarFechamento = false;
+        const btnCancelar = document.getElementById('btn-cancelar-fechamento');
+        if (btnCancelar) {
+            btnCancelar.textContent = 'Parar Fechamento';
+            btnCancelar.disabled = false;
+        }
 
         for (const reg of registrosDoAno) {
-            const urlAnexo = reg.campos && reg.campos.anexo_pdf;
-            if (!urlAnexo) continue;
-
-            const catId = reg.categoria_id || 'Outros';
-            const catNome = categoriasMap[catId] || ('Categoria ' + catId);
-            const folderCategoria = folderDocumentos.folder(catNome.replace(/[\\\/:*?"<>|]/g, ''));
-
-            // Definir nome do arquivo (Número Sequencial)
-            const numero = (reg.numero_sequencial || reg.id).toString().replace(/[\\\/:*?"<>|]/g, '-');
-            const extensao = urlAnexo.split('.').pop().split('?')[0]; // Pegar extensão antes de query params
-            const fileName = `${numero}.${extensao}`;
-
-            try {
-                // Baixar o arquivo
-                const response = await fetch(urlAnexo);
-                if (!response.ok) throw new Error('Falha no download');
-                const blob = await response.blob();
-
-                // Salvar o arquivo diretamente na pasta da categoria
-                folderCategoria.file(fileName, blob);
-                processados++;
-            } catch (err) {
-                console.error(`Erro ao baixar anexo de ${numero}:`, err);
-                falhas++;
+            if (window.flagCancelarFechamento) {
+                if (divProgresso) divProgresso.style.display = 'none';
+                Swal.fire('Cancelado', 'O processo de fechamento anual foi interrompido.', 'info');
+                return;
             }
 
-            // Atualizar progresso no Swal
-            safeSwalUpdate({
-                html: `Processando: ${processados} arquivos...<br>${falhas > 0 ? falhas + ' falhas.' : ''}`
-            });
+            registrosProcessados++;
+            
+            const urlAnexo = reg.campos && reg.campos.anexo_pdf;
+            
+            if (urlAnexo) {
+                const catId = reg.categoria_id || 'Outros';
+                const catNome = categoriasMap[catId] || ('Categoria ' + catId);
+                const folderCategoria = folderDocumentos.folder(catNome.replace(/[\\\/:*?"<>|]/g, ''));
+
+                // Definir nome do arquivo (Número Sequencial)
+                const numero = (reg.numero_sequencial || reg.id).toString().replace(/[\\\/:*?"<>|]/g, '-');
+                const extensao = urlAnexo.split('.').pop().split('?')[0]; // Pegar extensão antes de query params
+                const fileName = `${numero}.${extensao}`;
+
+                try {
+                    // Baixar o arquivo
+                    const response = await fetch(urlAnexo);
+                    if (!response.ok) throw new Error('Falha no download');
+                    const blob = await response.blob();
+
+                    // Salvar o arquivo diretamente na pasta da categoria
+                    folderCategoria.file(fileName, blob);
+                    processados++;
+                } catch (err) {
+                    console.error(`Erro ao baixar anexo de ${numero}:`, err);
+                    falhas++;
+                }
+            }
+
+            // Atualizamos apenas a UI de progresso na tela
+            
+            // Atualizar UI de progresso na tela
+            if (txtProgresso && totalRegistros > 0) {
+                const perc = Math.round((registrosProcessados / totalRegistros) * 100);
+                txtProgresso.textContent = `${perc}% (${registrosProcessados} de ${totalRegistros} registros)`;
+                if (barraProgresso) barraProgresso.style.width = `${perc}%`;
+            }
         }
 
         if (processados === 0) {
@@ -94,10 +151,7 @@ async function executarFechamentoAnual() {
         }
 
         // 5. Gerar Planilha ODS
-        safeSwalUpdate({
-            title: 'Gerando Planilha...',
-            html: 'Criando tabelas de dados.'
-        });
+        if (txtProgresso) txtProgresso.textContent = 'Gerando Planilhas...';
 
         const workbook = XLSX.utils.book_new();
         const folderTabela = zip.folder(anoAtual.toString()).folder("Tabela");
@@ -219,10 +273,7 @@ async function executarFechamentoAnual() {
         folderTabela.file(`Banco de Dados.xlsx`, dbBuffer);
 
         // 6. Gerar o ZIP final e baixar
-        safeSwalUpdate({
-            title: 'Compactando...',
-            html: 'Quase pronto! Gerando arquivo ZIP final.'
-        });
+        if (txtProgresso) txtProgresso.textContent = 'Compactando arquivo ZIP final...';
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         console.log("[Fechamento] ZIP gerado com sucesso. Tamanho:", zipBlob.size, "bytes");

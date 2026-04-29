@@ -1006,7 +1006,7 @@
 
                     <!-- Linha de Widgets (Base) -->
                     <div
-                        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: flex-start;">
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; align-items: flex-start;">
                         <!-- Visão Geral de Tarefas -->
                         <div
                             style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
@@ -1289,6 +1289,18 @@
                     </svg>
                     Fechamento anual
                 </button>
+                <div id="progresso-fechamento" style="display: none; margin-bottom: 20px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="font-size: 0.9rem; font-weight: bold; color: #1e293b;">Progresso do Fechamento:</span>
+                        <span id="progresso-fechamento-texto" style="font-size: 0.9rem; color: #3b82f6; font-weight: bold;">0% (0 de 0)</span>
+                    </div>
+                    <div style="width: 100%; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; height: 10px; margin-bottom: 10px;">
+                        <div id="progresso-fechamento-barra" style="width: 0%; height: 100%; background-color: #3b82f6; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div style="text-align: right;">
+                        <button id="btn-cancelar-fechamento" onclick="cancelarFechamento()" style="background-color: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold;">Parar Fechamento</button>
+                    </div>
+                </div>
 
                 <div class="sub-abas-cp">
                     <button class="sub-aba-btn active" onclick="mudarSubAbaCP('1.1', this)">NP</button>
@@ -1298,6 +1310,7 @@
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.5', this)">Relatório de Vistoria</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.6', this)">Protocolo</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.7', this)">Réplica</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.8', this)">Certidão</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('11', this)">Dívida Ativa</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('todos', this)">Todos</button>
                 </div>
@@ -1526,9 +1539,9 @@
 
                     <!-- LADO DIREITO: TABELA DE EVENTOS (MAIS ESPAÇOSA E REFINADA) -->
                     <div
-                        style="flex: 2.2; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 600px; border: 1px solid #e2e8f0;">
+                        style="flex: 2.2; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
                         <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px;">
                             <h2
                                 style="color: #1e293b; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; font-weight: 700;">
                                 <div style="width: 4px; height: 24px; background: #0c3e2b; border-radius: 2px;"></div>

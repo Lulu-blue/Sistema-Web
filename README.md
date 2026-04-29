@@ -109,7 +109,8 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
 ---
 
 ## 📅 Fechamento Anual (`fechamento.js`)
-- **Mecanismo de Consolidação**: Reúne todos os registros de produtividade e controle processual do ano vigente.
+- **Mecanismo de Consolidação Bypass**: Reúne todos os registros de produtividade e controle processual do ano vigente contornando o limite nativo de paginação de 1000 registros do banco de dados (através de iteração em chunks dinâmicos).
+- **Processamento em Background (Silencioso)**: O download ocorre em segundo plano com uma barra de progresso não-bloqueante na UI. Isso permite o livre uso do painel enquanto os arquivos são puxados e inclui um **Botão de Cancelamento** instantâneo da operação.
 - **Geração de Anexos (ZIP)**: Cria automaticamente um arquivo ZIP organizado por pastas:
   - Estrutura: `Ano/Documentos/Categoria/NumeroSequencial.pdf`
   - Exemplo: `2025/Documentos/Notificação Preliminar/0116/2025.pdf`
@@ -196,15 +197,15 @@ Gestão completa de áreas de atuação e mapeamento de bairros para fiscais.
 ## 📝 Sistema de Produtividade
 
 O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
-1. **Controle Processual (1.1° a 1.7°)**: Ficam numa área destacada (cards escuros verdes translucientes).
+1. **Controle Processual (1.1° a 6.2°)**: Ficam numa área destacada (cards escuros verdes translucientes).
 2. **Atividades Gerais (2° a 30°)**: Ficam nos blocos padrão (cards verdes claros).
 
 ### Funcionalidades Especiais:
 - **Tabelas Distintas no Supabase**: 
   - *Registros comuns* vão para a tabela `registros_produtividade`.
   - *Controle Processual* vai para a tabela separada `controle_processual`.
-- **Anexo Automático em PDF e Editor WYSIWYG**: Toda categoria oficial "Geradora de Documento" (Auto de Infração, Ofício, Relatório e Réplica) exibe o botão **Gerar Documento** ao invés do upload manual padrão. O preenchimento da modal não vai ao banco de dados imadiatamente; invoca-se um Mini-Editor (Modal editável) que mostra de antemão um formato A4 timbrado preenchido automaticamente com nome, matrícula do fiscal, numeração, dados e datas. O sistema aciona o `html2pdf.js` forçando um download local `.doc/.pdf` e, em segundo plano, acopla silenciosamente esse formulário digital PDF e envia ao Storage em nuvem.
-- **Segurança de Documentos no Histórico**: Por tratar-se de peças geradoras de PDF físico baseadas em dados doWYSIWYG, a aba de **Histórico** inibe a edição de Registros dessas naturezas ("Auto de Infracao", "Ofício", "Relatório", "Réplica") protegendo o dado bruto imutável. Caso o usuário cometa um erro de envio, precisará apagar o item por completo e regerar, mantendo a integridade perante o espelho em PDF oficial.
+- **Anexo Automático em PDF e Editor WYSIWYG**: Toda categoria oficial "Geradora de Documento" (Auto de Infração, Ofício, Relatório, Réplica e Certidão) exibe o botão **Gerar Documento** ao invés do upload manual padrão. O preenchimento da modal não vai ao banco de dados imadiatamente; invoca-se um Mini-Editor (Modal editável) que mostra de antemão um formato A4 timbrado preenchido automaticamente com nome, matrícula do fiscal, numeração, dados e datas. O sistema aciona o `html2pdf.js` forçando um download local `.doc/.pdf` e, em segundo plano, acopla silenciosamente esse formulário digital PDF e envia ao Storage em nuvem.
+- **Segurança de Documentos no Histórico**: Por tratar-se de peças geradoras de PDF físico baseadas em dados doWYSIWYG, a aba de **Histórico** inibe a edição de Registros dessas naturezas ("Auto de Infracao", "Ofício", "Relatório", "Réplica", "Certidão") protegendo o dado bruto imutável. Caso o usuário cometa um erro de envio, precisará apagar o item por completo e regerar, mantendo a integridade perante o espelho em PDF oficial.
 - **Auto-Preenchimento por Leitura IA de Word**: As categorias (ex. Notificação Preliminar e Protocolo) não necessitam preenchimento braçal graças à função inovadora "*Preenchimento Automático (Word)*". Utilizando o plugin local `mammoth.js`, o sistema varre o arquivo original DOCX submetido pelo fiscal instigando uma Extrator de Regex em busca de blocos cruciais no texto emulando NLP (buscando N° de Notificação/Protocolo, Contribuinte, Bairro, Inscrição etc) e repassa os dados instantaneamente para os inputs visuais da UI (e automaticamente preenche o arquivo DOCX original como anexo) em 1 segundo, reduzindo atritos de digitação manual de forma monstruosa.
 - **Campo de Dropdown Persistente Avançado**: A categoria permite dropdowns selecionáveis onde "Outro..." abre criação de motivos customizados, salvos localmente num array próprio, limpáveis pela Lixeira "🗑" e selecionáveis sem interrupção através de manipulação de DOM para impedir perda de focus no input de texto.
 - **Numeração Automática**: Algumas atividades de Processual (ex. Ofício e Auto de Infração) puxam sequenciado pelo maior número que o fiscal executou naquele tipo (ex. `0116/2026`).

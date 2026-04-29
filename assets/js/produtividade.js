@@ -172,12 +172,28 @@ const CATEGORIAS = [
     },
     {
         id: '1.7',
-        nome: 'Controle Processual: Réplica',
+        nome: 'Réplica',
         pontos: 50,
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
             { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true }
+        ]
+    },
+    {
+        id: '1.8',
+        nome: 'Certidão',
+        pontos: 50,
+        destaque: true,
+        campos: [
+            { nome: 'nome', label: 'Nome do Autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'cpf', label: 'CPF', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'rua', label: 'Rua de correspondência', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'numero', label: 'Nº', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
+            { nome: 'digitado', label: 'Referente ao', tipo: 'textarea', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'data_ciencia', label: 'Data da Ciência', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true }
         ]
     },
     // === CATEGORIAS GERAIS (1° a 29°) ===
@@ -238,10 +254,10 @@ const CATEGORIAS = [
     },
     {
         id: '7',
-        nome: 'Elaboração de Certidão e Relatório Fiscal',
+        nome: 'Elaboração de Certidão de Arquivamento e Relatório Fiscal',
         pontos: 50,
         campos: [
-            { nome: 'tipo', label: 'Tipo', tipo: 'select', obrigatorio: true, opcoes: ['Certidão', 'Relatório Fiscal'] },
+            { nome: 'tipo', label: 'Tipo', tipo: 'select', obrigatorio: true, opcoes: ['Certidão de Arquivamento', 'Relatório Fiscal'] },
             { nome: 'descricao', label: 'N°', tipo: 'text', obrigatorio: true },
             { nome: 'data', label: 'Data', tipo: 'date', obrigatorio: true }
         ]
@@ -495,7 +511,8 @@ function obterIdVisual(categoriaId) {
         '1.4': '16.4',
         '1.5': '16.5',
         '1.6': '16.6',
-        '1.7': '16.7',
+        '1.7': '6.1',
+        '1.8': '6.2',
         '2': '1',
         '3': '2',
         '4': '3',
@@ -658,7 +675,11 @@ function abrirFormulario(categoria) {
                 </div>
             `;
         } else {
-            inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''}>`;
+            let extraAttr = '';
+            if (campo.nome === 'cpf') {
+                extraAttr = ` maxlength="14" placeholder="000.000.000-00" oninput="let v=this.value.replace(/\\D/g,''); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); this.value=v;"`;
+            }
+            inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''} ${extraAttr}>`;
         }
 
         grupo.innerHTML = `
@@ -718,6 +739,9 @@ function abrirFormulario(categoria) {
     } else if (categoria.id === '1.7') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorReplica();
+    } else if (categoria.id === '1.8') {
+        btnSalvarForm.textContent = 'Gerar Documento';
+        btnSalvarForm.onclick = () => abrirEditorCertidao();
     } else {
         btnSalvarForm.textContent = 'Salvar';
         btnSalvarForm.onclick = () => salvarRegistro();
@@ -913,9 +937,9 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     .maybeSingle();
                 const fiscalNome = perfil?.full_name || 'Fiscal';
 
-                // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Dívida Ativa)
+                // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Certidão, Dívida Ativa)
                 let numeroSeq = null;
-                const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7', '11'];
+                const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7', '1.8', '11'];
                 if (categoriasAutoNum.includes(categoriaAtual.id)) {
                     numeroSeq = await gerarNumeroSequencial(categoriaAtual.id);
                 }
@@ -1379,7 +1403,7 @@ function editarRegistro() {
     const reg = registroSelecionado;
 
     // Trava de segurança extra para categorias geradoras de documentos
-    const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7'];
+    const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7', '1.8'];
     if (categoriasBloqueadas.includes(reg.categoria_id)) {
         alert('Registros que geram documentos oficiais não podem ser editados. Exclua e crie um novo se houver erro.');
         return;
@@ -1653,7 +1677,7 @@ async function carregarHistoricoGeral(categoriaId) {
 
     // Busca Livre em múltiplos campos JSON + número sequencial nativo
     if (termo) {
-        const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'nome', 'bairro', 'n_inscricao'];
+        const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'n_certidao', 'nome', 'bairro', 'n_inscricao'];
         const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`);
         orConditions.push(`numero_sequencial.ilike.%${termo}%`);
         query = query.or(orConditions.join(','));
@@ -1906,7 +1930,8 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 case '1.4': nomeCategoria = 'Controle Processual: Ofício'; break;
                 case '1.5': nomeCategoria = 'Controle Processual: Relatório de Vistoria'; break;
                 case '1.6': nomeCategoria = 'Controle Processual: Protocolo'; break;
-                case '1.7': nomeCategoria = 'Controle Processual: Réplica'; break;
+                case '1.7': nomeCategoria = 'Réplica'; break;
+                case '1.8': nomeCategoria = 'Certidão'; break;
                 case '11': nomeCategoria = 'Controle Processual: Dívida Ativa'; break;
                 default:
                     const catObj = CATEGORIAS.find(c => c.id === reg.categoria_id);
@@ -3802,6 +3827,131 @@ async function abrirEditorReplica() {
     }
 }
 
+// FUNÇÃO: ABRIR EDITOR CERTIDÃO DO FISCAL
+// ==========================================
+async function abrirEditorCertidao() {
+    // 1. Validação de Campos
+    const campos = {};
+    let todosPreenchidos = true;
+
+    categoriaAtual.campos.forEach(campo => {
+        if (campo.tipo === 'file') return;
+        const input = document.getElementById(`campo-${campo.nome}`);
+        let valor = input ? input.value.trim() : '';
+
+        if (campo.obrigatorio && !valor) {
+            todosPreenchidos = false;
+            if (input) input.style.borderColor = '#ef4444';
+        } else if (input) {
+            input.style.borderColor = '#e2e8f0';
+        }
+        campos[campo.nome] = valor || '';
+    });
+
+    if (!todosPreenchidos) {
+        alert('Preencha os dados obrigatórios da Certidão antes de gerar o documento.');
+        return;
+    }
+
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvarForm ? btnSalvarForm.textContent : 'Gerar Documento';
+    if (btnSalvarForm) {
+        btnSalvarForm.textContent = 'Carregando...';
+        btnSalvarForm.disabled = true;
+    }
+
+    try {
+        const numSequencial = await gerarNumeroSequencial('1.8');
+
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
+
+        const { data: { user } } = await getAuthUser();
+        let nomeFiscal = 'Nome do Fiscal';
+        let matriculaFiscal = 'XXXXXXXX';
+
+        if (user) {
+            const { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('full_name, matricula')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
+        }
+
+        const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+        const hoje = new Date();
+        const diaHoje = hoje.getDate();
+        const mesHoje = meses[hoje.getMonth()];
+        const anoHoje = hoje.getFullYear();
+        const dataPorExtenso = `Divinópolis, ${diaHoje} de ${mesHoje} de ${anoHoje}.`;
+
+        const imgBase64 = await obterBase64Cabecalho();
+        
+        // Format dates correctly from YYYY-MM-DD to DD/MM/YYYY
+        const formatData = (d) => {
+            if (!d) return '';
+            const p = d.split('-');
+            if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+            return d;
+        };
+        
+        const dataCienciaFmt = formatData(campos.data_ciencia);
+        const dataDefesaFmt = formatData(campos.data_defesa);
+
+        const htmlTemplate = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
+
+        <div style="text-align: center; margin-top: 30px; margin-bottom: 50px;">
+            <p style="font-weight: bold; font-size: 14pt; margin: 0;">CERTIDÃO N° ${numSequencial}</p>
+        </div>
+
+        <p style="text-indent: 0px; line-height: 1.5; margin-bottom: 20px; text-align: justify;">
+            Certifico que o autuado ${campos.nome} CPF ${campos.cpf}, com endereço de correspondência na ${campos.rua}, N° ${campos.numero}, ${campos.bairro}, não manifestou sobre a interposição de defesa <b>referente ao ${campos.digitado}</b> que teve ciência dia ${dataCienciaFmt} através dos correios aviso de recebimento (AR), com prazo para defesa até ${dataDefesaFmt}.
+        </p>
+
+        <p style="margin-top: 60px; margin-bottom: 60px;">
+            ${dataPorExtenso}
+        </p>
+
+        <div style="text-align: center; margin-top: 60px;">
+            <p style="margin: 0;">_________________________________________</p>
+            <p style="margin: 5px 0 0 0; font-weight: bold;">${nomeFiscal}</p>
+            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+            <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
+        </div>
+    `;
+
+        // 3. Exibe Modal
+        const editor = document.getElementById('editor-texto');
+        editor.innerHTML = htmlTemplate;
+
+        document.getElementById('modal-produtividade').classList.remove('ativo'); // esconde o form
+        document.getElementById('modal-editor-documento').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Erro ao preparar a certidão:', error);
+        alert('Ocorreu um erro ao processar os dados da certidão.');
+    } finally {
+        if (btnSalvarForm) {
+            btnSalvarForm.textContent = oldTexto;
+            btnSalvarForm.disabled = false;
+        }
+    }
+}
+
 async function abrirEditorDividaAtiva() {
     const campos = {};
     let todosPreenchidos = true;
@@ -3954,6 +4104,9 @@ async function baixarDocumentoWord() {
         } else if (catId === '1.7') {
             tipoNome = 'Replica';
             catNome = 'Réplica Fiscal';
+        } else if (catId === '1.8') {
+            tipoNome = 'Certidao';
+            catNome = 'Certidão Fiscal';
         } else if (catId === '11') {
             tipoNome = 'Divida_Ativa';
             catNome = 'Dívida Ativa';

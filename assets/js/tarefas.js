@@ -446,12 +446,51 @@ function toggleDetalheEventoCard(id) {
 }
 
 function renderizarConteudoExpandidoEvento(ev) {
-    var html = '<div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">';
+    var html = '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:30px;">';
 
     // Lado 1: Detalhes do Evento
     html += '<div>';
     html += '<h4 style="margin:0 0 10px 0; color:#1e293b; font-size:0.95rem;">Descrição do Projeto</h4>';
     html += '<p style="margin:0; color:#64748b; font-size:0.9rem; line-height:1.5;">' + (ev.descricao || 'Sem descrição detalhada.') + '</p>';
+
+    // Localização
+    if (ev.localizacao) {
+        html += '<div style="margin-top:14px; display:flex; align-items:center; gap:8px;">';
+        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+        html += '<a href="https://www.google.com/maps/search/' + encodeURIComponent(ev.localizacao) + '" target="_blank" style="color:#4285F4; font-size:0.85rem; font-weight:600; text-decoration:none;">' + ev.localizacao + ' ↗</a>';
+        html += '</div>';
+    }
+
+    // Parcerias
+    if (ev.parcerias && ev.parcerias.length > 0) {
+        html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">🤝 Parcerias</h4>';
+        html += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
+        ev.parcerias.forEach(function(p) {
+            html += '<span style="background:#ecfdf5; color:#065f46; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #a7f3d0;">' + p + '</span>';
+        });
+        html += '</div>';
+    }
+
+    // Orçamento
+    if (ev.orcamentos && ev.orcamentos.length > 0) {
+        html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">💰 Orçamento</h4>';
+        ev.orcamentos.forEach(function(o) {
+            html += '<div style="display:flex; justify-content:space-between; padding:6px 10px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; margin-bottom:4px; font-size:0.8rem;">';
+            html += '<span style="color:#92400e;">' + (o.descricao || 'Item') + '</span>';
+            html += '<span style="font-weight:700; color:#b45309;">' + (o.valor || '-') + '</span>';
+            html += '</div>';
+        });
+    }
+
+    // Patrocínios
+    if (ev.patrocinios && ev.patrocinios.length > 0) {
+        html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">⭐ Patrocínios</h4>';
+        html += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
+        ev.patrocinios.forEach(function(p) {
+            html += '<span style="background:#f5f3ff; color:#5b21b6; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #c4b5fd;">' + p + '</span>';
+        });
+        html += '</div>';
+    }
 
     html += '<h4 style="margin:20px 0 10px 0; color:#1e293b; font-size:0.95rem;">Documentos</h4>';
     html += '<div id="anexos-evento-' + ev.id + '" style="display:flex; flex-wrap:wrap; gap:8px;">';
@@ -495,7 +534,7 @@ function renderizarConteudoExpandidoEvento(ev) {
     var podeEditarEvento = ehDiretor || ehSecretario;
     
     if (podeEditarEvento) {
-        html += '<div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9;">';
+        html += '<div style="grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9;">';
         html += '<button onclick="abrirModalNovaTarefa(false, \'' + ev.id + '\')" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Inserir Tarefa</button>';
         html += '<button onclick="abrirModalEditarEvento(\'' + ev.id + '\')" style="background: white; color: #3b82f6; border: 1px solid #3b82f6; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=\'white\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar Projeto</button>';
         html += '<button onclick="excluirEvento(\'' + ev.id + '\')" style="background: white; color: #ef4444; border: 1px solid #ef4444; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'white\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir</button>';
@@ -3624,6 +3663,31 @@ function abrirModalNovoEventoAvancado() {
     html += '<div class="campo-grupo"><label>Título do Evento / Projeto</label><input type="text" id="ev-titulo" placeholder="Ex: Mutirão de Limpeza Vila Nova"></div>';
     html += '<div class="campo-grupo"><label>Descrição Detalhada</label><textarea id="ev-descricao" rows="2" placeholder="Objetivos e informações base..."></textarea></div>';
 
+    // Localização com link Google Maps
+    html += '<div class="campo-grupo"><label>Localização</label>';
+    html += '<div style="display:flex; gap:8px; align-items:center;">';
+    html += '<input type="text" id="ev-localizacao" placeholder="Ex: Praça Central, Vila Nova" style="flex:1;">';
+    html += '<button type="button" onclick="abrirMapaLocalizacao()" style="background:#4285F4; color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; white-space:nowrap;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Maps</button>';
+    html += '</div></div>';
+
+    // Parcerias (múltiplas)
+    html += '<div class="campo-grupo"><label>Parcerias</label>';
+    html += '<div id="ev-parcerias-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoMultiplo(\'ev-parcerias-lista\', \'parceria\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#10b981\';this.style.color=\'#10b981\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Parceria</button>';
+    html += '</div>';
+
+    // Orçamento (editável, com histórico)
+    html += '<div class="campo-grupo"><label>Orçamento</label>';
+    html += '<div id="ev-orcamentos-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoOrcamento(\'ev-orcamentos-lista\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#f59e0b\';this.style.color=\'#f59e0b\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Orçamento</button>';
+    html += '</div>';
+
+    // Patrocínios (múltiplos)
+    html += '<div class="campo-grupo"><label>Patrocínios</label>';
+    html += '<div id="ev-patrocinios-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoMultiplo(\'ev-patrocinios-lista\', \'patrocinio\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#8b5cf6\';this.style.color=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Patrocínio</button>';
+    html += '</div>';
+
     // Grid: Data, Cor e Documentos
     html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">';
 
@@ -3691,6 +3755,93 @@ function selecionarCorEvento(cor, el) {
     el.style.transform = 'scale(1.15)';
     document.getElementById('ev-cor').value = cor;
 }
+
+// --- Funções auxiliares para campos dinâmicos ---
+function adicionarCampoMultiplo(containerId, tipo) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var idx = container.children.length;
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:6px; align-items:center;';
+    div.innerHTML = '<input type="text" class="campo-' + tipo + '" placeholder="Digite aqui..." style="flex:1; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:14px;">' +
+        '<button type="button" onclick="this.parentElement.remove()" style="background:#fee2e2; border:1px solid #fecaca; border-radius:6px; padding:4px 8px; cursor:pointer; color:#dc2626; font-weight:bold; font-size:14px;">×</button>';
+    container.appendChild(div);
+    div.querySelector('input').focus();
+}
+
+function adicionarCampoOrcamento(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:6px; align-items:center;';
+    div.innerHTML = '<input type="text" class="campo-orcamento-desc" placeholder="Descrição (ex: Alimentação)" style="flex:1; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:14px;">' +
+        '<input type="text" class="campo-orcamento-valor" placeholder="R$ 0,00" style="width:120px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:14px;">' +
+        '<button type="button" onclick="this.parentElement.remove()" style="background:#fee2e2; border:1px solid #fecaca; border-radius:6px; padding:4px 8px; cursor:pointer; color:#dc2626; font-weight:bold; font-size:14px;">×</button>';
+    container.appendChild(div);
+    div.querySelector('input').focus();
+}
+
+function abrirMapaLocalizacao(inputId) {
+    var input = document.getElementById(inputId || 'ev-localizacao');
+    var loc = input ? input.value.trim() : '';
+    if (!loc) { Swal.fire('Atenção', 'Digite uma localização primeiro.', 'info'); return; }
+    window.open('https://www.google.com/maps/search/' + encodeURIComponent(loc), '_blank');
+}
+
+function coletarCamposMultiplos(containerId, classe) {
+    var container = document.getElementById(containerId);
+    if (!container) return [];
+    var valores = [];
+    container.querySelectorAll('.' + classe).forEach(function(input) {
+        var v = input.value.trim();
+        if (v) valores.push(v);
+    });
+    return valores;
+}
+
+function coletarOrcamentos(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return [];
+    var items = [];
+    container.querySelectorAll(':scope > div').forEach(function(row) {
+        var desc = row.querySelector('.campo-orcamento-desc');
+        var valor = row.querySelector('.campo-orcamento-valor');
+        if (desc && valor && (desc.value.trim() || valor.value.trim())) {
+            items.push({ descricao: desc.value.trim(), valor: valor.value.trim(), data: new Date().toISOString().substring(0, 10) });
+        }
+    });
+    return items;
+}
+
+function preencherCamposMultiplos(containerId, tipo, valores) {
+    var container = document.getElementById(containerId);
+    if (!container || !valores) return;
+    (valores || []).forEach(function(v) {
+        adicionarCampoMultiplo(containerId, tipo);
+        var inputs = container.querySelectorAll('.campo-' + tipo);
+        if (inputs.length > 0) inputs[inputs.length - 1].value = v;
+    });
+}
+
+function preencherOrcamentos(containerId, items) {
+    var container = document.getElementById(containerId);
+    if (!container || !items) return;
+    (items || []).forEach(function(item) {
+        adicionarCampoOrcamento(containerId);
+        var rows = container.querySelectorAll(':scope > div');
+        var lastRow = rows[rows.length - 1];
+        if (lastRow) {
+            var descInput = lastRow.querySelector('.campo-orcamento-desc');
+            var valInput = lastRow.querySelector('.campo-orcamento-valor');
+            if (descInput) descInput.value = item.descricao || '';
+            if (valInput) valInput.value = item.valor || '';
+        }
+    });
+}
+
+window.adicionarCampoMultiplo = adicionarCampoMultiplo;
+window.adicionarCampoOrcamento = adicionarCampoOrcamento;
+window.abrirMapaLocalizacao = abrirMapaLocalizacao;
 
 async function carregarResponsaveisEmTodosSelects() {
     var selects = document.querySelectorAll('.ev-task-responsaveis');
@@ -3760,6 +3911,10 @@ async function salvarEventoAvancado() {
     var dataInicio = document.getElementById('ev-data-inicio').value;
     var cor = document.getElementById('ev-cor').value;
     var arquivos = arquivosTemporariosEvento; // Usar array em memória
+    var localizacao = document.getElementById('ev-localizacao') ? document.getElementById('ev-localizacao').value.trim() : '';
+    var parcerias = coletarCamposMultiplos('ev-parcerias-lista', 'campo-parceria');
+    var orcamentos = coletarOrcamentos('ev-orcamentos-lista');
+    var patrocinios = coletarCamposMultiplos('ev-patrocinios-lista', 'campo-patrocinio');
 
     if (!titulo || !dataInicio) { Swal.fire('Atenção', 'Título e Data são obrigatórios.', 'warning'); return; }
 
@@ -3774,7 +3929,11 @@ async function salvarEventoAvancado() {
             descricao: descricao,
             data_inicio: dataInicio + 'T09:00:00',
             cor: cor,
-            criado_por: userIdGlobal
+            criado_por: userIdGlobal,
+            localizacao: localizacao || null,
+            parcerias: parcerias,
+            orcamentos: orcamentos,
+            patrocinios: patrocinios
         }).select('*').maybeSingle();
 
         if (evError) throw evError;
@@ -3891,6 +4050,31 @@ async function abrirModalEditarEvento(id) {
     html += '<div class="campo-grupo"><label>Data do evento</label><input type="date" id="edit-ev-data" value="' + dataFormatada + '" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;"></div>';
     html += '<div class="campo-grupo"><label>Descrição</label><textarea id="edit-ev-descricao" rows="3" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">' + (ev.descricao || '') + '</textarea></div>';
 
+    // Localização
+    html += '<div class="campo-grupo"><label>Localização</label>';
+    html += '<div style="display:flex; gap:8px; align-items:center;">';
+    html += '<input type="text" id="edit-ev-localizacao" value="' + (ev.localizacao || '').replace(/"/g, '&quot;') + '" placeholder="Ex: Praça Central" style="flex:1; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">';
+    html += '<button type="button" onclick="abrirMapaLocalizacao(\'edit-ev-localizacao\')" style="background:#4285F4; color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; white-space:nowrap;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Maps</button>';
+    html += '</div></div>';
+
+    // Parcerias
+    html += '<div class="campo-grupo"><label>Parcerias</label>';
+    html += '<div id="edit-ev-parcerias-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoMultiplo(\'edit-ev-parcerias-lista\', \'parceria\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%;">+ Adicionar Parceria</button>';
+    html += '</div>';
+
+    // Orçamento
+    html += '<div class="campo-grupo"><label>Orçamento</label>';
+    html += '<div id="edit-ev-orcamentos-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoOrcamento(\'edit-ev-orcamentos-lista\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%;">+ Adicionar Orçamento</button>';
+    html += '</div>';
+
+    // Patrocínios
+    html += '<div class="campo-grupo"><label>Patrocínios</label>';
+    html += '<div id="edit-ev-patrocinios-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
+    html += '<button type="button" onclick="adicionarCampoMultiplo(\'edit-ev-patrocinios-lista\', \'patrocinio\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%;">+ Adicionar Patrocínio</button>';
+    html += '</div>';
+
     html += '<div class="campo-grupo"><label style="font-weight:700; color:#475569; display:block; margin-bottom:8px;">Anexar mais Documentos</label>';
     html += '<label style="display:flex; align-items:center; gap:8px; padding:10px; border:2px dashed #cbd5e1; border-radius:10px; cursor:pointer; background:#f8fafc;">';
     html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
@@ -3906,6 +4090,13 @@ async function abrirModalEditarEvento(id) {
     html += '</div></div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
+
+    // Preencher campos dinâmicos com dados existentes
+    setTimeout(function() {
+        preencherCamposMultiplos('edit-ev-parcerias-lista', 'parceria', ev.parcerias || []);
+        preencherOrcamentos('edit-ev-orcamentos-lista', ev.orcamentos || []);
+        preencherCamposMultiplos('edit-ev-patrocinios-lista', 'patrocinio', ev.patrocinios || []);
+    }, 50);
 }
 
 // Sobrecarga para suportar preview no modal de edição
@@ -3950,6 +4141,10 @@ async function salvarEdicaoEvento(id) {
     var titulo = document.getElementById('edit-ev-titulo').value.trim();
     var data = document.getElementById('edit-ev-data').value;
     var descricao = document.getElementById('edit-ev-descricao').value.trim();
+    var localizacao = document.getElementById('edit-ev-localizacao') ? document.getElementById('edit-ev-localizacao').value.trim() : '';
+    var parcerias = coletarCamposMultiplos('edit-ev-parcerias-lista', 'campo-parceria');
+    var orcamentos = coletarOrcamentos('edit-ev-orcamentos-lista');
+    var patrocinios = coletarCamposMultiplos('edit-ev-patrocinios-lista', 'campo-patrocinio');
 
     if (!titulo || !data) { Swal.fire('Atenção', 'Título e Data são obrigatórios.', 'warning'); return; }
 
@@ -3961,7 +4156,11 @@ async function salvarEdicaoEvento(id) {
         var { error } = await supabaseClient.from('eventos').update({
             titulo: titulo,
             data_inicio: data + 'T09:00:00',
-            descricao: descricao
+            descricao: descricao,
+            localizacao: localizacao || null,
+            parcerias: parcerias,
+            orcamentos: orcamentos,
+            patrocinios: patrocinios
         }).eq('id', id);
 
         if (error) throw error;
