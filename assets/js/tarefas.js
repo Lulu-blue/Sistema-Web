@@ -1877,7 +1877,19 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId) {
     }
     
     try {
-        var { error } = await supabaseClient.from('tarefas').update({ resposta: texto }).eq('id', subId);
+        // Buscar nome do usuário atual
+        var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
+        var agora = new Date().toISOString();
+
+        var payload = {
+            texto: texto,
+            user_id: userIdGlobal,
+            user_name: nomeUsuario,
+            at: agora
+        };
+
+        var { error } = await supabaseClient.from('tarefas').update({ resposta: JSON.stringify(payload) }).eq('id', subId);
         if (error) throw error;
         
         Swal.fire({
@@ -2259,22 +2271,44 @@ async function abrirDetalheTarefa(id) {
                 html += '</div>';
                 // Campo de Resposta (opção responder em campo de texto)
                 if (podeConcluirSub || s.resposta) {
+                    var dadosResposta = null;
+                    if (s.resposta) {
+                        try {
+                            if (s.resposta.startsWith('{')) {
+                                dadosResposta = JSON.parse(s.resposta);
+                            } else {
+                                dadosResposta = { texto: s.resposta };
+                            }
+                        } catch (e) {
+                            dadosResposta = { texto: s.resposta };
+                        }
+                    }
+
                     html += '<div style="margin-left:24px; margin-top:8px; margin-bottom:12px;">';
                     if (podeConcluirSub && s.status !== 'concluida') {
                         html += '<div style="display:flex; gap:8px; align-items:flex-end;">';
                         html += '<div style="flex:1;">';
                         html += '<label style="font-size:12px; color:#64748b; font-weight:600; display:block; margin-bottom:2px;">Sua Resposta:</label>';
-                        html += '<textarea id="resposta-sub-' + s.id + '" rows="1" placeholder="Digite sua resposta..." style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; resize:vertical; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'">' + (s.resposta || '') + '</textarea>';
+                        html += '<textarea id="resposta-sub-' + s.id + '" rows="1" placeholder="Digite sua resposta..." style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; resize:vertical; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'">' + (dadosResposta ? dadosResposta.texto : '') + '</textarea>';
                         html += '</div>';
                         html += '<button onclick="salvarRespostaSubtarefa(\'' + s.id + '\', \'' + id + '\')" style="background:#10b981; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; height:32px; transition:background 0.2s;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">Salvar</button>';
                         html += '</div>';
-                    } else if (s.resposta) {
+                    } else if (dadosResposta) {
                         html += '<div style="font-size:13px; color:#1e293b; background:#f0fdf4; padding:10px; border-radius:8px; border:1px solid #dcfce7; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">';
-                        html += '<div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">';
+                        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">';
+                        html += '<div style="display:flex; align-items:center; gap:5px;">';
                         html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
                         html += '<strong style="font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.05em;">Resposta registrada</strong>';
                         html += '</div>';
-                        html += '<div style="line-height:1.5;">' + escapeHtmlTarefa(s.resposta).replace(/\n/g, '<br>') + '</div>';
+                        if (dadosResposta.at) {
+                            var dataResp = new Date(dadosResposta.at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                            html += '<span style="font-size:10px; color:#166534; font-weight:500; opacity:0.7;">' + dataResp + '</span>';
+                        }
+                        html += '</div>';
+                        html += '<div style="line-height:1.5; margin-bottom:2px;">' + escapeHtmlTarefa(dadosResposta.texto).replace(/\n/g, '<br>') + '</div>';
+                        if (dadosResposta.user_name) {
+                            html += '<div style="font-size:11px; color:#166534; font-weight:600; margin-top:4px;">— ' + escapeHtmlTarefa(dadosResposta.user_name) + '</div>';
+                        }
                         html += '</div>';
                     }
                     html += '</div>';

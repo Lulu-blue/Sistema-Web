@@ -1104,5 +1104,6 @@ SEMAC/
 
 ### 💬 Respostas em Subtarefas
 - **Campo de Resposta**: Adicionada a opção de inserir uma resposta textual diretamente nas subtarefas, permitindo que o responsável relate o andamento sem a necessidade de anexar um arquivo.
+- **Rastreabilidade**: O sistema agora registra automaticamente **quem** enviou a resposta e **em qual data/hora**, exibindo essa atribuição logo abaixo do texto.
 - **Flexibilização da Conclusão**: A regra de conclusão foi alterada para aceitar **Anexo OU Resposta**. Subtarefas agora podem ser finalizadas se houver pelo menos uma dessas informações registradas.
 - **Visualização Estilizada**: Respostas salvas são exibidas em um card destacado (verde claro) com identificação visual, facilitando o acompanhamento por outros membros da equipe.
