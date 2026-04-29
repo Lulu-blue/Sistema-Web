@@ -5655,7 +5655,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
 
     var html = '';
     html += gerarSecao('Tarefas', statsTarefas, 'grafico-estatisticas-tarefas', 'lista-tarefas-estatisticas', todasComuns);
-    html += gerarSecao('Eventos', statsEventos, 'grafico-estatisticas-eventos', 'lista-eventos-estatisticas', todasEventosLista);
+    html += gerarSecao('Eventos e Projetos', statsEventos, 'grafico-estatisticas-eventos', 'lista-eventos-estatisticas', todasEventosLista);
 
     container.innerHTML = html;
 

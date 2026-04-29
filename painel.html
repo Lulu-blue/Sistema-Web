@@ -173,7 +173,7 @@
                             <line x1="8" y1="2" x2="8" y2="6"></line>
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
-                        Eventos
+                        Eventos e Projetos
                     </button>
                 </div> <!-- /gerente-posturas-options -->
 
@@ -188,7 +188,7 @@
                             <line x1="8" y1="2" x2="8" y2="6"></line>
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
-                        Eventos
+                        Eventos e Projetos
                     </button>
                     <button class="nav-btn"
                         onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao'); mudarAba('tarefas');">
@@ -282,7 +282,7 @@
                     <div id="secretario-submenu-direcao"
                         style="display: none; padding-left: 20px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 4px;">
                         <button class="nav-btn" onclick="mudarAba('projetos')" style="font-size: 0.85rem;">
-                            Eventos
+                            Eventos e Projetos
                         </button>
                         <button class="nav-btn"
                             onclick="if(typeof configurarModoTarefas === 'function') configurarModoTarefas('direcao'); mudarAba('tarefas');"
@@ -424,7 +424,7 @@
                             <line x1="8" y1="2" x2="8" y2="6" />
                             <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
-                        Eventos
+                        Eventos e Projetos
                     </button>
                     <button class="nav-btn" onclick="mudarAba('tarefas')">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -754,7 +754,7 @@
                                         <path d="M9 11l3 3L22 4" />
                                         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                                     </svg>
-                                    Tarefas de Eventos
+                                    Calendário de Tarefas
                                 </h3>
                             </div>
                             <div id="home-especial-minhas-tarefas">
@@ -775,7 +775,7 @@
                                         <line x1="8" y1="2" x2="8" y2="6" />
                                         <line x1="3" y1="10" x2="21" y2="10" />
                                     </svg>
-                                    Eventos
+                                    Eventos e Projetos
                                 </h3>
                                 <span style="font-size: 12px; color: #64748b;">Próximos 30 dias</span>
                             </div>
@@ -904,7 +904,7 @@
                                     <line x1="8" y1="2" x2="8" y2="6" />
                                     <line x1="3" y1="10" x2="21" y2="10" />
                                 </svg>
-                                Tarefas de Eventos
+                                Tarefas
                             </h3>
                         </div>
                         <div id="home-minhas-tarefas">
@@ -981,7 +981,7 @@
                                         <line x1="8" y1="2" x2="8" y2="6" />
                                         <line x1="3" y1="10" x2="21" y2="10" />
                                     </svg>
-                                    Tarefas de Eventos
+                                    Tarefas
                                 </h3>
                             </div>
                             <div id="diretor-minhas-tarefas">
@@ -1072,7 +1072,7 @@
                                         <line x1="8" y1="2" x2="8" y2="6" />
                                         <line x1="3" y1="10" x2="21" y2="10" />
                                     </svg>
-                                    Projetos
+                                    Eventos e Projetos
                                 </h3>
                                 <button onclick="irParaProjetos()"
                                     style="background: none; border: none; color: #3b82f6; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
@@ -1125,7 +1125,7 @@
                     </button>
                     <button id="btn-tab-minhas" class="sub-aba-btn" onclick="trocarAbaTarefas('minhas')"
                         style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: transparent; color: #475569; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s;">
-                        Tarefas de eventos
+                        Tarefas de Eventos e Projetos
                     </button>
                 </div>
 
@@ -1231,7 +1231,7 @@
                     <div id="minhas-tarefas-container" style="display:none;">
                         <div class="historico-vazio"
                             style="text-align:center; padding:40px; color:#94a3b8; background:white; border-radius:12px; border:1px dashed #cbd5e1;">
-                            <h3>Suas tarefas de eventos aparecerão aqui</h3>
+                            <h3>Suas tarefas aparecerão aqui</h3>
                             <p>Esta visualização está em construção.</p>
                         </div>
                     </div>
@@ -1490,13 +1490,28 @@
             <!-- ABA: PROJETOS (Calendário do Gerente) -->
             <section id="aba-projetos" class="content-section" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h1>Eventos</h1>
+                    <h1>Eventos e Projetos</h1>
                 </div>
 
                 <div style="display: flex; gap: 24px; align-items: flex-start;">
                     <!-- LADO ESQUERDO: CALENDÁRIO (MAIS COMPACTO) -->
                     <div class="calendario-container"
                         style="flex: 0.8; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 320px; border: 1px solid #e2e8f0;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+                            <button id="btn-filtro-todos" onclick="setFiltroTipoEvento('todos')" 
+                                style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #0c3e2b; background: #0c3e2b; color: white; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                                Tudo
+                            </button>
+                            <button id="btn-filtro-evento" onclick="setFiltroTipoEvento('evento')" 
+                                style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #475569; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                                Eventos
+                            </button>
+                            <button id="btn-filtro-projeto" onclick="setFiltroTipoEvento('projeto')" 
+                                style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #475569; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                                Projetos
+                            </button>
+                        </div>
+                        <input type="hidden" id="filtro-tipo-evento" value="todos">
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                             <button onclick="mudarMesCalendario(-1)"
@@ -1552,14 +1567,30 @@
                                 style="display: none; width: auto; height: auto; background: #0c3e2b; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(12, 62, 43, 0.2);"
                                 onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 15px rgba(12, 62, 43, 0.3)';"
                                 onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 10px rgba(12, 62, 43, 0.2)';">
-                                + Novo Evento
+                                + Novo
                             </button>
                         </div>
 
-                        <div id="lista-eventos-container" style="max-height: 600px; overflow-y: auto; padding: 5px;">
+                        <div id="lista-eventos-container" style="max-height: 300px; overflow-y: auto; padding: 5px; margin-bottom: 20px;">
                             <!-- Cards de eventos injetados pelo tarefas.js -->
                             <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 1rem;">
                                 Carregando eventos do mês...
+                            </div>
+                        </div>
+
+                        <div
+                            style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+                            <h2
+                                style="color: #1e293b; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; font-weight: 700;">
+                                <div style="width: 4px; height: 24px; background: #3b82f6; border-radius: 2px;"></div>
+                                Projetos
+                            </h2>
+                        </div>
+
+                        <div id="lista-projetos-container" style="max-height: 300px; overflow-y: auto; padding: 5px;">
+                            <!-- Cards de projetos injetados pelo tarefas.js -->
+                            <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 1rem;">
+                                Carregando projetos do mês...
                             </div>
                         </div>
                     </div>

@@ -256,9 +256,9 @@ async function carregarEventos() {
             }
         }
 
-        if (ehDiretor || ehFiscal || (roleLower.includes('secretario') && !isModoEspecialSecretario)) {
-            // Diretor, Fiscal e Secretário (em modo normal) veem todos os eventos
-            if (!isModoEspecialSecretario) eventosMesCache = todosEventos;
+        if (ehDiretor || ehFiscal || roleLower.includes('secretario')) {
+            // Diretor, Fiscal e Secretário veem todos os eventos (o Secretário vê tudo independente do modo da Home)
+            eventosMesCache = todosEventos;
         } else if (ehGerente || isModoEspecialSecretario) {
             // Gerentes e Secretário em modo especial veem apenas eventos onde:
             // 1. Um dos IDs de interesse é o responsável direto do evento, OU
@@ -289,6 +289,17 @@ async function carregarEventos() {
             // Comportamento padrão: vê tudo
             eventosMesCache = todosEventos;
         }
+        
+        // --- FILTRO POR TIPO (Evento/Projeto) ---
+        var selectFiltro = document.getElementById('filtro-tipo-evento');
+        var filtroTipo = selectFiltro ? selectFiltro.value : 'todos';
+        if (filtroTipo !== 'todos') {
+            eventosMesCache = eventosMesCache.filter(function (ev) {
+                var t = ev.tipo || 'evento';
+                return t === filtroTipo;
+            });
+        }
+
         if (typeof renderizarCalendario === 'function') renderizarCalendario();
 
         var hojeStr = new Date().toISOString().substring(0, 10);
@@ -312,15 +323,21 @@ async function carregarEventos() {
         }
 
         if (eventosParaExibir.length === 0) {
-            var msg = window.dataFiltroSelecionada ? 'Nenhum evento neste dia.' : 'Nenhum evento futuro cadastrado.';
+            var msg = window.dataFiltroSelecionada ? 'Nenhum evento/projeto neste dia.' : 'Nenhum evento/projeto futuro cadastrado.';
             var emptyHtml = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">' + msg + '</div>';
             if (containerCards) containerCards.innerHTML = emptyHtml;
+            
+            var containerProjetos = document.getElementById('lista-projetos-container');
+            if (containerProjetos) containerProjetos.innerHTML = emptyHtml;
             
             var homeContainerCards = document.getElementById('home-lista-eventos-container');
             if (homeContainerCards) homeContainerCards.innerHTML = emptyHtml;
         } else {
-            var htmlCards = '';
+            var htmlCardsEventos = '';
+            var htmlCardsProjetos = '';
+            
             eventosParaExibir.forEach(function (ev) {
+                var htmlCard = '';
                 var dataObj = new Date(ev.data_inicio);
                 var diaNum = dataObj.getDate();
                 var mesAbrev = dataObj.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
@@ -353,55 +370,98 @@ async function carregarEventos() {
                     : (ev.responsavel ? ev.responsavel.full_name : 'Não atribuído');
 
                 // Wrapper para card + detalhe
-                htmlCards += '<div style="margin-bottom: 20px;">';
+                htmlCard += '<div style="margin-bottom: 20px;">';
 
                 // Card Principal
-                htmlCards += '<div onclick="toggleDetalheEventoCard(\'' + ev.id + '\')" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
+                htmlCard += '<div onclick="toggleDetalheEventoCard(\'' + ev.id + '\')" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
 
                 // Lado Esquerdo: Data Colorida
-                htmlCards += '<div style="background:' + corBase + '; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; flex-shrink: 0;">';
-                htmlCards += '<span style="font-size: 1.8rem; font-weight: 800; line-height: 1;">' + diasExibicao + '</span>';
-                htmlCards += '<span style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">' + mesAbrev + '</span>';
-                htmlCards += '<div style="position: absolute; left: 80px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid ' + corBase + ';"></div>';
-                htmlCards += '</div>';
+                htmlCard += '<div style="background:' + corBase + '; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; flex-shrink: 0;">';
+                htmlCard += '<span style="font-size: 1.8rem; font-weight: 800; line-height: 1;">' + diasExibicao + '</span>';
+                htmlCard += '<span style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">' + mesAbrev + '</span>';
+                htmlCard += '<div style="position: absolute; left: 80px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid ' + corBase + ';"></div>';
+                htmlCard += '</div>';
 
                 // Centro: Informações
-                htmlCards += '<div style="flex: 1; padding: 15px 25px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">';
-                htmlCards += '<div style="display: flex; justify-content: space-between; align-items: flex-start;">';
-                htmlCards += '<h3 style="margin: 0; color: #1e293b; font-size: 1.1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + ev.titulo + '</h3>';
-                htmlCards += '<svg id="seta-card-' + ev.id + '" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" style="transition:0.3s;"><path d="M6 9l6 6 6-6"/></svg>';
-                htmlCards += '</div>';
-                htmlCards += '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.85rem;">';
-                htmlCards += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-                htmlCards += 'Prazo: ' + (dataFimObj ? dataFimObj.toLocaleDateString('pt-BR') : dataObj.toLocaleDateString('pt-BR'));
-                htmlCards += statusObj.badge;
-                htmlCards += '</div>';
-                htmlCards += '<div style="color: #94a3b8; font-size: 0.8rem; font-style: italic;">Resp: ' + resp + '</div>';
-                htmlCards += '</div>';
+                htmlCard += '<div style="flex: 1; padding: 15px 25px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">';
+                htmlCard += '<div style="display: flex; justify-content: space-between; align-items: flex-start;">';
+                htmlCard += '<h3 style="margin: 0; color: #1e293b; font-size: 1.1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + ev.titulo + '</h3>';
+                htmlCard += '<svg id="seta-card-' + ev.id + '" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" style="transition:0.3s;"><path d="M6 9l6 6 6-6"/></svg>';
+                htmlCard += '</div>';
+                htmlCard += '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.85rem;">';
+                htmlCard += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+                htmlCard += 'Prazo: ' + (dataFimObj ? dataFimObj.toLocaleDateString('pt-BR') : dataObj.toLocaleDateString('pt-BR'));
+                htmlCard += statusObj.badge;
+                htmlCard += '</div>';
+                htmlCard += '<div style="color: #94a3b8; font-size: 0.8rem; font-style: italic;">Resp: ' + resp + '</div>';
+                htmlCard += '</div>';
 
                 // Lado Direito: Barra Lateral de Status Vertical
-                htmlCards += '<div style="background:' + corBase + '22; width: 40px; display: flex; align-items: center; justify-content: center; border-left: 1px solid ' + corBase + '22; flex-shrink: 0;">';
-                htmlCards += '<span style="writing-mode: vertical-rl; transform: rotate(180deg); color: ' + corBase + '; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">' + statusObj.text + '</span>';
-                htmlCards += '</div>';
+                htmlCard += '<div style="background:' + corBase + '22; width: 40px; display: flex; align-items: center; justify-content: center; border-left: 1px solid ' + corBase + '22; flex-shrink: 0;">';
+                htmlCard += '<span style="writing-mode: vertical-rl; transform: rotate(180deg); color: ' + corBase + '; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">' + statusObj.text + '</span>';
+                htmlCard += '</div>';
 
-                htmlCards += '</div>'; // Fecha Card Principal
+                htmlCard += '</div>'; // Fecha Card Principal
 
                 // Área de Detalhes (Oculta)
-                htmlCards += '<div id="detalhe-evento-card-' + ev.id + '" style="display:none; background:#fcfdfe; border: 1px solid #f1f5f9; border-top:none; border-radius: 0 0 12px 12px; padding: 25px; margin-top: -5px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);">';
-                htmlCards += renderizarConteudoExpandidoEvento(ev);
-                htmlCards += '</div>';
+                htmlCard += '<div id="detalhe-evento-card-' + ev.id + '" style="display:none; background:#fcfdfe; border: 1px solid #f1f5f9; border-top:none; border-radius: 0 0 12px 12px; padding: 25px; margin-top: -5px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);">';
+                htmlCard += renderizarConteudoExpandidoEvento(ev);
+                htmlCard += '</div>';
 
-                htmlCards += '</div>'; // Fecha Wrapper
+                htmlCard += '</div>'; // Fecha Wrapper
+
+                if (ev.tipo === 'projeto') {
+                    htmlCardsProjetos += htmlCard;
+                } else {
+                    htmlCardsEventos += htmlCard;
+                }
             });
-            if (containerCards) containerCards.innerHTML = htmlCards;
+            
+            var emptyEv = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">Nenhum evento encontrado.</div>';
+            var emptyProj = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">Nenhum projeto encontrado.</div>';
+
+            if (containerCards) containerCards.innerHTML = htmlCardsEventos || emptyEv;
+            
+            var containerProjetos = document.getElementById('lista-projetos-container');
+            if (containerProjetos) containerProjetos.innerHTML = htmlCardsProjetos || emptyProj;
             
             var homeContainerCards = document.getElementById('home-lista-eventos-container');
-            if (homeContainerCards) homeContainerCards.innerHTML = htmlCards;
+            if (homeContainerCards) homeContainerCards.innerHTML = htmlCardsEventos || emptyEv;
         }
 
     } catch (err) {
         console.error(err);
     }
+}
+
+function setFiltroTipoEvento(valor) {
+    var input = document.getElementById('filtro-tipo-evento');
+    if (!input) return;
+    input.value = valor;
+
+    // Atualiza Estilo dos Botões
+    var ids = ['btn-filtro-todos', 'btn-filtro-evento', 'btn-filtro-projeto'];
+    var mapping = {
+        'todos': 'btn-filtro-todos',
+        'evento': 'btn-filtro-evento',
+        'projeto': 'btn-filtro-projeto'
+    };
+
+    ids.forEach(function(id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        if (id === mapping[valor]) {
+            btn.style.background = '#0c3e2b';
+            btn.style.color = 'white';
+            btn.style.borderColor = '#0c3e2b';
+        } else {
+            btn.style.background = 'white';
+            btn.style.color = '#475569';
+            btn.style.borderColor = '#cbd5e1';
+        }
+    });
+
+    if (typeof carregarEventos === 'function') carregarEventos();
 }
 
 function calcularStatusEvento(ev) {
@@ -487,7 +547,12 @@ function renderizarConteudoExpandidoEvento(ev) {
         html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">⭐ Patrocínios</h4>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
         ev.patrocinios.forEach(function(p) {
-            html += '<span style="background:#f5f3ff; color:#5b21b6; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #c4b5fd;">' + p + '</span>';
+            if (typeof p === 'object' && p !== null) {
+                var valTxt = p.valor ? (' - <span style="font-weight:700;">' + p.valor + '</span>') : '';
+                html += '<span style="background:#f5f3ff; color:#5b21b6; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #c4b5fd;">' + (p.descricao || 'Patrocinador') + valTxt + '</span>';
+            } else {
+                html += '<span style="background:#f5f3ff; color:#5b21b6; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #c4b5fd;">' + p + '</span>';
+            }
         });
         html += '</div>';
     }
@@ -3262,20 +3327,39 @@ async function carregarMinhasTarefasHome(containerId) {
         var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (!user) return;
+        
+        // Determinar IDs de interesse (dele ou subordinados se for Diretor)
+        var idsInteresse = [user.id];
+        var roleLower = (userRoleGlobal || '').toLowerCase();
+        
+        if (roleLower.includes('diretor')) {
+            // Diretor vê tarefas dele e de toda a equipe subordinada
+            var subordinates = [].concat(
+                idsGerentesGlobal || [],
+                idsGerentesAmbientalGlobal || [],
+                idsGerentesCAGlobal || [],
+                idsFiscaisPosturasGlobal || [],
+                idsEquipeAmbientalGlobal || [],
+                idsEquipeCAGlobal || []
+            );
+            idsInteresse = Array.from(new Set(idsInteresse.concat(subordinates)));
+        }
 
-        // Buscar tarefas onde o usuário é responsável OU é o criador
-        var { data: minhasResps, error: errR } = await supabaseClient
+        // Buscar tarefas onde algum ID de interesse é responsável
+        var { data: resps, error: errR } = await supabaseClient
             .from('tarefa_responsaveis')
             .select('tarefa_id')
-            .eq('user_id', user.id);
+            .in('user_id', idsInteresse);
 
         if (errR) throw errR;
-        var idsResponsavel = (minhasResps || []).map(function (r) { return r.tarefa_id; });
+        var idsResponsavel = (resps || []).map(function (r) { return r.tarefa_id; });
 
-        // Query dinâmica para incluir tarefas criadas por ele
-        var filterStr = 'criado_por.eq.' + user.id;
+        // Query dinâmica para incluir tarefas criadas por eles ou onde são responsáveis
+        var filterStr = 'criado_por.in.(' + idsInteresse.join(',') + ')';
         if (idsResponsavel.length > 0) {
-            filterStr = 'or(criado_por.eq.' + user.id + ',id.in.(' + idsResponsavel.join(',') + '))';
+            // Garante que não temos duplicatas nos IDs de tarefas
+            var uniqueTaskIds = Array.from(new Set(idsResponsavel));
+            filterStr = 'or(criado_por.in.(' + idsInteresse.join(',') + '),id.in.(' + uniqueTaskIds.join(',') + '))';
         }
 
         var { data: tarefasDiretas, error: errT } = await supabaseClient
@@ -3659,7 +3743,12 @@ function abrirModalNovoEventoAvancado() {
 
     html += '<div class="modal-body" style="background: #fff; padding: 25px;">';
 
-    // Seção Superior: Título e Descrição
+    // Seção Superior: Tipo, Título e Descrição
+    html += '<div class="campo-grupo"><label>Tipo de Registro</label>';
+    html += '<div style="display:flex; gap:20px; align-items:center; margin-bottom:10px;">';
+    html += '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="ev-tipo" value="evento" checked> Evento</label>';
+    html += '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="ev-tipo" value="projeto"> Projeto</label>';
+    html += '</div></div>';
     html += '<div class="campo-grupo"><label>Título do Evento / Projeto</label><input type="text" id="ev-titulo" placeholder="Ex: Mutirão de Limpeza Vila Nova"></div>';
     html += '<div class="campo-grupo"><label>Descrição Detalhada</label><textarea id="ev-descricao" rows="2" placeholder="Objetivos e informações base..."></textarea></div>';
 
@@ -3682,10 +3771,10 @@ function abrirModalNovoEventoAvancado() {
     html += '<button type="button" onclick="adicionarCampoOrcamento(\'ev-orcamentos-lista\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#f59e0b\';this.style.color=\'#f59e0b\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Orçamento</button>';
     html += '</div>';
 
-    // Patrocínios (múltiplos)
+    // Patrocínios (múltiplos com contribuição)
     html += '<div class="campo-grupo"><label>Patrocínios</label>';
     html += '<div id="ev-patrocinios-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
-    html += '<button type="button" onclick="adicionarCampoMultiplo(\'ev-patrocinios-lista\', \'patrocinio\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#8b5cf6\';this.style.color=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Patrocínio</button>';
+    html += '<button type="button" onclick="adicionarCampoPatrocinio(\'ev-patrocinios-lista\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%; transition:0.2s;" onmouseover="this.style.borderColor=\'#8b5cf6\';this.style.color=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#cbd5e1\';this.style.color=\'#64748b\'">+ Adicionar Patrocínio</button>';
     html += '</div>';
 
     // Grid: Data, Cor e Documentos
@@ -3781,6 +3870,18 @@ function adicionarCampoOrcamento(containerId) {
     div.querySelector('input').focus();
 }
 
+function adicionarCampoPatrocinio(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:6px; align-items:center;';
+    div.innerHTML = '<input type="text" class="campo-patrocinio-desc" placeholder="Nome do Patrocinador" style="flex:1; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:14px;">' +
+        '<input type="text" class="campo-patrocinio-valor" placeholder="Contribuição (opcional)" style="width:150px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:14px;">' +
+        '<button type="button" onclick="this.parentElement.remove()" style="background:#fee2e2; border:1px solid #fecaca; border-radius:6px; padding:4px 8px; cursor:pointer; color:#dc2626; font-weight:bold; font-size:14px;">×</button>';
+    container.appendChild(div);
+    div.querySelector('input').focus();
+}
+
 function abrirMapaLocalizacao(inputId) {
     var input = document.getElementById(inputId || 'ev-localizacao');
     var loc = input ? input.value.trim() : '';
@@ -3806,6 +3907,20 @@ function coletarOrcamentos(containerId) {
     container.querySelectorAll(':scope > div').forEach(function(row) {
         var desc = row.querySelector('.campo-orcamento-desc');
         var valor = row.querySelector('.campo-orcamento-valor');
+        if (desc && valor && (desc.value.trim() || valor.value.trim())) {
+            items.push({ descricao: desc.value.trim(), valor: valor.value.trim(), data: new Date().toISOString().substring(0, 10) });
+        }
+    });
+    return items;
+}
+
+function coletarPatrocinios(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return [];
+    var items = [];
+    container.querySelectorAll(':scope > div').forEach(function(row) {
+        var desc = row.querySelector('.campo-patrocinio-desc');
+        var valor = row.querySelector('.campo-patrocinio-valor');
         if (desc && valor && (desc.value.trim() || valor.value.trim())) {
             items.push({ descricao: desc.value.trim(), valor: valor.value.trim(), data: new Date().toISOString().substring(0, 10) });
         }
@@ -3839,8 +3954,29 @@ function preencherOrcamentos(containerId, items) {
     });
 }
 
+function preencherPatrocinios(containerId, items) {
+    var container = document.getElementById(containerId);
+    if (!container || !items) return;
+    (items || []).forEach(function(item) {
+        adicionarCampoPatrocinio(containerId);
+        var rows = container.querySelectorAll(':scope > div');
+        var lastRow = rows[rows.length - 1];
+        if (lastRow) {
+            var descInput = lastRow.querySelector('.campo-patrocinio-desc');
+            var valInput = lastRow.querySelector('.campo-patrocinio-valor');
+            if (typeof item === 'object') {
+                if (descInput) descInput.value = item.descricao || '';
+                if (valInput) valInput.value = item.valor || '';
+            } else {
+                if (descInput) descInput.value = item || '';
+            }
+        }
+    });
+}
+
 window.adicionarCampoMultiplo = adicionarCampoMultiplo;
 window.adicionarCampoOrcamento = adicionarCampoOrcamento;
+window.adicionarCampoPatrocinio = adicionarCampoPatrocinio;
 window.abrirMapaLocalizacao = abrirMapaLocalizacao;
 
 async function carregarResponsaveisEmTodosSelects() {
@@ -3914,7 +4050,10 @@ async function salvarEventoAvancado() {
     var localizacao = document.getElementById('ev-localizacao') ? document.getElementById('ev-localizacao').value.trim() : '';
     var parcerias = coletarCamposMultiplos('ev-parcerias-lista', 'campo-parceria');
     var orcamentos = coletarOrcamentos('ev-orcamentos-lista');
-    var patrocinios = coletarCamposMultiplos('ev-patrocinios-lista', 'campo-patrocinio');
+    var patrocinios = coletarPatrocinios('ev-patrocinios-lista');
+
+    var tipoRadio = document.querySelector('input[name="ev-tipo"]:checked');
+    var tipo = tipoRadio ? tipoRadio.value : 'evento';
 
     if (!titulo || !dataInicio) { Swal.fire('Atenção', 'Título e Data são obrigatórios.', 'warning'); return; }
 
@@ -3925,6 +4064,7 @@ async function salvarEventoAvancado() {
     try {
         // 1. Inserir Evento
         var { data: evData, error: evError } = await supabaseClient.from('eventos').insert({
+            tipo: tipo,
             titulo: titulo,
             descricao: descricao,
             data_inicio: dataInicio + 'T09:00:00',
@@ -4046,6 +4186,14 @@ async function abrirModalEditarEvento(id) {
     html += '<button class="modal-close" onclick="fecharModal(\'modal-editar-evento\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
 
+    var tipoEvento = (!ev.tipo || ev.tipo === 'evento') ? 'checked' : '';
+    var tipoProjeto = ev.tipo === 'projeto' ? 'checked' : '';
+    html += '<div class="campo-grupo"><label>Tipo de Registro</label>';
+    html += '<div style="display:flex; gap:20px; align-items:center; margin-bottom:10px;">';
+    html += '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="edit-ev-tipo" value="evento" ' + tipoEvento + '> Evento</label>';
+    html += '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="edit-ev-tipo" value="projeto" ' + tipoProjeto + '> Projeto</label>';
+    html += '</div></div>';
+
     html += '<div class="campo-grupo"><label>Título</label><input type="text" id="edit-ev-titulo" value="' + (ev.titulo || '') + '" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;"></div>';
     html += '<div class="campo-grupo"><label>Data do evento</label><input type="date" id="edit-ev-data" value="' + dataFormatada + '" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;"></div>';
     html += '<div class="campo-grupo"><label>Descrição</label><textarea id="edit-ev-descricao" rows="3" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">' + (ev.descricao || '') + '</textarea></div>';
@@ -4072,7 +4220,7 @@ async function abrirModalEditarEvento(id) {
     // Patrocínios
     html += '<div class="campo-grupo"><label>Patrocínios</label>';
     html += '<div id="edit-ev-patrocinios-lista" style="display:flex; flex-direction:column; gap:6px;"></div>';
-    html += '<button type="button" onclick="adicionarCampoMultiplo(\'edit-ev-patrocinios-lista\', \'patrocinio\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%;">+ Adicionar Patrocínio</button>';
+    html += '<button type="button" onclick="adicionarCampoPatrocinio(\'edit-ev-patrocinios-lista\')" style="background:none; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 12px; cursor:pointer; color:#64748b; font-size:13px; margin-top:6px; width:100%;">+ Adicionar Patrocínio</button>';
     html += '</div>';
 
     html += '<div class="campo-grupo"><label style="font-weight:700; color:#475569; display:block; margin-bottom:8px;">Anexar mais Documentos</label>';
@@ -4095,7 +4243,7 @@ async function abrirModalEditarEvento(id) {
     setTimeout(function() {
         preencherCamposMultiplos('edit-ev-parcerias-lista', 'parceria', ev.parcerias || []);
         preencherOrcamentos('edit-ev-orcamentos-lista', ev.orcamentos || []);
-        preencherCamposMultiplos('edit-ev-patrocinios-lista', 'patrocinio', ev.patrocinios || []);
+        preencherPatrocinios('edit-ev-patrocinios-lista', ev.patrocinios || []);
     }, 50);
 }
 
@@ -4144,7 +4292,10 @@ async function salvarEdicaoEvento(id) {
     var localizacao = document.getElementById('edit-ev-localizacao') ? document.getElementById('edit-ev-localizacao').value.trim() : '';
     var parcerias = coletarCamposMultiplos('edit-ev-parcerias-lista', 'campo-parceria');
     var orcamentos = coletarOrcamentos('edit-ev-orcamentos-lista');
-    var patrocinios = coletarCamposMultiplos('edit-ev-patrocinios-lista', 'campo-patrocinio');
+    var patrocinios = coletarPatrocinios('edit-ev-patrocinios-lista');
+
+    var tipoRadio = document.querySelector('input[name="edit-ev-tipo"]:checked');
+    var tipo = tipoRadio ? tipoRadio.value : 'evento';
 
     if (!titulo || !data) { Swal.fire('Atenção', 'Título e Data são obrigatórios.', 'warning'); return; }
 
@@ -4154,6 +4305,7 @@ async function salvarEdicaoEvento(id) {
 
     try {
         var { error } = await supabaseClient.from('eventos').update({
+            tipo: tipo,
             titulo: titulo,
             data_inicio: data + 'T09:00:00',
             descricao: descricao,

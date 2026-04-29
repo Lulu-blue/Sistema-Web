@@ -1080,3 +1080,24 @@ SEMAC/
 - A pasta `lib/` permaneceu na raiz para evitar quebra de múltiplas importações nos HTMLs
 - Todas as referências em `index.html`, `painel.html`, `style.css`, `painel.js` e `produtividade.js` foram atualizadas para refletir os novos caminhos
 - Os entry points (`index.html`, `painel.html`, `redefinir-senha.html`) e as navegações por `window.location.href` permanecem inalterados na raiz
+
+---
+
+## 🆕 Atualizações Recentes (29/04/2026) — Padronização e Eventos
+
+### 🚀 Módulo de Eventos e Projetos (Separação Visual)
+- **Segregação de Listas**: A aba "Eventos e Projetos" agora possui containers independentes para **Eventos** e **Projetos**. Ambos compartilham o mesmo calendário, mas são listados separadamente para melhor organização.
+- **Filtros Dinâmicos por Botões**: Substituição do seletor de tipo por botões de filtro rápido (**Tudo**, **Eventos**, **Projetos**) acima do calendário. O filtro afeta tanto os indicadores no calendário quanto as listas de cards.
+- **Campo "Tipo" na Criação**: Adicionado seletor de tipo (Evento vs Projeto) nos modais de criação e edição. 
+  - *Nota técnica*: Requer a coluna `tipo` (text) na tabela `eventos` do Supabase.
+
+### 📋 Padronização de Interface e Nomenclatura
+- **Botões de Ação**: O botão "+ Novo Evento" foi simplificado para **"+ Novo"**, seguindo a tendência de design minimalista.
+- **Home do Diretor**: O widget "Tarefas de Eventos" agora se chama apenas **"Tarefas"** e inclui automaticamente as tarefas de todos os seus **subordinados** (Gerentes e equipes), permitindo uma visão gerencial completa.
+- **Home do Secretário**: 
+  - Widget renomeado para **"Eventos e Projetos"**.
+  - Visibilidade expandida: agora exibe **todos** os eventos e projetos do sistema, ignorando filtros de modo (como Jurídico/RH) para garantir visão total à gestão municipal.
+
+### ⚙️ Lógica e Segurança
+- **Filtro de Hierarquia**: A função `carregarMinhasTarefasHome` foi aprimorada para detectar o cargo de Diretor e concatenar IDs de gerentes e fiscais na busca de tarefas.
+- **Persistência de Filtro**: Uso de inputs ocultos para manter o estado do filtro de tipo entre recarregamentos de dados.
