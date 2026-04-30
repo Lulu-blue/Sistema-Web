@@ -965,26 +965,52 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     const dia = String(hoje.getDate()).padStart(2, '0');
                     const dataAtual = `${ano}-${mes}-${dia}`;
 
-                    const campos14 = {
-                        n_notificacao: campos.n_notificacao || '',
-                        descricao: campos.motivo || 'Expedição Automática',
-                        data: dataAtual
-                    };
+                    const startsWithAI = campos.n_notificacao && campos.n_notificacao.toUpperCase().startsWith('AI');
 
-                    const { error: err14 } = await supabaseClient
-                        .from('registros_produtividade')
-                        .insert({
-                            user_id: user.id,
-                            categoria_id: '14',
-                            categoria_nome: 'Notificação Preliminar expedidos',
-                            pontuacao: 20,
-                            campos: campos14
-                        });
+                    if (startsWithAI) {
+                        const campos16 = {
+                            n_auto: campos.n_notificacao || '',
+                            descricao: campos.motivo || 'Expedição Automática',
+                            data: dataAtual
+                        };
 
-                    if (!err14) {
-                        pontos += 20; // Para mostrar os 25 pontos no alerta de sucesso
+                        const { error: err16 } = await supabaseClient
+                            .from('registros_produtividade')
+                            .insert({
+                                user_id: user.id,
+                                categoria_id: '16',
+                                categoria_nome: 'Autos de Infração expedidos',
+                                pontuacao: 30,
+                                campos: campos16
+                            });
+
+                        if (!err16) {
+                            pontos += 30; // Para mostrar os 35 pontos no alerta de sucesso
+                        } else {
+                            console.error('Erro ao gerar Autos de Infração expedidos (16):', err16);
+                        }
                     } else {
-                        console.error('Erro ao gerar Notificação Preliminar expedidos (14):', err14);
+                        const campos14 = {
+                            n_notificacao: campos.n_notificacao || '',
+                            descricao: campos.motivo || 'Expedição Automática',
+                            data: dataAtual
+                        };
+
+                        const { error: err14 } = await supabaseClient
+                            .from('registros_produtividade')
+                            .insert({
+                                user_id: user.id,
+                                categoria_id: '14',
+                                categoria_nome: 'Notificação Preliminar expedidos',
+                                pontuacao: 20,
+                                campos: campos14
+                            });
+
+                        if (!err14) {
+                            pontos += 20; // Para mostrar os 25 pontos no alerta de sucesso
+                        } else {
+                            console.error('Erro ao gerar Notificação Preliminar expedidos (14):', err14);
+                        }
                     }
                 }
 
@@ -1112,7 +1138,12 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             } else if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
                 alert(`${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
             } else if (categoriaAtual.id === '1.1') {
-                alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
+                const startsWithAI = campos.n_notificacao && campos.n_notificacao.toUpperCase().startsWith('AI');
+                if (startsWithAI) {
+                    alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
+                } else {
+                    alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
+                }
             } else if (categoriaAtual.id === '1.2') {
                 alert('Registros salvos com sucesso!\n\n• Auto de Infração (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
             } else {
