@@ -210,6 +210,11 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
 - **Campo de Dropdown Persistente Avançado**: A categoria permite dropdowns selecionáveis onde "Outro..." abre criação de motivos customizados, salvos localmente num array próprio, limpáveis pela Lixeira "🗑" e selecionáveis sem interrupção através de manipulação de DOM para impedir perda de focus no input de texto.
 - **Numeração Automática**: Algumas atividades de Processual (ex. Ofício e Auto de Infração) puxam sequenciado pelo maior número que o fiscal executou naquele tipo (ex. `0116/2026`).
 - **Calculadora de Horas**: Certas rotinas geram pontos multiplicando o "horas gastas" * "fator (ex 30pts/h)".
+- **Automação de Produtividade**: Para evitar retrabalho, o preenchimento de certas categorias-chave de Controle Processual gera automaticamente a pontuação de suas categorias associadas de expedição/elaboração. As pontuações são somadas e consolidadas silenciosamente no banco de dados. As regras ativas são:
+  - **Notificação Preliminar (16.1)** gera automaticamente **Notificação Preliminar expedidos (14)** (Total: 25 pts).
+  - **Auto de Infração (16.2)** gera automaticamente **Autos de Infração expedidos (15°)** (Total: 35 pts).
+  - **Ofício (16.4)** gera automaticamente **Elaboração de Ofícios (7°)** (Total: 25 pts).
+  - **Relatório Fiscal (16.5)** gera automaticamente **Elaboração de Certidão de Arquivamento e Relatório Fiscal (6°)** como tipo Relatório Fiscal (Total: 60 pts).
 
 ---
 
