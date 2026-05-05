@@ -63,6 +63,53 @@ function isSecretario(role) {
     return getNivelHierarquico(role) >= 3;
 }
 // --- FUNÇÕES AUXILIARES GERAIS ---
+
+// Gera um hash SHA-256 para um arquivo (assinatura única do conteúdo)
+async function calcularHashArquivo(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Verifica se já existe um registro com o mesmo hash ou dados idênticos no banco
+async function verificarDuplicidade(tabela, campos, arquivoHash) {
+    try {
+        // 1. Verifica se o mesmo arquivo já foi enviado
+        if (arquivoHash) {
+            const { data: porHash } = await supabaseClient
+                .from(tabela)
+                .select('id')
+                .eq('campos->>arquivo_hash', arquivoHash)
+                .limit(1);
+            
+            if (porHash && porHash.length > 0) return true;
+        }
+
+        // 2. Verifica se os dados principais são idênticos
+        let query = supabaseClient.from(tabela).select('id');
+        const camposChave = ['n_notificacao', 'n_auto', 'n_ar', 'n_protocolo', 'n_inscricao', 'nome'];
+        let temFiltro = false;
+
+        camposChave.forEach(c => {
+            if (campos[c]) {
+                query = query.eq(`campos->>${c}`, campos[c]);
+                temFiltro = true;
+            }
+        });
+
+        if (temFiltro) {
+            const { data: porCampos } = await query.limit(1);
+            if (porCampos && porCampos.length > 0) return true;
+        }
+
+        return false;
+    } catch (e) {
+        console.error("Erro na verificação:", e);
+        return false;
+    }
+}
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -915,6 +962,51 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         let data, error;
         const isCP = categoriaAtual.destaque === true;
         const tabela = isCP ? 'controle_processual' : 'registros_produtividade';
+
+      // --- INÍCIO DA VALIDAÇÃO DE DUPLICIDADE ---
+        if (!modoEdicao) { 
+            let hashArquivo = null;
+            if (arquivoAnexo && arquivoAnexo.file) {
+                hashArquivo = await calcularHashArquivo(arquivoAnexo.file);
+                campos['arquivo_hash'] = hashArquivo; 
+            }
+
+            const numAtual = campos['n_notificacao'] || campos['n_auto'] || '';
+
+            if (hashArquivo && numAtual) {
+                // Filtro preciso: busca no banco se existe EXATAMENTE a mesma combinação
+                const { data: duplicados, error: erroBusca } = await supabaseClient
+                    .from(tabela)
+                    .select('id')
+                    .contains('campos', { 
+                        arquivo_hash: hashArquivo, 
+                        [campos['n_notificacao'] ? 'n_notificacao' : 'n_auto']: numAtual 
+                    })
+                    .limit(1);
+
+                if (erroBusca) console.error('Erro na verificação:', erroBusca);
+
+                                if (duplicados && duplicados.length > 0) {
+                    Swal.fire({
+                        icon: 'info', // Ícone azul de informação, menos alarmante que o erro vermelho
+                        title: 'Arquivo já registrado',
+                        text: 'Identificamos que este arquivo já foi enviado com esta mesma numeração. Para manter a organização do sistema, não é necessário salvá-lo novamente.',
+                        confirmButtonColor: '#3b82f6', // Um azul suave para o botão
+                        confirmButtonText: 'Entendido'
+                    });
+                    
+                    if (btnSalvar) {
+                        btnSalvar.textContent = oldTexto;
+                        btnSalvar.disabled = false;
+                    }
+                    salvando = false;
+                    return; 
+                }
+
+            }
+        }
+        // --- FIM DA VALIDAÇÃO ---
+
 
         if (modoEdicao && idEditando) {
             // EDIÇÃO: atualizar registro existente
