@@ -76,6 +76,18 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
   - Envio de token de segurança válido por 1 hora para o e-mail real do usuário.
   - O e-mail é disparado via **Google Apps Script** (contornando a necessidade de SMTP direto no Supabase e possíveis bloqueios).
   - Atualização da senha (criptografada) via `redefinir-senha.html`.
+
+### Expiração de Sessão (12 Horas)
+Por segurança, toda sessão de usuário possui um **limite máximo contínuo de 12 horas**, independentemente da renovação automática de tokens do Supabase.
+
+- **Como funciona**: no momento do login (`assets/js/script.js`), um timestamp (`semac_session_start`) é salvo no `localStorage` do navegador.
+- **Verificação**: o guardião de rotas (`assets/js/protecao.js`) checa esse timestamp em três momentos:
+  1. Ao carregar qualquer página protegida (`verificarAcesso()`).
+  2. Durante monitoramento reativo de estado de autenticação (`onAuthStateChange`).
+  3. Antes de operações críticas, como salvar dados (`garantirSessaoAtiva()`).
+- **Comportamento ao expirar**: se o tempo decorrido ultrapassar 12 horas, o sistema executa `signOut()`, remove o timestamp e redireciona para `index.html` com o aviso:
+  > *"Sua sessão expirou após 12 horas por segurança. Por favor, faça login novamente."*
+
 ---
 
 ## 📊 Home / Visão Geral

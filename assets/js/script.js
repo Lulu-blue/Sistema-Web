@@ -56,6 +56,8 @@ form.addEventListener('submit', async (e) => {
                 console.error("Erro ao buscar perfil:", perfilErr);
                 alert("Erro ao carregar seu perfil. Tente novamente.");
             } else if (perfil) {
+                // Salva o momento exato do login para controle de expiração de 12h
+                localStorage.setItem('semac_session_start', Date.now().toString());
                 // Redirecionamento baseado no cargo
                 window.location.href = "painel.html";
             } else {

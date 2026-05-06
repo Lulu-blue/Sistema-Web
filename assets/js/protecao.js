@@ -19,6 +19,20 @@ async function verificarAcesso() {
             window.location.href = "index.html";
             return null;
         }
+
+        // ⏱️ Verificar limite máximo de 12 horas de sessão
+        const HORAS_LIMITE = 12;
+        const MS_LIMITE = HORAS_LIMITE * 60 * 60 * 1000;
+        const sessionStart = parseInt(localStorage.getItem('semac_session_start') || '0');
+
+        if (!sessionStart || (Date.now() - sessionStart > MS_LIMITE)) {
+            await supabaseClient.auth.signOut();
+            localStorage.removeItem('semac_session_start');
+            alert(`Sua sessão expirou após ${HORAS_LIMITE} horas por segurança. Por favor, faça login novamente.`);
+            window.location.href = "index.html";
+            return null;
+        }
+
         return session;
     } catch (err) {
         console.error("Erro crítico na verificação de acesso:", err);
@@ -35,6 +49,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log(`[Auth Event] ${event}`);
     if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
         console.warn("Sessão encerrada pelo sistema. Redirecionando...");
+        localStorage.removeItem('semac_session_start');
         window.location.href = "index.html";
     }
 });
@@ -49,6 +64,19 @@ async function garantirSessaoAtiva() {
         const sessionCheck = await verificarAcesso();
         return !!sessionCheck;
     }
+
+    // ⏱️ Também validar limite de 12h antes de operações críticas
+    const HORAS_LIMITE = 12;
+    const MS_LIMITE = HORAS_LIMITE * 60 * 60 * 1000;
+    const sessionStart = parseInt(localStorage.getItem('semac_session_start') || '0');
+    if (!sessionStart || (Date.now() - sessionStart > MS_LIMITE)) {
+        await supabaseClient.auth.signOut();
+        localStorage.removeItem('semac_session_start');
+        alert(`Sua sessão expirou após ${HORAS_LIMITE} horas por segurança. Por favor, faça login novamente.`);
+        window.location.href = "index.html";
+        return false;
+    }
+
     return true;
 }
 window.garantirSessaoAtiva = garantirSessaoAtiva;
