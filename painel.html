@@ -39,8 +39,35 @@
 
 <body>
 
-    <div class="dashboard-layout">
-        <aside class="sidebar">
+    <!-- Botão hambúrguer flutuante (mobile) -->
+    <button id="mobile-menu-toggle" class="mobile-menu-toggle" onclick="toggleSidebarMobile()" aria-label="Abrir menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <!-- Backdrop escuro para sidebar mobile -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="fecharSidebarMobile()"></div>
+
+    <div class="dashboard-layout" id="dashboard-layout">
+        <aside class="sidebar" id="sidebar">
+            <!-- Botão fechar (mobile) -->
+            <button class="sidebar-close-btn" onclick="fecharSidebarMobile()" aria-label="Fechar menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+
+            <!-- Botão minimizar/expandir (desktop) -->
+            <button class="sidebar-toggle-desktop" id="btn-toggle-sidebar" onclick="toggleSidebarDesktop()" aria-label="Minimizar menu">
+                <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
             <div class="profile-section">
                 <div class="avatar-wrapper">
                     <img id="user-photo"
@@ -668,7 +695,7 @@
                     </div>
 
                     <div
-                        style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
+                        style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 20px;">
                         <!-- Coluna Gerentes de Cuidado Animal -->
                         <div class="grafico-container" style="width: 100%;">
                             <div
@@ -936,8 +963,7 @@
                         </div>
                     </div>
 
-                    <div
-                        style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px;">
+                    <div class="home-diretor-grid" style="margin-top: 20px;">
                         <!-- Coluna Gerentes de Posturas -->
                         <div class="grafico-container" style="width: 100%;">
                             <div style="margin-bottom: 16px;">
@@ -997,7 +1023,7 @@
                 <div id="home-secretario-container" style="display:none; margin-top: -5px; padding-top: 0px;">
                     <!-- Árvore Hierárquica (Topo) -->
                     <div style="width: 100%; margin-bottom: -2px;">
-                        <div id="secretario-arvore-hierarquia"
+                        <div id="secretario-arvore-hierarquia" class="arvore-hierarquica-secretario"
                             style="padding: 0px; background: transparent; border-radius: 12px; margin: 0; line-height: 1.2;">
                             <div style="text-align: center; color: #64748b; padding: 40px; font-weight: 500;">
                                 Carregando estrutura...</div>

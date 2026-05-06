@@ -1019,8 +1019,8 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         let anoRelatorio = dataObj.getFullYear();
         let mesIndex = dataObj.getMonth();
 
-        // Regra do relatório: dias 1, 2, 3 referem-se ao mês anterior
-        if (dataObj.getDate() <= 3) {
+        // Regra do relatório: dias 1 a 7 referem-se ao mês anterior
+        if (dataObj.getDate() <= 7) {
             mesIndex -= 1;
             if (mesIndex < 0) {
                 mesIndex = 11;
@@ -1032,9 +1032,9 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         const anoAtual = anoRelatorio;
         const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + (r.pontuacao || 0), 0);
 
-        // Filtrar registros do mês do relatório
+        // Filtrar registros do mês do relatório (usando created_at para consistência)
         const registrosMes = registrosFiltrados.filter(r => {
-            const dt = typeof obterDataReal === 'function' ? obterDataReal(r) : new Date(r.created_at);
+            const dt = new Date(r.created_at);
             return dt.getFullYear() === anoAtual && dt.getMonth() === mesIndex;
         });
 
@@ -1177,16 +1177,17 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                             font-size: 1.25rem;
                         }
                         #modal-relatorio-gerente .relatorio-col-graficos {
-                            flex-direction: row !important;
+                            flex-direction: column !important;
                             flex-wrap: nowrap !important;
                             order: -1 !important;
                             max-height: none;
                             gap: 10px;
+                            width: 100% !important;
                         }
                         #modal-relatorio-gerente .relatorio-col-graficos > div {
-                            flex: 1 1 calc(50% - 5px);
-                            min-width: 0;
-                            padding: 8px;
+                            flex: none;
+                            width: 100%;
+                            padding: 12px;
                             box-sizing: border-box;
                             min-height: auto;
                             overflow: hidden;
@@ -1259,12 +1260,15 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
 
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-        // 6. Renderizar gráficos
+        // 6. Guardar dados globais para alternância Mês/Ano
         window.docPorTipoMesFiscal = docPorTipoMes;
         window.docPorTipoAnoFiscal = docPorTipoAno;
         window.tarefasStatusFiscal = tarefasStatus;
         window.modoGraficoDocsFiscal = 'mes';
-        renderizarGraficosFiscal(docPorTipoMes, tarefasStatus);
+        // Delay para garantir que o DOM esteja estável e dimensões calculadas (especialmente no mobile)
+        requestAnimationFrame(function() {
+            renderizarGraficosFiscal(docPorTipoMes, tarefasStatus);
+        });
 
     } catch (err) {
         console.error("Erro ao gerar relatório do fiscal:", err);
@@ -1296,8 +1300,8 @@ function alternarModoGraficoDocsFiscal(modo) {
         btnAno.style.borderColor = modo === 'ano' ? '#10b981' : '#e2e8f0';
     }
 
-    // Atualizar ou criar gráfico
-    renderizarGraficosFiscal(docPorTipo, window.tarefasStatusFiscal);
+    // Atualizar ou criar gráfico (garantir objeto válido)
+    renderizarGraficosFiscal(docPorTipo || {}, window.tarefasStatusFiscal || {});
 }
 window.alternarModoGraficoDocsFiscal = alternarModoGraficoDocsFiscal;
 
@@ -1312,11 +1316,24 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         canvasPizza = document.getElementById('grafico-pizza-docs');
     }
 
-    if (canvasPizza && typeof Chart !== 'undefined' && Object.keys(docPorTipo).length > 0) {
-        // Destruir gráfico anterior se existir
+    // Garantir que docPorTipo seja um objeto válido
+    const dadosDoc = docPorTipo || {};
+    if (canvasPizza && typeof Chart !== 'undefined' && Object.keys(dadosDoc).length > 0) {
+        // Destruir gráfico anterior se existir (tanto em window quanto no canvas)
         if (window.graficoPizzaDocsFiscal) {
             try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
             window.graficoPizzaDocsFiscal = null;
+        }
+        if (canvasPizza.chartInstance) {
+            try { canvasPizza.chartInstance.destroy(); } catch(e) {}
+            canvasPizza.chartInstance = null;
+        }
+
+        // Garantir dimensões do canvas para evitar renderização em tamanho 0
+        const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : null;
+        if (wrapperRect && wrapperRect.width > 0 && wrapperRect.height > 0) {
+            canvasPizza.width = wrapperRect.width;
+            canvasPizza.height = wrapperRect.height;
         }
 
         const cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
@@ -1324,10 +1341,10 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         window.graficoPizzaDocsFiscal = new Chart(canvasPizza, {
             type: 'doughnut',
             data: {
-                labels: Object.keys(docPorTipo),
+                labels: Object.keys(dadosDoc),
                 datasets: [{
-                    data: Object.values(docPorTipo),
-                    backgroundColor: cores.slice(0, Object.keys(docPorTipo).length),
+                    data: Object.values(dadosDoc),
+                    backgroundColor: cores.slice(0, Object.keys(dadosDoc).length),
                     borderWidth: 2,
                     borderColor: '#ffffff'
                 }]
@@ -1364,9 +1381,20 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
             try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
             window.graficoPizzaDocsFiscal = null;
         }
-        // Não destruir o canvas, apenas limpar para mensagem se quisermos
+        // Desenhar mensagem amigável quando não há dados
         const ctx = canvasPizza.getContext('2d');
+        const rect = canvasPizza.getBoundingClientRect();
+        canvasPizza.width = rect.width || 380;
+        canvasPizza.height = rect.height || 380;
         ctx.clearRect(0, 0, canvasPizza.width, canvasPizza.height);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const modoAtual = window.modoGraficoDocsFiscal || 'mes';
+        const labelModo = modoAtual === 'mes' ? 'este mês' : 'este ano';
+        ctx.fillText('Nenhum registro encontrado para', canvasPizza.width / 2, canvasPizza.height / 2 - 12);
+        ctx.fillText(labelModo + '.', canvasPizza.width / 2, canvasPizza.height / 2 + 12);
     }
 
     // Gráfico de Colunas - Status das Tarefas
@@ -1492,8 +1520,13 @@ function fecharRelatorioGerente() {
         var canvasPizza = document.getElementById('grafico-pizza-docs');
         var canvasColunas = document.getElementById('grafico-colunas-tarefas');
 
+        if (window.graficoPizzaDocsFiscal) {
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            window.graficoPizzaDocsFiscal = null;
+        }
         if (canvasPizza && canvasPizza.chartInstance) {
-            canvasPizza.chartInstance.destroy();
+            try { canvasPizza.chartInstance.destroy(); } catch(e) {}
+            canvasPizza.chartInstance = null;
         }
         if (canvasColunas && canvasColunas.chartInstance) {
             canvasColunas.chartInstance.destroy();
@@ -2841,10 +2874,10 @@ async function carregarGerentesHierarquiaDiretor() {
                 fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + ';">' + (gerente.full_name ? gerente.full_name.charAt(0).toUpperCase() : 'G') + '</div>';
             }
 
-            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Posturas\')">';
+            html += '<div class="funcionario-card-diretor" style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Posturas\')">';
 
-            html += '<div style="display:flex;align-items:center;gap:12px;">';
-            html += fotoHtml;
+            html += '<div class="funcionario-card-inner" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+            html += '<div style="flex-shrink:0;">' + fotoHtml + '</div>';
             html += '<div style="flex:1;">';
             html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (gerente.full_name || 'Sem Nome') + '</div>';
             html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (gerente.matricula || '---') + '</div>';
@@ -2912,10 +2945,10 @@ async function carregarGerentesAmbientalHierarquiaDiretor() {
                 fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + '">' + (gerente.full_name ? gerente.full_name.charAt(0).toUpperCase() : 'G') + '</div>';
             }
 
-            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Regularização Ambiental\')">';
+            html += '<div class="funcionario-card-diretor" style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + gerente.id + '\', \'' + (gerente.full_name || '').replace(/'/g, "\\'") + '\', \'Gerente de Regularização Ambiental\')">';
 
-            html += '<div style="display:flex;align-items:center;gap:12px;">';
-            html += fotoHtml;
+            html += '<div class="funcionario-card-inner" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+            html += '<div style="flex-shrink:0;">' + fotoHtml + '</div>';
             html += '<div style="flex:1;">';
             html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (gerente.full_name || 'Sem Nome') + '</div>';
             html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (gerente.matricula || '---') + '</div>';
@@ -2980,10 +3013,10 @@ async function carregarConsorciosHierarquiaDiretor() {
                 fotoHtml = '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,' + cor + ',#666);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;border:3px solid ' + cor + '">' + (cons.full_name ? cons.full_name.charAt(0).toUpperCase() : 'C') + '</div>';
             }
 
-            html += '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + cons.id + '\', \'' + (cons.full_name || '').replace(/'/g, "\\'") + '\', \'Consórcio\')">';
+            html += '<div class="funcionario-card-diretor" style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid ' + cor + ';cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseout="this.style.transform=\'none\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\'" onclick="abrirEstatisticasFuncionario(\'' + cons.id + '\', \'' + (cons.full_name || '').replace(/'/g, "\\'") + '\', \'Consórcio\')">';
 
-            html += '<div style="display:flex;align-items:center;gap:12px;">';
-            html += fotoHtml;
+            html += '<div class="funcionario-card-inner" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+            html += '<div style="flex-shrink:0;">' + fotoHtml + '</div>';
             html += '<div style="flex:1;">';
             html += '<div style="font-weight:700;font-size:16px;color:#1e293b;">' + (cons.full_name || 'Sem Nome') + '</div>';
             html += '<div style="font-size:12px;color:#64748b;">Matrícula: ' + (cons.matricula || '---') + '</div>';
@@ -3760,7 +3793,7 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '<div style="display: flex; justify-content: center; gap: 65px; align-items: flex-start;">';
         
         // Gerência de Posturas
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 290px; flex: 0 0 auto;">';
+        html += '<div class="arvore-coluna-gp" style="display: flex; flex-direction: column; align-items: center; width: 290px; flex: 0 0 auto;">';
         html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA POSTURAS</span>';
         html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
         gerentesPosturas.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#0c3e2b', 'gerente_posturas'); });
@@ -3771,7 +3804,7 @@ async function carregarHierarquiaCompletaSecretario() {
         if (fiscais.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #b45309; margin: 4px 0 2px 0;"></div>';
             html += '<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">FISCAIS (' + fiscais.length + ')</span>';
-            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
+            html += '<div class="arvore-grid-dupla" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
             fiscais.forEach(function (f) { html += renderizarCardArvoreCompacto(f, '#b45309', 'fiscal'); });
             html += '</div>';
         }
@@ -3779,7 +3812,7 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>';
         
         // Gerência Ambiental
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 340px; flex: 0 0 auto;">';
+        html += '<div class="arvore-coluna-ga" style="display: flex; flex-direction: column; align-items: center; width: 340px; flex: 0 0 auto;">';
         html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA AMBIENTAL</span>';
         html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
         gerentesAmbiental.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#1e3a5f', 'gerente_ambiental'); });
@@ -3794,10 +3827,10 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '<div style="display: flex; justify-content: center; gap: 20px; width: 100%; align-items: flex-start;">';
         
         // Coluna da esquerda: EQUIPE RA
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 210px; flex: 0 0 auto;">';
+        html += '<div class="arvore-coluna-equipe-ra" style="display: flex; flex-direction: column; align-items: center; width: 210px; flex: 0 0 auto;">';
         html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">EQUIPE (' + equipeAmbiental.length + ')</span>';
         if (equipeAmbiental.length > 0) {
-            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
+            html += '<div class="arvore-grid-dupla" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; margin-top: 4px;">';
             equipeAmbiental.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#065f46', 'equipe_ambiental'); });
             html += '</div>';
         }
@@ -3814,7 +3847,7 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>'; // Fim coluna EQUIPE RA
         
         // Coluna da direita: CONSÓRCIO + ANALISTAS
-        html += '<div style="display: flex; flex-direction: column; align-items: center; width: 130px; flex: 0 0 auto;">';
+        html += '<div class="arvore-coluna-consorcio" style="display: flex; flex-direction: column; align-items: center; width: 130px; flex: 0 0 auto;">';
         html += '<span style="background: #d97706; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">CONSÓRCIO (' + consorcios.length + ')</span>';
         if (consorcios.length > 0) {
             html += '<div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px;">';
@@ -3857,7 +3890,7 @@ async function carregarHierarquiaCompletaSecretario() {
         if (equipeCuidadoAnimal.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #c026d3; margin: 4px 0 2px 0;"></div>';
             html += '<span style="background: #c026d3; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">COORD. (' + equipeCuidadoAnimal.length + ')</span>';
-            html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin-top: 8px;">';
+            html += '<div class="arvore-grid-dupla" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin-top: 8px;">';
             equipeCuidadoAnimal.forEach(function (e) { html += renderizarCardArvoreCompacto(e, '#c026d3', 'coordenador_ca'); });
             html += '</div>';
         }
@@ -4938,7 +4971,8 @@ var CARGOS_EQUIPE_AMBIENTAL = [
     'Engenheiro(a) Agrônomo(a)',
     'Engenheiro(a) Civil',
     'Analista Ambiental',
-    'Auxiliar de Serviços II'
+    'Auxiliar de Serviços II',
+    'Consórcio'
 ];
 
 var CARGOS_EQUIPE_AMBIENTAL_LOWER = [
@@ -4947,6 +4981,8 @@ var CARGOS_EQUIPE_AMBIENTAL_LOWER = [
     'engenheiro(a) civil',
     'engenheiro civil',
     'analista ambiental',
+    'consorcio',
+    'consórcio',
     'auxiliar de serviços ii',
     'auxiliar de servicos ii'
 ];
@@ -5631,11 +5667,11 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
     var todasEventosLista = tarefasEventos.concat(subtarefasEventos);
 
     function gerarCards(stats) {
-        return '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:20px;">'
-            + '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.atrasadas + '</div><div style="font-size:12px;opacity:0.9;">Atrasadas</div></div>'
-            + '<div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.concluidas + '</div><div style="font-size:12px;opacity:0.9;">Concluídas</div></div>'
-            + '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.emProgresso + '</div><div style="font-size:12px;opacity:0.9;">Em Progresso</div></div>'
-            + '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:16px;text-align:center;color:white;"><div style="font-size:28px;font-weight:700;">' + stats.pendentes + '</div><div style="font-size:12px;opacity:0.9;">Pendentes</div></div>'
+        return '<div class="stats-cards-container" style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:20px;">'
+            + '<div class="stats-card" style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.atrasadas + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Atrasadas</div></div>'
+            + '<div class="stats-card" style="background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.concluidas + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Concluídas</div></div>'
+            + '<div class="stats-card" style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.emProgresso + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Em Progresso</div></div>'
+            + '<div class="stats-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.pendentes + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Pendentes</div></div>'
             + '</div>';
     }
 
@@ -5780,7 +5816,7 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
     var dataObj = new Date();
     var anoRelatorio = dataObj.getFullYear();
     var mesIndex = dataObj.getMonth();
-    if (dataObj.getDate() <= 3) {
+    if (dataObj.getDate() <= 7) {
         mesIndex -= 1;
         if (mesIndex < 0) { mesIndex = 11; anoRelatorio -= 1; }
     }
@@ -5789,7 +5825,7 @@ async function adicionarRelatorioFiscalNasEstatisticas(fiscalId, nomeFiscal) {
     var pontuacaoTotal = registrosFiltrados.reduce(function (s, r) { return s + (r.pontuacao || 0); }, 0);
 
     var registrosMes = registrosFiltrados.filter(function (r) {
-        var dt = typeof obterDataReal === 'function' ? obterDataReal(r) : new Date(r.created_at);
+        var dt = new Date(r.created_at);
         return dt.getFullYear() === anoAtual && dt.getMonth() === mesIndex;
     });
 

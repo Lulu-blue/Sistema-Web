@@ -84,9 +84,11 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
   - **Gráfico de Produtividade Diária (Chart.js)**: Gráfico de barras combinando contagem por dia e uma linha para pontos acumulados, com linha indicadora da meta.
   - **Resumo de Pontuação**: Exibe os pontos totais e notificações de conclusão.
   - **Destaque Dinâmico (Meta 2000)**: Quando a soma dos pontos atinge 2000 no mês, um badge dourado pulsante "*🏆 META ATINGIDA*" é exibido.
-  - **Botão "Gerar Relatório"**: Processa no navegador um **relatório HTML editável** (com a data de pesquisa, agrupado por categorias e subtotais) com botão para Salvar em formato PDF. O título do relatório insere automaticamente o "Mês/Ano" corrente baseado no dia de fechamento (até dia 3 = mês anterior, pós-dia 3 = mês atual).
-- **Botão "Limpeza Geral"**: Localizado ao lado do relatório, permite que o fiscal limpe permanentemente seus dados da tabela `registros_produtividade` e **zere a pontuação** da tabela `controle_processual` vinculada a ele.
-    - **⚠️ Integridade**: O botão **NÃO apaga** os registros da tabela `controle_processual` (Notificações, Autos, Ofícios, etc), garantindo que os documentos oficiais continuem existindo no Histórico Geral, apenas remove a pontuação associada ao fiscal no histórico pessoal.
+  - **Botão "Gerar Relatório"**: Processa no navegador um **relatório HTML editável** (com a data de pesquisa, agrupado por categorias e subtotais) com botão para Salvar em formato PDF. O título do relatório insere automaticamente o "Mês/Ano" corrente baseado no dia de fechamento (até dia 7 = mês anterior, pós-dia 7 = mês atual).
+- **Botão "Limpeza Geral"**: Localizado ao lado do relatório, permite que o fiscal limpe permanentemente seus dados de **meses anteriores**. Registros do **mês atual** são mantidos intocados.
+    - **Produtividade Normal**: registros de meses passados em `registros_produtividade` são excluídos permanentemente.
+    - **Controle Processual**: a pontuação (`pontuacao`) de registros de meses passados em `controle_processual` é zerada — os documentos oficiais (Notificações, Autos, Ofícios, etc) **NÃO são apagados** e continuam visíveis no Histórico Geral.
+    - O filtro de mês é baseado no `created_at` e usa o mês calendário atual (sem aplicar a regra dos 7 dias).
 - **Alerta de Encerramento Mensal**: Um banner verde translúcido aparece automaticamente no topo da Home no **último dia de cada mês**, lembrando o fiscal de gerar seu relatório antes da virada do calendário.
 - **Visão de Diretoria (Home)**: Quando o **Diretor de Meio Ambiente** expande o menu de gestão, a Home alterna automaticamente para exibir os gráficos de desempenho dos fiscais e outras ferramentas de supervisão.
 
@@ -215,6 +217,12 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
   - **Auto de Infração (16.2)** gera automaticamente **Autos de Infração expedidos (15°)** (Total: 35 pts).
   - **Ofício (16.4)** gera automaticamente **Elaboração de Ofícios (7°)** (Total: 25 pts).
   - **Relatório Fiscal (16.5)** gera automaticamente **Elaboração de Certidão de Arquivamento e Relatório Fiscal (6°)** como tipo Relatório Fiscal (Total: 60 pts).
+- **Data Registrada e Período de Ajuste (Corte do Mês)**:
+  - O corte mensal para definição do "mês corrente" no relatório foi alterado do **dia 3** para o **dia 7** de cada mês. Até o dia 7, o sistema considera o mês anterior como período ativo.
+  - Durante os **primeiros 7 dias de cada mês**, os fiscais podem informar uma **data anterior** ao criar ou editar um registro. Um campo `datetime-local` aparece automaticamente no formulário, permitindo ajustar o `created_at` para qualquer dia do mês anterior (ou do próprio mês, desde que não seja data futura).
+  - **Novo registro**: o campo é pré-preenchido com o horário atual, mas pode ser alterado.
+  - **Edição**: o campo exibe a data/hora salva originalmente e permite modificação dentro do período de ajuste.
+  - Fora do período de 7 dias, o campo fica oculto e o sistema usa a data atual automaticamente.
 
 ---
 
@@ -1088,6 +1096,27 @@ SEMAC/
 
 ---
 
+## 🆕 Atualizações Recentes (06/05/2026) — Home do Diretor e Responsividade
+
+### 🏠 Cards de Funcionários na Home do Diretor
+- **Correção de layout desktop**: Resolvido problema de texto verticalizado/cortado nos cards de gerentes e consórcios.
+- **Grid responsiva adaptativa**:
+  - **Desktop (> 1100px)**: `repeat(auto-fit, minmax(800px, 1fr))` — colunas largas e confortáveis.
+  - **Tablet/Sidebar visível (769px ~ 1100px)**: cai para `1fr` (coluna única) para evitar corte lateral quando a sidebar ocupa espaço.
+  - **Mobile (≤ 768px)**: `1fr` com layout vertical mantido.
+- **Flex interno otimizado**: Container de texto usa `flex: 1` para ocupar todo o espaço restante; gap reduzido para `12px`; avatar e botão mantêm tamanhos fixos.
+- **Tipografia ajustada**: Nome em `14px`, matrícula/e-mail em `12px` — legível sem desperdiçar espaço.
+- **Fotos**: `aspect-ratio: 1` + `object-fit: cover` garantem proporção quadrada sem distorção.
+
+### 📊 Relatório de Produtividade e Limpeza Geral (Fiscal de Posturas)
+- **Filtro por mês no relatório**: O relatório agora exibe **apenas os registros do mês referente**, determinado pela regra dos 7 dias (até dia 7 = mês anterior; após dia 7 = mês atual). Registros de outros meses são omitidos automaticamente.
+- **Limpeza Geral inteligente**: O botão "Limpeza Geral" agora afeta **apenas registros de meses anteriores**, mantendo intocados todos os registros do **mês atual** (sem aplicar a regra dos 7 dias).
+  - **Controle Processual**: zera a pontuação (`pontuacao = 0`) apenas dos registros com `created_at` de meses passados.
+  - **Produtividade Normal**: exclui permanentemente apenas os registros com `created_at` de meses passados.
+  - O fiscal é informado por mensagem qual mês está sendo protegido antes de confirmar a limpeza.
+
+---
+
 ## 🆕 Atualizações Recentes (29/04/2026) — Padronização e Eventos
 
 ### 🚀 Módulo de Eventos e Projetos (Separação Visual)
@@ -1113,7 +1142,40 @@ SEMAC/
 - **Flexibilização da Conclusão**: A regra de conclusão foi alterada para aceitar **Anexo OU Resposta**. Subtarefas agora podem ser finalizadas se houver pelo menos uma dessas informações registradas.
 - **Visualização Estilizada**: Respostas salvas são exibidas em um card destacado (verde claro) com identificação visual, facilitando o acompanhamento por outros membros da equipe.
 
+<<<<<<< Updated upstream
 ### 🤖 Automação de Produtividade (Notificação Preliminar)
 - **Registro Automático de Atendimento**: Ao editar uma Notificação Preliminar no Histórico Geral e alterar a resposta para "ATENDIDO" (via select ou texto), o sistema agora identifica automaticamente a mudança.
 - **Pontuação Garantida**: Insere instantaneamente 20 pontos referentes à categoria "Notificação Preliminar regularizados (atendidos)" para o fiscal responsável, evitando retrabalho e agilizando a prestação de contas.
 - **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
+=======
+---
+
+## 🆕 Atualizações Recentes (05/05/2026) — Datas no Relatório, Limpeza e Pontuação
+
+### 📅 Lógica de Datas Separada (CP vs Registros Comuns)
+- **`obterDataReal()`**: Função unificada de extração de data agora diferencia automaticamente:
+  - **Controle Processual** (`categoria_id` começando com `1.`): sempre utiliza `created_at` (data de entrada no sistema).
+  - **Registros comuns** (`registros_produtividade`): busca o campo `data` dentro do JSON `campos` (formatos ISO `YYYY-MM-DD`, brasileiro `DD/MM/YYYY` ou curto `DD/MM/YY`).
+- **Fallback seguro**: Se não encontrar uma data válida nos campos, retorna `created_at` para garantir que nenhum registro fique sem data.
+
+### 📊 Filtro do Relatório por Data Real
+- O relatório de produtividade agora filtra registros comuns **pela data informada no formulário** (`campos.data`), não mais pelo `created_at`.
+- **Exemplo prático**: Um fiscal pode salvar hoje (05/05) um registro com data retroativa (01/04) e ele aparecerá corretamente no relatório de **abril**, não de maio.
+- **Controle Processual continua usando `created_at`** para o filtro de mês, preservando o comportamento processual.
+
+### 🧹 Limpeza Geral Inteligente por Data Real
+- O botão "Limpeza Geral" agora também usa a **data do campo** (`campos.data`) para avaliar registros comuns:
+  - **Controle Processual**: mantém o uso de `created_at` para zerar pontuação de meses anteriores.
+  - **Registros comuns**: busca todos os registros do usuário, extrai a data real via `obterDataReal()`, e exclui apenas aqueles cujo mês/ano é **estritamente anterior** ao mês atual.
+- Isso evita que registros salvos "em atraso" (ex: digitados no dia 05/05 com data 30/04) sejam erroneamente mantidos ou apagados.
+
+### ⚡ Atualização Automática da Pontuação após Salvar
+- Ao salvar um **novo registro** (fluxo de criação), a função `carregarHistorico()` é chamada automaticamente após fechar o modal.
+- A pontuação total exibida na Home e no resumo é atualizada **instantaneamente**, sem necessidade de recarregar a página.
+- O fluxo de **edição** já mantinha esse comportamento (fecha modal, exibe toast de sucesso e recarrega).
+
+### 🖊️ UX de Edição e Salvamento (Ajustes Finais)
+- **Botão Salvar**: exibe "Carregando..." imediatamente ao iniciar o salvamento, com timeout de conexão reduzido para 2000ms.
+- **Modal de Edição**: fecha instantaneamente ao confirmar, exibe toast "Alteração salva" e rola suavemente até a seção de histórico.
+- **Anexos preservados**: em modo de edição, inputs do tipo `file` são ocultados e os campos existentes são mantidos via spread operator (`{ ...registroSelecionado.campos }`).
+>>>>>>> Stashed changes

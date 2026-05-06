@@ -886,6 +886,36 @@
     border-right: none;
 }
 
+/* Abreviação de headers no mobile */
+.historico-tabela th .th-full {
+    display: inline;
+}
+.historico-tabela th .th-abbr {
+    display: none;
+}
+
+/* Mobile: colunas curtas (N°, Data, Pontos, etc.) ficam compactas;
+   colunas de texto livre mantêm comportamento normal */
+@media (max-width: 768px) {
+    .historico-tabela .col-curta {
+        white-space: nowrap;
+        width: 1%;
+    }
+    .historico-tabela td,
+    .historico-tabela th {
+        max-width: 200px;
+        word-break: break-all;
+        white-space: normal;
+        min-width: unset;
+    }
+    .historico-tabela th .th-full {
+        display: none;
+    }
+    .historico-tabela th .th-abbr {
+        display: inline;
+    }
+}
+
 .badge-categoria {
     display: inline-block;
     padding: 4px 10px;
@@ -981,7 +1011,14 @@
     font-weight: 700;
 }
 
-/* Responsivo */
+/* Telas médias: tablets e notebooks pequenos */
+@media (max-width: 1100px) {
+    .grafico-container {
+        max-width: 100%;
+    }
+}
+
+/* Responsivo Mobile */
 @media (max-width: 768px) {
     .categorias-grid {
         grid-template-columns: 1fr;
@@ -994,10 +1031,133 @@
 
     .pontuacao-resumo {
         flex-direction: column;
+        gap: 12px;
+    }
+
+    .pontuacao-card {
+        min-width: unset;
+        width: 100%;
     }
 
     .grafico-container {
         max-width: 100%;
+        min-width: unset;
+        padding: 16px;
+    }
+
+    .grafico-container h3 {
+        font-size: 0.85rem;
+    }
+
+    /* Inputs touch-friendly e anti-zoom iOS */
+    .campo-grupo input,
+    .campo-grupo select,
+    .campo-grupo textarea {
+        font-size: 16px;
+        padding: 12px 14px;
+    }
+
+    /* Modal de produtividade */
+    .modal-container {
+        width: 95% !important;
+        max-width: 95vw !important;
+        border-radius: 14px !important;
+    }
+
+    .modal-header {
+        padding: 16px 18px 12px !important;
+    }
+
+    .modal-header h2 {
+        font-size: 1rem;
+    }
+
+    .modal-body {
+        padding: 14px 18px 18px !important;
+    }
+
+    .modal-close {
+        width: 32px;
+        height: 32px;
+    }
+
+    /* Relatório preview */
+    .relatorio-preview {
+        padding: 20px;
+        width: 95%;
+    }
+
+    .relatorio-preview h1 {
+        font-size: 1rem;
+    }
+
+    .relatorio-preview .relatorio-info {
+        grid-template-columns: 1fr;
+    }
+
+    .relatorio-acoes {
+        flex-direction: column;
+    }
+
+    .btn-relatorio {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* ==========================================
+       HISTÓRICO — TABELAS E FILTROS MOBILE
+       ========================================== */
+    .filtros-historico {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    .filtro-grupo {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    .filtro-grupo input,
+    .filtro-grupo select {
+        font-size: 16px;
+        width: 100%;
+    }
+
+    /* Esconder colunas secundárias da tabela (mantém 1ª e última) */
+    .tabela-historico th:nth-child(n+3):not(:last-child),
+    .tabela-historico td:nth-child(n+3):not(:last-child) {
+        display: none;
+    }
+
+    /* Botões de ação empilhados */
+    .tabela-historico td:last-child {
+        min-width: 120px;
+    }
+
+    .tabela-historico td:last-child button,
+    .tabela-historico td:last-child a,
+    .btn-ver-anexo,
+    .btn-excluir {
+        display: flex;
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 6px;
+        min-height: 40px;
+    }
+
+    .tabela-historico td:last-child button:last-child,
+    .tabela-historico td:last-child a:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Tabela com scroll horizontal garantido */
+    .historico-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tabela-historico {
+        min-width: 600px;
     }
 }
 

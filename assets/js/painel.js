@@ -4,6 +4,118 @@
 // Variável global para modo de visualização do Diretor
 window.diretorModoVisualizacao = window.diretorModoVisualizacao || 'direcao';
 
+// --- CONTROLE DA SIDEBAR (MOBILE / DESKTOP) ---
+function toggleSidebarMobile() {
+    var sidebar = document.getElementById('sidebar');
+    var backdrop = document.getElementById('sidebar-backdrop');
+    if (!sidebar) return;
+    sidebar.classList.add('mobile-open');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function fecharSidebarMobile() {
+    var sidebar = document.getElementById('sidebar');
+    var backdrop = document.getElementById('sidebar-backdrop');
+    if (!sidebar) return;
+    sidebar.classList.remove('mobile-open');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function toggleSidebarDesktop() {
+    var layout = document.getElementById('dashboard-layout');
+    var icon = document.getElementById('icon-toggle-sidebar');
+    if (!layout) return;
+
+    var estaMinimizada = layout.classList.contains('sidebar-collapsed');
+    if (estaMinimizada) {
+        layout.classList.remove('sidebar-collapsed');
+        if (icon) icon.innerHTML = '<polyline points="15 18 9 12 15 6"></polyline>';
+        localStorage.setItem('sidebarCollapsed', 'false');
+    } else {
+        layout.classList.add('sidebar-collapsed');
+        if (icon) icon.innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+        localStorage.setItem('sidebarCollapsed', 'true');
+    }
+}
+
+// Restaurar estado da sidebar ao carregar
+function restaurarEstadoSidebar() {
+    var layout = document.getElementById('dashboard-layout');
+    var icon = document.getElementById('icon-toggle-sidebar');
+    if (!layout) return;
+    var colapsado = localStorage.getItem('sidebarCollapsed') === 'true';
+    if (colapsado && window.innerWidth > 768) {
+        layout.classList.add('sidebar-collapsed');
+        if (icon) icon.innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+    }
+}
+
+// Fechar sidebar mobile automaticamente ao clicar em um link
+function setupSidebarAutoClose() {
+    var sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    var botoes = sidebar.querySelectorAll('.nav-btn, .logout-footer');
+    botoes.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                fecharSidebarMobile();
+            }
+        });
+    });
+}
+
+// Ao redimensionar para desktop, garantir que classes mobile sejam limpas
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+        fecharSidebarMobile();
+    }
+});
+
+window.addEventListener('load', function() {
+    restaurarEstadoSidebar();
+    setupSidebarAutoClose();
+});
+
+// --- RESIZE GLOBAL DOS GRÁFICOS CHART.JS ---
+window.addEventListener('resize', function() {
+    if (typeof Chart !== 'undefined' && Chart.instances) {
+        Object.values(Chart.instances).forEach(function(chart) {
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+            }
+        });
+    }
+});
+
+// --- SWIPE NA SIDEBAR PARA FECHAR (MOBILE) ---
+(function setupSidebarSwipe() {
+    var sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    var touchStartX = 0;
+    var touchCurrentX = 0;
+
+    sidebar.addEventListener('touchstart', function(e) {
+        touchStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    sidebar.addEventListener('touchmove', function(e) {
+        touchCurrentX = e.touches[0].clientX;
+    }, { passive: true });
+
+    sidebar.addEventListener('touchend', function(e) {
+        var diff = touchCurrentX - touchStartX;
+        // Se deslizou para a esquerda mais de 60px, fecha a sidebar
+        if (diff < -60) {
+            fecharSidebarMobile();
+        }
+        touchStartX = 0;
+        touchCurrentX = 0;
+    }, { passive: true });
+})();
+
 async function sair() {
     console.log("Botao sair clicado!");
     try {
@@ -1388,7 +1500,7 @@ async function carregarDashboardGerenteAmbiental() {
             .select('id, full_name, role, ativo')
             .in('role', ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental',
                 'Auxiliar de Serviços II', 'Gerente de Regularização Ambiental',
-                'gerente de regularização ambiental'])
+                'gerente de regularização ambiental', 'Consórcio', 'consorcio'])
             .eq('ativo', true);
 
         if (error) throw error;

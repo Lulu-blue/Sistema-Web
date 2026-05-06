@@ -58,6 +58,7 @@ body {
     background-color: var(--bg-main);
     height: 100vh;
     overflow: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-layout {
@@ -257,7 +258,8 @@ h1 {
 }
 
 /* Efeito ao passar o mouse */
-.nav-btn:hover {
+.nav-btn:hover,
+.nav-btn:active {
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(255, 255, 255, 0.25);
     color: white;
@@ -424,7 +426,7 @@ h1 {
 
 /* Tela média: calendário e lista de eventos empilham */
 @media (max-width: 1100px) {
-    #aba-projetos > div:nth-child(2) {
+    #aba-projetos>div:nth-child(2) {
         flex-direction: column !important;
     }
 
@@ -435,15 +437,269 @@ h1 {
     }
 
     /* Painel de lista de eventos */
-    #aba-projetos > div:nth-child(2) > div:nth-child(2) {
+    #aba-projetos>div:nth-child(2)>div:nth-child(2) {
         min-width: unset !important;
         flex: unset !important;
         width: 100% !important;
     }
 }
 
-/* Tela pequena: ajustes finos nos cards e detalhes */
+/* ==========================================
+   SIDEBAR MOBILE / MINIMIZAR
+   ========================================== */
+
+/* Botão hambúrguer para mobile */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 100;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--sidebar-gradient);
+    color: white;
+    border: none;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-toggle:hover {
+    transform: scale(1.05);
+}
+
+.mobile-menu-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Botão fechar dentro da sidebar (mobile) */
+.sidebar-close-btn {
+    display: none;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transition: all 0.2s ease;
+}
+
+.sidebar-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Backdrop escuro para mobile */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-backdrop.active {
+    display: block;
+    opacity: 1;
+}
+
+/* Sidebar minimizada (desktop) */
+.dashboard-layout.sidebar-collapsed .sidebar {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    padding: 1.5rem 0.6rem;
+}
+
+.dashboard-layout.sidebar-collapsed .profile-section {
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.dashboard-layout.sidebar-collapsed .avatar-wrapper img {
+    width: 48px;
+    height: 48px;
+}
+
+.dashboard-layout.sidebar-collapsed .profile-info h3,
+.dashboard-layout.sidebar-collapsed .profile-info p,
+.dashboard-layout.sidebar-collapsed #user-matricula {
+    display: none;
+}
+
+.dashboard-layout.sidebar-collapsed .nav-btn {
+    justify-content: center;
+    padding: 12px;
+    gap: 0;
+    font-size: 0;
+    white-space: nowrap;
+}
+
+.dashboard-layout.sidebar-collapsed .nav-btn svg {
+    flex-shrink: 0;
+}
+
+.dashboard-layout.sidebar-collapsed .logout-footer span {
+    display: none;
+}
+
+.dashboard-layout.sidebar-collapsed .logout-footer {
+    justify-content: center;
+    padding: 12px;
+}
+
+.dashboard-layout.sidebar-collapsed .nav-divider {
+    text-align: center;
+    font-size: 0.6rem;
+}
+
+/* Botão minimizar no desktop */
+.sidebar-toggle-desktop {
+    display: flex;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transition: all 0.2s ease;
+}
+
+.sidebar-toggle-desktop:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: white;
+}
+
+/* Cards de funcionários na Home do Diretor — desktop */
+.funcionario-card-diretor {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 20px !important;
+}
+
+.funcionario-card-diretor .funcionario-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap !important;
+}
+
+.funcionario-card-diretor .funcionario-card-inner>div:first-child img,
+.funcionario-card-diretor .funcionario-card-inner>div:first-child>div {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    aspect-ratio: 1;
+    flex-shrink: 0;
+}
+
+.funcionario-card-diretor .funcionario-card-inner>div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.5;
+    word-break: normal;
+    white-space: normal;
+}
+
+.funcionario-card-diretor .funcionario-card-inner>div:nth-child(2)>div:first-child {
+    font-size: 14px !important;
+    line-height: 1.4;
+    margin-bottom: 2px;
+    word-break: normal;
+    white-space: normal;
+}
+
+.funcionario-card-diretor .funcionario-card-inner>div:nth-child(2)>div {
+    font-size: 12px !important;
+    line-height: 1.5;
+    margin-bottom: 2px;
+    word-break: normal;
+    white-space: normal;
+}
+
+.funcionario-card-diretor .funcionario-card-inner>div:last-child {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* Grid da Home do Diretor */
+.home-diretor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(800px, 1fr));
+    gap: 20px;
+}
+
+/* Telas médias (sidebar visível mas sem espaço para 800px) */
+@media (max-width: 1100px) {
+    .home-diretor-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+}
+
+/* ==========================================
+   RESPONSIVIDADE MOBILE
+   ========================================== */
 @media (max-width: 768px) {
+    .mobile-menu-toggle {
+        display: flex;
+    }
+
+    .sidebar-toggle-desktop {
+        display: none;
+    }
+
+    .sidebar {
+        position: fixed;
+        left: -100%;
+        top: 0;
+        bottom: 0;
+        width: 280px !important;
+        min-width: 280px !important;
+        max-width: 280px !important;
+        z-index: 100;
+        transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar.mobile-open {
+        left: 0;
+    }
+
+    .sidebar-close-btn {
+        display: flex;
+    }
+
+    .main-content {
+        padding: 1.2rem !important;
+        padding-top: 70px !important;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1.2rem;
+    }
+
     /* Cabeçalho Eventos: título + botão */
     #aba-projetos h1 {
         font-size: 1.6rem;
@@ -458,8 +714,476 @@ h1 {
         padding: 6px 12px !important;
     }
 
-    /* Conteúdo principal com menos padding */
+    /* LAYOUT GERAL — HOME CONTAINERS */
+    .pontuacao-resumo {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    .pontuacao-card {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    /* Grids da Home que usam inline styles → sobrescrever no mobile */
+    #home-gerente-ambiental-container .pontuacao-resumo,
+    #home-diretor-container .pontuacao-resumo,
+    #home-diretor-cuidado-animal-container .pontuacao-resumo,
+    #home-gerente-cuidado-animal-container .pontuacao-resumo,
+    #home-consorcio-container .pontuacao-resumo {
+        grid-template-columns: 1fr !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    #home-diretor-container>div[style*="grid-template-columns"],
+    #home-secretario-container>div[style*="grid-template-columns"],
+    #home-diretor-cuidado-animal-container>div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Alerta de último dia */
+    #alerta-ultimo-dia {
+        font-size: 0.85rem;
+        flex-wrap: wrap;
+    }
+
+    /* Botões da home (Gerar Relatório + Limpeza) */
+    #home-produtividade-container .pontuacao-card[style*="flex-direction: row"] {
+        flex-direction: column !important;
+    }
+
+    /* Gráficos nunca estouram */
+    .grafico-container {
+        max-width: 100% !important;
+        min-width: unset !important;
+        padding: 16px !important;
+    }
+
+    /* HOME / DASHBOARD específicos */
+    #home-produtividade-container,
+    #home-gerente-container,
+    #home-diretor-container,
+    #home-secretario-container,
+    #home-gerente-ambiental-container,
+    #home-gerente-cuidado-animal-container,
+    #home-diretor-cuidado-animal-container,
+    #home-consorcio-container,
+    #home-especial-container {
+        margin-top: 16px !important;
+    }
+
+    /* Todos os flex containers da home com gap menor */
+    #home-produtividade-container>div[style*="display: flex"],
+    #home-gerente-container>div[style*="display: flex"],
+    #home-diretor-container>div[style*="display: flex"],
+    #home-secretario-container>div[style*="display: flex"],
+    #home-especial-container>div[style*="display: flex"] {
+        gap: 12px !important;
+    }
+
+    /* Árvore hierárquica do Secretário: scroll horizontal se necessário */
+    #secretario-arvore-hierarquia {
+        overflow-x: auto;
+        padding-bottom: 8px;
+    }
+
+    /* NP/AI + Tarefas de Eventos empilham */
+    #home-npai-container,
+    #minhas-tarefas-wrapper {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    /* Ranking de fiscais: lista com scroll vertical */
+    #grafico-fiscais-pontuacao {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    /* Calendário na home especial: dias menores */
+    #home-calendario-grid {
+        grid-auto-rows: minmax(36px, auto) !important;
+    }
+
+    /* Scroll horizontal preventivo em wrappers de conteúdo */
     .main-content {
-        padding: 1.5rem !important;
+        overflow-x: hidden;
+    }
+
+    /* ==========================================
+       KANBAN DE TAREFAS → LISTA VERTICAL
+       ========================================== */
+    #tarefas-atribuidas-container>div[style*="display: flex"] {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    #tarefas-atribuidas-container>div[style*="display: flex"]>div {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    /* ==========================================
+       TABELAS DE HISTÓRICO — SCROLL HORIZONTAL
+       ========================================== */
+    #aba-historico .tabela-wrapper,
+    #aba-historico-geral .tabela-wrapper,
+    #aba-historico table,
+    #aba-historico-geral table,
+    .content-section table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+
+    /* ==========================================
+       MODAIS GLOBAIS
+       ========================================== */
+    .modal-overlay {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    .modal-overlay .modal-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 16px 16px 0 0 !important;
+        max-height: 92vh !important;
+    }
+
+    .modal-overlay .modal-header {
+        border-radius: 16px 16px 0 0 !important;
+    }
+
+    /* Cards de estatísticas de tarefas no modal de funcionário */
+    .stats-cards-container {
+        gap: 6px !important;
+        margin-bottom: 12px !important;
+    }
+
+    .stats-card {
+        padding: 8px 4px !important;
+        border-radius: 8px !important;
+    }
+
+    .stats-card .stats-numero {
+        font-size: 20px !important;
+    }
+
+    .stats-card .stats-label {
+        display: none !important;
+    }
+
+    /* Cards de funcionários na Home do Diretor */
+    .funcionario-card-diretor .funcionario-card-inner {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+    }
+
+    .funcionario-card-diretor .funcionario-card-inner>div:last-child {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+    }
+
+    .funcionario-card-diretor img,
+    .funcionario-card-diretor .funcionario-avatar {
+        width: 40px !important;
+        height: 40px !important;
+        font-size: 16px !important;
+    }
+
+    /* Grid da Home do Diretor no mobile */
+    .home-diretor-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+
+    /* Zoom da árvore hierárquica do Secretário no mobile */
+    .arvore-hierarquica-secretario {
+        zoom: 0.8;
+        -moz-transform: scale(0.8);
+        -moz-transform-origin: top left;
+    }
+
+    /* Grids de 2 colunas na árvore viram fila no mobile */
+    .arvore-grid-dupla {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Reduzir largura das colunas da árvore no mobile */
+    .arvore-coluna-gp {
+        width: 150px !important;
+    }
+
+    .arvore-coluna-ga {
+        width: 180px !important;
+    }
+
+    .arvore-coluna-equipe-ra {
+        width: 150px !important;
+    }
+
+    .arvore-coluna-consorcio {
+        width: 100px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        width: 260px !important;
+        min-width: 260px !important;
+        max-width: 260px !important;
+    }
+
+    .main-content {
+        padding: 1rem !important;
+        padding-top: 65px !important;
+    }
+
+    h1 {
+        font-size: 1.25rem;
+        margin-bottom: 1rem;
+    }
+
+    .pontuacao-card {
+        padding: 14px 18px !important;
+    }
+
+    .pontuacao-card .valor {
+        font-size: 1.6rem !important;
+    }
+
+    /* ==========================================
+       CONFIGURAÇÕES / PERFIL
+       ========================================== */
+    .perfil-container {
+        flex-direction: column !important;
+        gap: 30px !important;
+        padding: 24px !important;
+    }
+
+    .perfil-avatar-sec {
+        width: 100% !important;
+    }
+
+    .avatar-grande-wrapper {
+        width: 100px !important;
+        height: 100px !important;
+    }
+
+    /* ==========================================
+       PROJETOS / CALENDÁRIO
+       ========================================== */
+    #aba-projetos .calendario-container {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    /* Touch targets mínimos */
+    button,
+    .nav-btn,
+    .btn-relatorio,
+    .btn-salvar-pdf,
+    .modal-close {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Desativar raminhos decorativos no mobile (performance) */
+    .raminho-bg {
+        display: none !important;
+    }
+
+    /* SweetAlert2 — largura no mobile */
+    .swal2-popup {
+        width: 90% !important;
+        max-width: 400px;
+        font-size: 0.9rem;
+    }
+
+    .swal2-title {
+        font-size: 1.1rem !important;
+    }
+
+    .swal2-html-container {
+        font-size: 0.9rem !important;
+    }
+
+    .swal2-actions {
+        flex-direction: column-reverse !important;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .swal2-actions button {
+        width: 100%;
+        margin: 0 !important;
+    }
+
+    /* Sub-abas do Histórico Geral — scroll horizontal */
+    #aba-historico-geral .sub-abas-container,
+    #aba-historico-geral div[style*="sub-aba-btn"] {
+        overflow-x: auto;
+        white-space: nowrap;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .sub-aba-btn {
+        flex-shrink: 0;
+    }
+
+    /* Filtros de busca — largura total */
+    .filtros-historico,
+    #aba-historico-geral input[type="text"],
+    #aba-historico input[type="text"],
+    #aba-historico-geral select,
+    #aba-historico select {
+        width: 100% !important;
+    }
+
+    /* ==========================================
+       BAIRROS E ÁREAS
+       ========================================== */
+    #aba-bairros>div[style*="display: flex"] {
+        flex-direction: column !important;
+    }
+
+    #aba-bairros>div[style*="display: flex"]>div {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+
+    #busca-bairro-gestao {
+        width: 100% !important;
+        font-size: 16px;
+    }
+
+    /* ==========================================
+       PROJETOS / CALENDÁRIO — MODAL DE EVENTO
+       ========================================== */
+    #modal-novo-evento .campo-grupo,
+    #modal-editar-evento .campo-grupo {
+        width: 100% !important;
+    }
+
+    #modal-novo-evento input[type="date"],
+    #modal-editar-evento input[type="date"] {
+        width: 100% !important;
+        font-size: 16px;
+    }
+
+    /* ==========================================
+       RELATÓRIO DO FISCAL (VISÃO DO GERENTE+)
+       ========================================== */
+    #modal-relatorio-gerente>div[style*="display:flex"] {
+        flex-direction: column !important;
+        padding: 12px !important;
+        gap: 16px !important;
+    }
+
+    #modal-relatorio-gerente .relatorio-preview,
+    #modal-relatorio-gerente .relatorio-col-graficos {
+        flex: none !important;
+        width: 100% !important;
+        min-width: unset !important;
+        max-height: none !important;
+    }
+
+    #modal-relatorio-gerente .relatorio-col-graficos {
+        order: -1 !important;
+        gap: 12px !important;
+    }
+
+    #modal-relatorio-gerente .relatorio-col-graficos>div {
+        padding: 14px !important;
+    }
+
+    #modal-relatorio-gerente #grafico-pizza-docs-wrapper {
+        height: 280px !important;
+    }
+
+    #modal-relatorio-gerente #grafico-colunas-tarefas-wrapper {
+        height: 200px !important;
+    }
+
+    /* ==========================================
+       TAREFAS — ABAS DE NAVEGAÇÃO
+       ========================================== */
+    #aba-tarefas>div[style*="display: flex"]:first-of-type {
+        flex-wrap: wrap !important;
+    }
+
+    #btn-tab-atribuidas,
+    #btn-tab-minhas {
+        flex: 1 1 auto !important;
+        white-space: normal !important;
+        min-width: 120px;
+        font-size: 13px !important;
+    }
+
+    /* ==========================================
+       TAREFAS — SUBTAREFAS E RESPONSÁVEIS
+       ========================================== */
+    /* Checkbox de subtarefas maior */
+    #modal-detalhe-tarefa input[type="checkbox"],
+    .subtarefa-checkbox {
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px;
+        min-height: 20px;
+    }
+
+    /* Lista de responsáveis touch-friendly */
+    .cb-responsavel {
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px;
+        min-height: 20px;
+    }
+
+    .cb-responsavel+span,
+    label:has(.cb-responsavel) {
+        padding: 8px 0 !important;
+        font-size: 16px !important;
+    }
+
+    /* Botões de anexo em subtarefas visíveis e grandes */
+    #modal-detalhe-tarefa button[onclick*="anexo"],
+    #modal-detalhe-tarefa a[href*="anexo"] {
+        min-height: 40px;
+        padding: 8px 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ==========================================
+       CALENDÁRIO DE PROJETOS
+       ========================================== */
+    #tarefas-calendario-grid {
+        grid-auto-rows: minmax(36px, auto) !important;
+    }
+
+    #tarefas-calendario-grid>div {
+        font-size: 0.75rem !important;
+    }
+
+    /* ==========================================
+       ÁRVORE HIERÁRQUICA — CARDS MENORES
+       ========================================== */
+    #secretario-arvore-hierarquia [style*="border-radius: 12px"] {
+        padding: 10px 12px !important;
+    }
+
+    /* Anti-zoom iOS em todos os inputs do sistema */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
     }
 }

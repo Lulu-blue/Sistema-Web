@@ -20,7 +20,7 @@ async function verificarConexaoAntesDeSalvar() {
     // 3. Checagem de resposta do servidor (Ping)
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s para o ping
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s para o ping
 
         const response = await fetch('https://marmpnusgmbjphffaynr.supabase.co/rest/v1/', {
             method: 'HEAD',
@@ -587,6 +587,8 @@ function criarCard(cat) {
 // --- ABRIR MODAL COM FORMULÁRIO ---
 function abrirFormulario(categoria) {
     categoriaAtual = categoria;
+    modoEdicao = false;
+    idEditando = null;
     const overlay = document.getElementById('modal-produtividade');
     const titulo = document.getElementById('modal-titulo');
     const corpo = document.getElementById('modal-campos');
@@ -615,6 +617,11 @@ function abrirFormulario(categoria) {
             <p id="msg-word-status" style="font-size: 0.8rem; margin-top: 8px; font-weight: 600;"></p>
         `;
         corpo.appendChild(divWord);
+    }
+
+    // Campo especial para categoria 1.1 nos primeiros 7 dias do mês
+    if (categoria.id === '1.1' && estaNosPrimeiros7Dias()) {
+        adicionarCampoDataRegistrada(corpo, null, false);
     }
 
     // Gerar campos dinamicamente
@@ -781,16 +788,31 @@ let salvando = false;
 async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (!categoriaAtual || salvando) return;
 
+    // Feedback visual imediato
+    const btnSalvar = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvar ? btnSalvar.textContent : 'Salvar';
+    if (btnSalvar) {
+        btnSalvar.textContent = 'Carregando...';
+        btnSalvar.disabled = true;
+    }
+
     // Verificar conexão antes de salvar
     const conexaoOK = await verificarConexaoAntesDeSalvar();
     if (!conexaoOK) {
+        if (btnSalvar) {
+            btnSalvar.textContent = oldTexto;
+            btnSalvar.disabled = false;
+        }
         return;
     }
 
     salvando = true;
 
     // 1. Coletar valores dos campos
-    const campos = {};
+    // Na edição, preserva os campos existentes (inclusive anexos) e só sobrescreve o que o usuário alterou
+    const campos = (modoEdicao && registroSelecionado && registroSelecionado.campos)
+        ? { ...registroSelecionado.campos }
+        : {};
     let todosPreenchidos = true;
     let arquivoAnexo = null; // para upload de PDF
 
@@ -807,8 +829,12 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         if (campo.tipo === 'file') {
             if (arquivoAnexo && arquivoAnexo.file) return; // Se ja forneceu um auto-file via prop manual
 
+            // Na edição, o campo file não é renderizado — pula validação e mantém anexo existente
+            if (modoEdicao && !input) return;
+
             // Tratar campo de arquivo
-            if (campo.obrigatorio && (!input.files || input.files.length === 0)) {
+            const temAnexoExistente = modoEdicao && registroSelecionado && registroSelecionado.campos && registroSelecionado.campos[campo.nome];
+            if (campo.obrigatorio && (!input.files || input.files.length === 0) && !temAnexoExistente) {
                 todosPreenchidos = false;
                 input.style.borderColor = '#ef4444';
             } else if (input.files && input.files.length > 0) {
@@ -878,7 +904,20 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (!todosPreenchidos) {
         alert('Preencha todos os campos obrigatórios!');
         salvando = false;
+        if (btnSalvar) {
+            btnSalvar.textContent = oldTexto;
+            btnSalvar.disabled = false;
+        }
         return;
+    }
+
+    // Campo especial: data registrada manual (categoria 1.1, primeiros 7 dias)
+    let dataRegistradaManual = null;
+    if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
+        const inputDataManual = document.getElementById('campo-data_registrada_manual');
+        if (inputDataManual && inputDataManual.value) {
+            dataRegistradaManual = new Date(inputDataManual.value).toISOString();
+        }
     }
 
     // 2. Obter usuário logado
@@ -904,28 +943,55 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     }
 
     // 5. Salvar no Supabase
-    const btnSalvar = document.querySelector('#modal-produtividade .btn-salvar');
-    const oldTexto = btnSalvar ? btnSalvar.textContent : 'Salvar';
-    if (btnSalvar) {
-        btnSalvar.textContent = 'Carregando...';
-        btnSalvar.disabled = true;
-    }
-
     try {
+        console.log('[Salvar] Iniciando salvamento. modoEdicao:', modoEdicao, 'idEditando:', idEditando, 'categoria:', categoriaAtual?.id);
         let data, error;
         const isCP = categoriaAtual.destaque === true;
         const tabela = isCP ? 'controle_processual' : 'registros_produtividade';
+        console.log('[Salvar] tabela:', tabela, 'isCP:', isCP);
 
         if (modoEdicao && idEditando) {
+            console.log('[Salvar] Entrou no bloco de EDIÇÃO');
             // EDIÇÃO: atualizar registro existente
-            ({ data, error } = await supabaseClient
+            const updateData = {
+                pontuacao: pontos,
+                campos: campos
+            };
+            if (dataRegistradaManual) {
+                updateData.created_at = dataRegistradaManual;
+            }
+            const { error: updateError } = await supabaseClient
                 .from(tabela)
-                .update({
-                    pontuacao: pontos,
-                    campos: campos
-                })
-                .eq('id', idEditando)
-                .select());
+                .update(updateData)
+                .eq('id', idEditando);
+
+            if (updateError) {
+                console.error('[Salvar] Erro no update:', updateError);
+                throw updateError;
+            }
+
+            console.log('[Salvar] Edição salva com sucesso.');
+            fecharModalProdutividade();
+            Swal.fire({
+                icon: 'success',
+                title: 'Alteração salva',
+                text: 'O registro foi atualizado com sucesso.',
+                timer: 2500,
+                timerProgressBar: true,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+            });
+            try {
+                await new Promise(r => setTimeout(r, 300));
+                await carregarHistorico();
+                console.log('[Salvar] Histórico recarregado.');
+            } catch (e) {
+                console.warn('[Salvar] Erro ao recarregar histórico:', e);
+            }
+            const secaoHistorico = document.getElementById('aba-historico');
+            if (secaoHistorico) secaoHistorico.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
         } else {
             // CRIAÇÃO
             if (isCP) {
@@ -944,17 +1010,21 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     numeroSeq = await gerarNumeroSequencial(categoriaAtual.id);
                 }
 
+                const insertDataCP = {
+                    user_id: user.id,
+                    fiscal_nome: fiscalNome,
+                    categoria_id: categoriaAtual.id,
+                    categoria_nome: categoriaAtual.nome,
+                    numero_sequencial: numeroSeq,
+                    pontuacao: pontos,
+                    campos: campos
+                };
+                if (dataRegistradaManual) {
+                    insertDataCP.created_at = dataRegistradaManual;
+                }
                 ({ data, error } = await supabaseClient
                     .from('controle_processual')
-                    .insert({
-                        user_id: user.id,
-                        fiscal_nome: fiscalNome,
-                        categoria_id: categoriaAtual.id,
-                        categoria_nome: categoriaAtual.nome,
-                        numero_sequencial: numeroSeq,
-                        pontuacao: pontos,
-                        campos: campos
-                    })
+                    .insert(insertDataCP)
                     .select());
 
                 // AUTOMÁTICO: Gerar a categoria 14 (Notificação Preliminar expedidos - id visual 13) - 20 pts
@@ -1085,10 +1155,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
 
             if (error) {
+                console.error('[Salvar] Erro no insert/update:', error);
                 throw error;
             }
+            console.log('[Salvar] Insert/update OK. data:', data);
 
             // Upload de arquivo anexo (se houver)
+            console.log('[Salvar] Chegou no upload. arquivoAnexo:', !!arquivoAnexo, 'data.length:', data?.length);
             if (arquivoAnexo && data && data.length > 0) {
                 const registroId = data[0].id;
                 // Limpar acentos e espaços do nome para não dar erro no Supabase
@@ -1125,14 +1198,11 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             const eraEdicao = modoEdicao;
             modoEdicao = false;
             idEditando = null;
+            console.log('[Salvar] Reset modoEdicao. eraEdicao:', eraEdicao);
 
             // Atualizar histórico aguardando o Supabase com pequena margem de segurança
             await new Promise(r => setTimeout(r, 500));
-            await carregarHistorico();
-
-            if (eraEdicao) {
-                alert('Registro atualizado com sucesso!');
-            } else if (categoriaAtual.id === '11' && data && data.length > 0) {
+            if (categoriaAtual.id === '11' && data && data.length > 0) {
                 // Para Dívida Ativa, o usuário precisa ver o número gerado para anotar no processo físico
                 alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
             } else if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
@@ -1153,11 +1223,17 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             // Fechar modal DEPOIS do alerta (pois zera a categoriaAtual)
             fecharModalProdutividade();
 
+            // Atualizar histórico e pontuação total na tela
+            await carregarHistorico();
+
         } // Fim de else (CRIAÇÃO)
     } catch (err) {
-        console.error("Erro no salvarRegistro:", err);
-        alert('Ocorreu um erro ao salvar o registro no banco de dados: ' + (err.message || JSON.stringify(err)));
+        console.error("[Salvar] Erro capturado:", err);
+        console.error("[Salvar] Tipo do erro:", typeof err, "JSON:", JSON.stringify(err));
+        alert('Ocorreu um erro ao salvar o registro no banco de dados: ' + (err?.message || JSON.stringify(err) || 'Erro desconhecido'));
+        fecharModalProdutividade();
     } finally {
+        console.log('[Salvar] Finally executado.');
         if (btnSalvar) {
             btnSalvar.textContent = oldTexto;
             btnSalvar.disabled = false;
@@ -1173,19 +1249,66 @@ let todosRegistros = []; // Armazena globalmente para filtrar
 // Procura pela data preenchida nos campos do formulário para exibir a data correta
 // da ação, em vez da data em que o registro foi digitado no sistema (created_at)
 function obterDataReal(reg) {
+    // Controle Processual: sempre usar created_at
+    if (reg.categoria_id && reg.categoria_id.toString().startsWith('1.')) {
+        return new Date(reg.created_at);
+    }
+
     if (!reg.campos) return new Date(reg.created_at);
 
-    // Procura por qualquer campo que tenha "data" no nome e tenha um valor válido
+    // Registros comuns: procura por qualquer campo que tenha "data" no nome
     for (const [chave, valor] of Object.entries(reg.campos)) {
         if (chave.includes('data') && valor && typeof valor === 'string') {
-            // Verifica se o formato é YYYY-MM-DD
+            // Formato ISO: YYYY-MM-DD
             if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                // Adiciona T12:00:00 para evitar problemas de fuso horário que movem a data 1 dia pra trás
                 return new Date(valor + 'T12:00:00');
+            }
+            // Formato brasileiro: DD/MM/YYYY
+            const matchBr = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (matchBr) {
+                const [, dia, mes, ano] = matchBr;
+                return new Date(`${ano}-${mes}-${dia}T12:00:00`);
+            }
+            // Formato brasileiro curto: DD/MM/YY
+            const matchBrCurto = valor.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+            if (matchBrCurto) {
+                const [, dia, mes, anoCurto] = matchBrCurto;
+                const ano = parseInt(anoCurto, 10) >= 50 ? `19${anoCurto}` : `20${anoCurto}`;
+                return new Date(`${ano}-${mes}-${dia}T12:00:00`);
             }
         }
     }
     return new Date(reg.created_at);
+}
+
+function estaNosPrimeiros7Dias() {
+    const hoje = new Date();
+    return hoje.getDate() <= 7;
+}
+
+function adicionarCampoDataRegistrada(container, dataExistenteISO, isEdicao) {
+    const grupo = document.createElement('div');
+    grupo.className = 'campo-grupo';
+    grupo.id = 'grupo-data-registrada-manual';
+
+    const agora = new Date();
+    const agoraISO = agora.toISOString().slice(0, 16);
+
+    let valorInicial = agoraISO;
+    let maxValor = agoraISO;
+
+    if (isEdicao && dataExistenteISO) {
+        const dt = new Date(dataExistenteISO);
+        valorInicial = dt.toISOString().slice(0, 16);
+        maxValor = valorInicial;
+    }
+
+    grupo.innerHTML = `
+        <label for="campo-data_registrada_manual">Data Registrada <span style="color:#666;font-size:0.8em;">(até dia 7 do mês)</span></label>
+        <input type="datetime-local" id="campo-data_registrada_manual" value="${valorInicial}" max="${maxValor}" style="font-size:16px;">
+        <small style="color:#64748b; font-size:0.75rem;">Ajuste a data/hora real do registro. Não pode ser futura${isEdicao ? ' nem posterior à data atualmente salva' : ''}.</small>
+    `;
+    container.appendChild(grupo);
 }
 
 async function carregarHistorico() {
@@ -1508,6 +1631,9 @@ function editarRegistro() {
                 `<option value="${op}" ${op === valorAtual ? 'selected' : ''}>${op}</option>`
             ).join('');
             inputHTML = `<select id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''}><option value="">Selecione...</option>${opcoes}</select>`;
+        } else if (campo.tipo === 'file') {
+            // Na edição do histórico pessoal, não exibe o campo de anexo (mantém o existente no banco)
+            return;
         } else {
             inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" value="${valorAtual}" ${campo.obrigatorio ? 'required' : ''}>`;
         }
@@ -1518,6 +1644,11 @@ function editarRegistro() {
         `;
         corpo.appendChild(grupo);
     });
+
+    // Campo especial para categoria 1.1 nos primeiros 7 dias do mês (edição)
+    if (catDef.id === '1.1' && estaNosPrimeiros7Dias()) {
+        adicionarCampoDataRegistrada(corpo, reg.created_at, true);
+    }
 
     overlay.classList.add('ativo');
 }
@@ -1891,6 +2022,33 @@ function atualizarIndicadorFiltro() {
         : 'Filtro';
 }
 
+function classeColunaHistorico(label) {
+    if (!label) return '';
+    const l = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const curtas = ['n°', 'nº', 'numero', 'data', 'pontos', 'prazo', 'valor', 'zona', 'quadra', 'lote', 'area', 'anexo', 'fiscal', 'tipo', 'identificador', 'status'];
+    if (curtas.some(p => l.includes(p))) return 'col-curta';
+    return '';
+}
+
+function renderizarTh(label) {
+    const abbrMap = {
+        'N° da Notificação': 'N°',
+        'Nº da notificação': 'N°'
+    };
+    const abbr = abbrMap[label];
+    if (abbr) {
+        return `<span class="th-full">${label}</span><span class="th-abbr">${abbr}</span>`;
+    }
+    return label;
+}
+
+function renderizarTd(conteudo, classe) {
+    const isCurta = classe && classe.includes('col-curta');
+    const minW = isCurta ? '70px' : '100px';
+    const maxW = isCurta ? '140px' : '200px';
+    return `<td${isCurta ? ` class="${classe}"` : ''}><span style="display:inline-block;min-width:${minW};max-width:${maxW};word-break:break-all;white-space:normal;">${conteudo}</span></td>`;
+}
+
 function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     const container = document.getElementById('historico-geral-lista');
     // Usar nova hierarquia de permissões: Gerente, Diretor e Secretário podem ver anexos
@@ -1980,8 +2138,8 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     };
 
     if (categoriaId === 'todos') {
-        let headerHTML = '<tr><th>Tipo de Documento</th><th>Identificador / Nome</th><th>Fiscal</th><th>Data</th><th>Pontos</th>';
-        if (podeVerAnexos) headerHTML += '<th>Anexo</th>';
+        let headerHTML = '<tr><th class="col-curta">Tipo de Documento</th><th>Identificador / Nome</th><th class="col-curta">Fiscal</th><th class="col-curta">Data</th><th class="col-curta">Pontos</th>';
+        if (podeVerAnexos) headerHTML += '<th class="col-curta">Anexo</th>';
         headerHTML += '</tr>';
 
         let bodyHTML = '';
@@ -2048,9 +2206,9 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             }
 
             bodyHTML += `<tr${rowAttributes}>`;
-            bodyHTML += `<td><span style="background:#10b981; color:#ffffff; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,0.1);">${nomeCategoria}</span></td>`;
-            bodyHTML += `<td>${identificador}</td>`;
-            bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
+            bodyHTML += renderizarTd(`<span style="background:#10b981; color:#ffffff; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,0.1);">${nomeCategoria}</span>`, 'col-curta');
+            bodyHTML += renderizarTd(identificador, '');
+            bodyHTML += renderizarTd(reg.fiscal_nome, 'col-curta') + renderizarTd(dataFormatada, 'col-curta') + renderizarTd(reg.pontuacao, 'col-curta');
 
             if (podeVerAnexos) {
                 const temAnexoAR = reg.campos && reg.campos.anexo_ar;
@@ -2098,14 +2256,15 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     const temNumero = registros.some(r => r.numero_sequencial);
 
     let headerHTML = '<tr>';
-    if (temNumero) headerHTML += '<th>N°</th>';
+    if (temNumero) headerHTML += '<th class="col-curta">N°</th>';
     categoria.campos.forEach(campo => {
         if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
-            headerHTML += `<th>${campo.label}</th>`;
+            const cls = classeColunaHistorico(campo.label);
+            headerHTML += `<th${cls ? ` class="${cls}"` : ''}>${renderizarTh(campo.label)}</th>`;
         }
     });
-    headerHTML += '<th>Fiscal</th><th>Data</th><th>Pontos</th>';
-    if (podeVerAnexos) headerHTML += '<th>Anexo</th>';
+    headerHTML += '<th class="col-curta">Fiscal</th><th class="col-curta">Data</th><th class="col-curta">Pontos</th>';
+    if (podeVerAnexos) headerHTML += '<th class="col-curta">Anexo</th>';
     headerHTML += '</tr>';
 
     let bodyHTML = '';
@@ -2151,14 +2310,15 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
         }
         bodyHTML += `<tr${rowAttributes}>`;
-        if (temNumero) bodyHTML += `<td>${reg.numero_sequencial || '-'}</td>`;
+        if (temNumero) bodyHTML += renderizarTd(reg.numero_sequencial || '-', 'col-curta');
         categoria.campos.forEach(campo => {
             if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
-                bodyHTML += `<td>${reg.campos[campo.nome] || '-'}</td>`;
+                const cls = classeColunaHistorico(campo.label);
+                bodyHTML += renderizarTd(reg.campos[campo.nome] || '-', cls);
             }
         });
         const dataFormatada = obterDataReal(reg).toLocaleDateString('pt-BR');
-        bodyHTML += `<td>${reg.fiscal_nome}</td><td>${dataFormatada}</td><td>${reg.pontuacao}</td>`;
+        bodyHTML += renderizarTd(reg.fiscal_nome, 'col-curta') + renderizarTd(dataFormatada, 'col-curta') + renderizarTd(reg.pontuacao, 'col-curta');
 
         if (podeVerAnexos) {
             const temAnexoAR = reg.campos && reg.campos.anexo_ar;
@@ -2889,8 +3049,8 @@ async function abrirRelatorio() {
     let anoRelatorio = dataAtual.getFullYear();
     let mesIndex = dataAtual.getMonth();
 
-    // Se for dia 1, 2 ou 3 do mês, o relatório é referente ao mês anterior
-    if (dataAtual.getDate() <= 3) {
+    // Se for dia 1 a 7 do mês, o relatório é referente ao mês anterior
+    if (dataAtual.getDate() <= 7) {
         mesIndex -= 1;
         if (mesIndex < 0) {
             mesIndex = 11;
@@ -2901,8 +3061,20 @@ async function abrirRelatorio() {
     const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     const mesRelatorio = nomesMeses[mesIndex];
 
-    // Filtrar registros omitindo pontuação 0
-    const registrosFiltrados = todosRegistros.filter(r => (r.pontuacao || 0) !== 0);
+    // Filtrar registros pelo mês/ano do relatório E omitindo pontuação 0
+    const registrosFiltrados = todosRegistros.filter(r => {
+        if ((r.pontuacao || 0) === 0) return false;
+        
+        // Controle Processual: usar created_at
+        // Registros comuns: usar o campo 'data' dos campos
+        let dt;
+        if (r.categoria_id && r.categoria_id.toString().startsWith('1.')) {
+            dt = new Date(r.created_at);
+        } else {
+            dt = obterDataReal(r);
+        }
+        return dt.getFullYear() === anoRelatorio && dt.getMonth() === mesIndex;
+    });
 
     // Agrupar registros por categoria
     const porCategoria = {};
@@ -3029,14 +3201,17 @@ function salvarPDF() {
 
 // --- NOVA LIMPEZA GERAL ---
 function confirmarLimpeza() {
+    const agora = new Date();
+    const nomeMesAtual = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
     Swal.fire({
         title: 'Limpeza Geral',
-        text: 'Tem certeza? Isso zerará sua pontuação atual em todos os registros do Controle Processual vinculados a você. Eles não aparecerão mais no seu Histórico pessoal, mas continuarão visíveis no Histórico Geral. Esta ação não tem volta.',
+        html: `Tem certeza? Esta ação irá remover <strong>apenas os registros de meses anteriores</strong>.<br><br>Registros de <strong>${nomeMesAtual}</strong> serão mantidos intocados.<br><br>Registros do Controle Processual terão a pontuação zerada (mas permanecem no Histórico Geral). Registros de Produtividade serão excluídos permanentemente.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         cancelButtonColor: '#94a3b8',
-        confirmButtonText: 'Sim, zerar minha pontuação',
+        confirmButtonText: 'Sim, limpar meses anteriores',
         cancelButtonText: 'Cancelar'
     }).then(async (result) => {
         if (result.isConfirmed) {
@@ -3054,23 +3229,46 @@ function confirmarLimpeza() {
                     return;
                 }
 
-                // 1. Zera a pontuação no Controle Processual
+                // 1. Zera a pontuação no Controle Processual APENAS para meses anteriores (usa created_at)
+                const inicioMesAtual = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
                 const { error: errorCP } = await supabaseClient
                     .from('controle_processual')
                     .update({ pontuacao: 0 })
-                    .eq('user_id', user.id);
+                    .eq('user_id', user.id)
+                    .lt('created_at', inicioMesAtual);
 
                 if (errorCP) throw errorCP;
 
-                // 2. Remove registros da produtividade normal (se houver política de limpeza total)
-                const { error: errorProd } = await supabaseClient
+                // 2. Remove registros da produtividade normal APENAS para meses anteriores
+                // Para registros comuns, usa a data do campo 'data' em campos, não created_at
+                const { data: registrosProd, error: errorFetch } = await supabaseClient
                     .from('registros_produtividade')
-                    .delete()
+                    .select('id, campos')
                     .eq('user_id', user.id);
 
-                if (errorProd) throw errorProd;
+                if (errorFetch) throw errorFetch;
 
-                Swal.fire('Concluído!', 'Sua pontuação foi zerada com sucesso.', 'success');
+                const idsParaExcluir = [];
+                const anoAtual = agora.getFullYear();
+                const mesAtual = agora.getMonth();
+
+                (registrosProd || []).forEach(r => {
+                    const dt = obterDataReal(r);
+                    if (dt.getFullYear() < anoAtual || (dt.getFullYear() === anoAtual && dt.getMonth() < mesAtual)) {
+                        idsParaExcluir.push(r.id);
+                    }
+                });
+
+                if (idsParaExcluir.length > 0) {
+                    const { error: errorDel } = await supabaseClient
+                        .from('registros_produtividade')
+                        .delete()
+                        .in('id', idsParaExcluir);
+
+                    if (errorDel) throw errorDel;
+                }
+
+                Swal.fire('Concluído!', 'Registros de meses anteriores foram limpos. Os registros do mês atual permanecem intocados.', 'success');
                 carregarHistorico();
             } catch (err) {
                 console.error('Erro ao limpar produtividade:', err);
@@ -4089,7 +4287,7 @@ async function abrirEditorCertidao() {
         const dataPorExtenso = `Divinópolis, ${diaHoje} de ${mesHoje} de ${anoHoje}.`;
 
         const imgBase64 = await obterBase64Cabecalho();
-        
+
         // Format dates correctly from YYYY-MM-DD to DD/MM/YYYY
         const formatData = (d) => {
             if (!d) return '';
@@ -4097,7 +4295,7 @@ async function abrirEditorCertidao() {
             if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
             return d;
         };
-        
+
         const dataCienciaFmt = formatData(campos.data_ciencia);
         const dataDefesaFmt = formatData(campos.data_defesa);
 
