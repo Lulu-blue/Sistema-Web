@@ -2692,6 +2692,46 @@ async function salvarDetalhesHist(id) {
     const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id);
     const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
 
+    let pontosAdicionadosAutom = false;
+    let pontosAddTxt = '';
+
+    // Automação: Se for Notificação Preliminar (1.1) e estiver mudando para ATENDIDO
+    if (reg.categoria_id === '1.1') {
+        const respostaAntiga = (reg.campos.resposta_fiscal || '').toLowerCase();
+        const respostaNova = (novosCampos.resposta_fiscal || '').toLowerCase();
+
+        if (!respostaAntiga.includes('atendido') && respostaNova.includes('atendido')) {
+            const hoje = new Date();
+            const ano = hoje.getFullYear();
+            const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+            const dia = String(hoje.getDate()).padStart(2, '0');
+            const dataAtual = `${ano}-${mes}-${dia}`;
+
+            const campos15 = {
+                n_notificacao: reg.numero_sequencial || novosCampos.n_notificacao || novosCampos.nome || '',
+                descricao: 'Atendimento Automático',
+                data: dataAtual
+            };
+
+            const { error: err15 } = await supabaseClient
+                .from('registros_produtividade')
+                .insert({
+                    user_id: reg.user_id, // Pontos vão para o fiscal dono do registro
+                    categoria_id: '15',
+                    categoria_nome: 'Notificação Preliminar regularizados (atendidos)',
+                    pontuacao: 20,
+                    campos: campos15
+                });
+
+            if (!err15) {
+                pontosAdicionadosAutom = true;
+                pontosAddTxt = '• Notificação Preliminar regularizados (atendidos) (20 pontos)\n\n 20 pontos salvos no total!';
+            } else {
+                console.error('Erro ao gerar Notificação Preliminar regularizados (atendidos):', err15);
+            }
+        }
+    }
+
     try {
         // Tenta usar a RPC (Stored Procedure) para burlar o RLS
         const { error } = await supabaseClient
@@ -2727,7 +2767,12 @@ async function salvarDetalhesHist(id) {
         }
 
         await carregarHistorico(); // atualiza pontuação e gráfico em tempo real
-        alert('Alterações salvas com sucesso!');
+        
+        if (pontosAdicionadosAutom) {
+            alert('Alterações salvas com sucesso!\n\n' + pontosAddTxt);
+        } else {
+            alert('Alterações salvas com sucesso!');
+        }
     } catch (err) {
         console.error("Erro ao salvar detalhes:", err);
         alert(err.message || 'Erro ao salvar no banco de dados. Tente novamente.');

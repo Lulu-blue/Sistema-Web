@@ -1130,3 +1130,8 @@ SEMAC/
 ### ⚙️ Melhorias de Performance
 - **Processamento Client-side**: O cálculo do hash é realizado diretamente no navegador do usuário (Web Crypto API), reduzindo a carga de processamento do servidor e garantindo respostas instantâneas na interface.
 
+### 🤖 Automação de Produtividade (Notificação Preliminar)
+- **Registro Automático de Atendimento**: Ao editar uma Notificação Preliminar no Histórico Geral e alterar a resposta para "ATENDIDO" (via select ou texto), o sistema agora identifica automaticamente a mudança.
+- **Pontuação Garantida**: Insere instantaneamente 20 pontos referentes à categoria "Notificação Preliminar regularizados (atendidos)" para o fiscal responsável, evitando retrabalho e agilizando a prestação de contas.
+- **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
+
