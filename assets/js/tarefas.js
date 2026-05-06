@@ -27,30 +27,6 @@ var idsAnalistasConsorcioGlobal = []; // Analistas do Consórcio
 var moduloIniciado = false;
 var inicializacaoPromise = null;
 
-// --- FUNÇÕES AUXILIARES DE DUPLICIDADE ---
-async function calcularHashArquivoTarefa(file) {
-    const arrayBuffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function verificarDuplicidadeAnexo(tarefaId, fileHash) {
-    try {
-        const { data, error } = await supabaseClient
-            .from('tarefa_anexos')
-            .select('id')
-            .eq('tarefa_id', tarefaId)
-            .eq('arquivo_hash', fileHash)
-            .limit(1);
-        
-        if (error) return false;
-        return data && data.length > 0;
-    } catch (e) {
-        return false;
-    }
-}
-
 // Calendário de Tarefas
 var dataCalendarioTarefasAtual = new Date();
 var dataFiltroTarefasSelecionada = null;
@@ -3157,17 +3133,7 @@ async function uploadAnexo(tarefaId, inputEl) {
             Swal.fire('Acesso Negado', 'Apenas o responsável ou criador da tarefa pode anexar arquivos.', 'error');
             return;
         }
-
-                // --- VERIFICAÇÃO DE DUPLICIDADE ---
-        const fileHash = await calcularHashArquivoTarefa(file);
-        const isDuplicado = await verificarDuplicidadeAnexo(tarefaId, fileHash);
-        if (isDuplicado) {
-            Swal.fire('Arquivo Duplicado', 'Este arquivo já foi anexado a esta tarefa.', 'warning');
-            return;
-        }
-        // ----------------------------------
-
-
+        
         var filePath = tarefaId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
         var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
         if (uploadErr) {
@@ -3186,8 +3152,7 @@ async function uploadAnexo(tarefaId, inputEl) {
             tarefa_id: tarefaId,
             nome_arquivo: file.name,
             url: publicUrl,
-            uploaded_by: userIdGlobal,
-            arquivo_hash: fileHash
+            uploaded_by: userIdGlobal
         });
 
         if (insertErr) {
