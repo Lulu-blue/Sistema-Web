@@ -1113,25 +1113,7 @@ SEMAC/
 - **Flexibilização da Conclusão**: A regra de conclusão foi alterada para aceitar **Anexo OU Resposta**. Subtarefas agora podem ser finalizadas se houver pelo menos uma dessas informações registradas.
 - **Visualização Estilizada**: Respostas salvas são exibidas em um card destacado (verde claro) com identificação visual, facilitando o acompanhamento por outros membros da equipe.
 
-## 🆕 Atualizações Recentes (05/05/2026) — Integridade e Proteção de Dados
-
-### 🛡️ Mecanismo Anti-Duplicidade por Hash (DNA do Arquivo)
-- **Validação por Conteúdo (SHA-256)**: Implementação de cálculo de hash binário para cada arquivo anexado. O sistema agora identifica o "DNA" do arquivo, impedindo duplicatas mesmo que o nome do arquivo seja alterado.
-- **Trava de Segurança Inteligente**: O bloqueio de salvamento é ativado apenas quando há a combinação exata de **Mesmo Arquivo + Mesma Numeração** (Notificação ou Auto de Infração).
-- **Flexibilidade Operacional**: 
-  - Permite o registro de múltiplas notificações contidas em um único arquivo PDF.
-  - Permite a anexação de diferentes arquivos para uma mesma numeração (útil para retificações ou documentos complementares).
-- **Feedback Amigável**: Substituição de alertas genéricos por mensagens informativas e profissionais via SweetAlert2, orientando o usuário sobre registros já existentes na base.
-
-### 📂 Módulo de Tarefas e Anexos
-- **Verificação em Tempo Real**: A lógica de duplicidade foi estendida para o módulo de tarefas, evitando que o mesmo arquivo seja anexado repetidamente dentro de uma mesma tarefa, otimizando o armazenamento no Storage.
-- **Persistência no Banco de Dados**: Adicionada a coluna `arquivo_hash` na tabela `tarefa_anexos` e nos campos JSON das tabelas de produtividade para rastreabilidade permanente.
-
-### ⚙️ Melhorias de Performance
-- **Processamento Client-side**: O cálculo do hash é realizado diretamente no navegador do usuário (Web Crypto API), reduzindo a carga de processamento do servidor e garantindo respostas instantâneas na interface.
-
 ### 🤖 Automação de Produtividade (Notificação Preliminar)
 - **Registro Automático de Atendimento**: Ao editar uma Notificação Preliminar no Histórico Geral e alterar a resposta para "ATENDIDO" (via select ou texto), o sistema agora identifica automaticamente a mudança.
 - **Pontuação Garantida**: Insere instantaneamente 20 pontos referentes à categoria "Notificação Preliminar regularizados (atendidos)" para o fiscal responsável, evitando retrabalho e agilizando a prestação de contas.
 - **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
-
