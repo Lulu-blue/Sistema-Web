@@ -110,7 +110,7 @@ const CATEGORIAS = [
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Contribuinte', tipo: 'text', obrigatorio: true },
-            { nome: 'cpf_contribuinte', label: 'CPF do Contribuinte', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'cpf_contribuinte', label: 'CPF/CNPJ do Contribuinte', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_infrator', label: 'Endereço do Infrator', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_imovel', label: 'Endereço do Imóvel Autuado', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'bairro', label: 'Bairro do Imóvel Autuado', tipo: 'text', obrigatorio: true },
@@ -683,8 +683,8 @@ function abrirFormulario(categoria) {
             `;
         } else {
             let extraAttr = '';
-            if (campo.nome === 'cpf') {
-                extraAttr = ` maxlength="14" placeholder="000.000.000-00" oninput="let v=this.value.replace(/\\D/g,''); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); this.value=v;"`;
+            if (campo.nome === 'cpf' || campo.nome === 'cpf_contribuinte') {
+                extraAttr = ` maxlength="18" placeholder="CPF ou CNPJ" oninput="let v=this.value.replace(/\\D/g,''); if(v.length<=11){ v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); } else { v=v.replace(/^(\\d{2})(\\d)/,'$1.$2'); v=v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/,'$1.$2.$3'); v=v.replace(/\\.(\\d{3})(\\d)/,'.$1/$2'); v=v.replace(/(\\d{4})(\\d)/,'$1-$2'); } this.value=v;"`;
             }
             inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''} ${extraAttr}>`;
         }
@@ -2835,7 +2835,7 @@ async function salvarDetalhesHist(id) {
         }
 
         await carregarHistorico(); // atualiza pontuação e gráfico em tempo real
-        
+
         if (pontosAdicionadosAutom) {
             alert('Alterações salvas com sucesso!\n\n' + pontosAddTxt);
         } else {
@@ -3064,7 +3064,7 @@ async function abrirRelatorio() {
     // Filtrar registros pelo mês/ano do relatório E omitindo pontuação 0
     const registrosFiltrados = todosRegistros.filter(r => {
         if ((r.pontuacao || 0) === 0) return false;
-        
+
         // Controle Processual: usar created_at
         // Registros comuns: usar o campo 'data' dos campos
         let dt;
@@ -3731,13 +3731,15 @@ async function abrirEditorAutoInfracao() {
         // Pegar informações do Fiscal (Nome logado) e Data de Hoje para Assinatura
         const { data: { user } } = await getAuthUser();
         let nomeFiscal = 'Nome do Fiscal';
+        let matriculaFiscal = 'XXXXXXXX';
         if (user) {
             const { data: perfil } = await supabaseClient
                 .from('profiles')
-                .select('full_name')
+                .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
             if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
         const termoDocumento = categoriaAtual.id === '11' ? 'documento de Dívida Ativa' : 'Auto de infração';
@@ -3765,7 +3767,7 @@ async function abrirEditorAutoInfracao() {
         
         <p style="margin-top: 20px; line-height: 1.5;">
             <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}<br>
-            <strong>CPF:</strong> ${campos.cpf_contribuinte || '_________________'}
+            <strong>CPF/CNPJ:</strong> ${campos.cpf_contribuinte || '_________________'}
         </p>
         <p>
             <strong>Endereço:</strong> ${campos.endereco_infrator || '---'}
@@ -3791,7 +3793,11 @@ async function abrirEditorAutoInfracao() {
         <div style="margin-top: 40px; margin-left: 30px;">
             <div style="display: inline-block; text-align: center;">
                 <p style="margin: 0;">_________________________________________ Divinópolis, ${dataAssinatura}</p>
-                <p style="margin: 5px 0 0 0; margin-right: 170px;"><strong>${nomeFiscal}</strong></p>
+                <p style="margin: 5px 0 0 0; margin-right: 170px;">
+                    <strong>${nomeFiscal}</strong><br>
+                    Matrícula: ${matriculaFiscal}<br>
+                    Fiscal de Posturas
+                </p>
             </div>
         </div>
         
