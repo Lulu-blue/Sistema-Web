@@ -1160,8 +1160,14 @@ SEMAC/
 - **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
 
 ---
+### 🤖 Atualizações Recentes (05/05/2026) - Automação de Produtividade (Notificação Preliminar); Automação de Busca de Bairros.
 
-## 🆕 Atualizações Recentes (05/05/2026) — Datas no Relatório, Limpeza e Pontuação
+- **Registro Automático de Atendimento**: Ao editar uma Notificação Preliminar no Histórico Geral e alterar a resposta para "ATENDIDO" (via select ou texto), o sistema agora identifica automaticamente a mudança.
+- **Pontuação Garantida**: Insere instantaneamente 20 pontos referentes à categoria "Notificação Preliminar regularizados (atendidos)" para o fiscal responsável, evitando retrabalho e agilizando a prestação de contas.
+- **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
+>>>>>>> meus-ajustes-salvos
+
+## 🆕 Atualizações Recentes (06/05/2026) — Datas no Relatório, Limpeza e Pontuação; 
 
 ### 📅 Lógica de Datas Separada (CP vs Registros Comuns)
 - **`obterDataReal()`**: Função unificada de extração de data agora diferencia automaticamente:
@@ -1190,9 +1196,6 @@ SEMAC/
 - **Modal de Edição**: fecha instantaneamente ao confirmar, exibe toast "Alteração salva" e rola suavemente até a seção de histórico.
 - **Anexos preservados**: em modo de edição, inputs do tipo `file` são ocultados e os campos existentes são mantidos via spread operator (`{ ...registroSelecionado.campos }`).
 
----
-
-## 🆕 Atualizações Recentes (08/05/2026) — Automação de Busca de Bairros
 
 ### 🏙️ Integração com Banco de Dados de Bairros
 - **Campo Inteligente**: Os campos de "Bairro" nos formulários (ex: Notificação Preliminar, Auto de Infração, Protocolo, etc.) foram transformados de inputs de texto livre para campos de seleção interativos (`select_bairro`).
@@ -1200,3 +1203,55 @@ SEMAC/
 - **Carregamento Automático**: O sistema agora puxa automaticamente os bairros mapeados na tabela oficial `bairros` do Supabase assim que a aplicação é iniciada.
 - **Aviso Dinâmico**: Caso o fiscal não encontre o bairro na lista, um alerta integrado aparece instruindo-o a notificar o Gerente de Posturas para cadastro, garantindo consistência na base de dados.
 - **Integração com Auto-Preenchimento (Word)**: A automação de extração de dados de arquivos DOCX foi atualizada para suportar o novo componente dropdown, atualizando visualmente o bairro extraído do documento Word na tela.
+
+## 🆕 Atualizações Recentes (08/05/2026) — Botões Vencidos/Atendidos no Histórico Geral
+
+### 🔴🟢 Botões Vencidos e Atendidos (GP+)
+- **Visibilidade**: Dois botões aparecem abaixo do "Fechamento Anual" no Histórico Geral, exclusivamente para cargos de **Gerente de Posturas (GP) ou superior** (Diretor, Secretário).
+- **Aba NP (1.1)**: botões filtram Notificações Preliminares.
+- **Aba AI (1.2)**: botões filtram Autos de Infração.
+- **Fora dessas abas**: botões ficam ocultos automaticamente.
+
+#### Botão "Vencidos"
+- Lista registros com **data de vencimento já passada** e **sem resposta do fiscal**.
+- Exibe a **quantidade total** em badge vermelho.
+- Tabela com colunas: N°, Nome, Bairro, Fiscal, Data Venc., Resposta, Anexos.
+
+#### Botão "Atendidos"
+- Lista registros cuja **resposta do fiscal contém "ATENDIDO"**.
+- Exibe a **quantidade total** em badge verde.
+- Mesmas colunas do modal de vencidos.
+
+#### Download de Relatório
+- Cada modal possui dropdown **"Baixar Relatório"** com duas opções:
+  1. **Somente Relatório** → abre HTML formatado em iframe para impressão/PDF.
+  2. **Relatório + Anexos (ZIP)** → gera ZIP contendo relatório HTML + todos os anexos (PDF/AR/extras) organizados na pasta `anexos/`.
+
+---
+
+### 🔗 Separação Inteligente: NP Vencidas com AI Vinculado
+- Ao abrir "Vencidos" na aba **NP**, o sistema busca automaticamente no banco todos os **Autos de Infração** (categoria 1.2) cujo campo `Nº da notificação` (`campos.n_notificacao`) corresponda ao número de alguma NP vencida.
+- O modal é dividido em **duas seções**:
+  - **⚠️ Vencidas com Auto de Infração vinculado** (fundo amarelo) — NPs que já possuem AI gerado, mas o fiscal ainda não marcou a resposta no sistema.
+  - **🔴 Vencidas sem Auto de Infração** (fundo vermelho claro) — NPs que realmente não têm AI vinculado.
+- **Coluna "AI Vinculado"**: mostra o número do AI (badge âmbar) e botão 📎 para abrir o anexo PDF do AI diretamente.
+
+---
+
+### 🔄 Ordenação no Modal de Vencidos
+- Dropdown **"Ordenar por..."** disponível em **ambos os modais** de Vencidos (NP e AI).
+- Opções de ordenação (todas com direção reversa):
+  - **Data Venc. (próxima → distante)** / **(distante → próxima)**
+  - **Fiscal (A → Z)** / **(Z → A)**
+  - **Bairro (A → Z)** / **(Z → A)**
+  - **Nome (A → Z)** / **(Z → A)**
+- A ordenação é aplicada **instantaneamente** sem fechar o modal.
+- O **relatório e o ZIP** respeitam a ordem escolhida pelo usuário.
+
+---
+
+### 🐛 Correção do Gráfico de Status do Fiscal
+- No Histórico Geral, ao filtrar por nome de fiscal, o gráfico de barras **"Status das Pendências do Fiscal"** agora conta cada categoria de forma **independente**.
+- Antes, o uso de `else if` fazia registros com múltiplos status (ex: Atendido + Com Histórico) serem contados apenas na primeira categoria.
+- Agora um registro pode incrementar **uma, duas ou três barras simultaneamente**, refletindo a real situação das pendências.
+- Delay de renderização do Chart.js aumentado de 50ms para 150ms para maior estabilidade visual.
