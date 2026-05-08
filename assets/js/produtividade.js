@@ -98,7 +98,7 @@ const CATEGORIAS = [
             { nome: 'n_notificacao', label: 'N° da Notificação', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome do Contribuinte', tipo: 'text', obrigatorio: true },
             { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio', 'Reconstrução de Muro ou Passeio'] },
             { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
         ]
@@ -113,7 +113,7 @@ const CATEGORIAS = [
             { nome: 'cpf_contribuinte', label: 'CPF/CNPJ do Contribuinte', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_infrator', label: 'Endereço do Infrator', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'endereco_imovel', label: 'Endereço do Imóvel Autuado', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'bairro', label: 'Bairro do Imóvel Autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro do Imóvel Autuado', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'inscricao_zona', label: 'Zona', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
             { nome: 'inscricao_quadra', label: 'Quadra', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
             { nome: 'inscricao_lote', label: 'Lote', tipo: 'text', obrigatorio: true, agrupar: 'inscricao', ignorarNoBanco: true },
@@ -135,7 +135,7 @@ const CATEGORIAS = [
             { nome: 'n_ar', label: 'N° do AR', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
             { nome: 'data_chegada', label: 'Data de Chegada', tipo: 'date', obrigatorio: true },
-            { nome: 'bairro', label: 'Bairro Notificada', tipo: 'text', obrigatorio: true }
+            { nome: 'bairro', label: 'Bairro Notificada', tipo: 'select_bairro', obrigatorio: true }
         ]
     },
     {
@@ -166,7 +166,7 @@ const CATEGORIAS = [
             { nome: 'n_protocolo', label: 'N° do Protocolo', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
             { nome: 'data', label: 'Data de Finalização', tipo: 'date', obrigatorio: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
         ]
     },
@@ -177,7 +177,7 @@ const CATEGORIAS = [
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true }
+            { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true }
         ]
     },
     {
@@ -190,7 +190,7 @@ const CATEGORIAS = [
             { nome: 'cpf', label: 'CPF', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'rua', label: 'Rua de correspondência', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'numero', label: 'Nº', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'digitado', label: 'Referente ao', tipo: 'textarea', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_ciencia', label: 'Data da Ciência', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true }
@@ -533,6 +533,22 @@ function obterIdVisual(categoriaId) {
 }
 
 // --- VARIÁVEIS GLOBAIS ---
+let bairrosSistema = [];
+async function carregarBairrosSistema() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('bairros')
+            .select('nome')
+            .order('nome');
+            
+        if (!error && data) {
+            bairrosSistema = data.map(b => b.nome);
+        }
+    } catch (e) {
+        console.error("Erro ao carregar bairros:", e);
+    }
+}
+
 let categoriaAtual = null;
 let rascunhoDocumento = null; // { id, numero_sequencial, categoria_id, campos }
 
@@ -667,6 +683,35 @@ function abrirFormulario(categoria) {
                 <div id="outro-container-${campo.nome}" style="display:none; margin-top:8px;">
                     <input type="text" id="outro-input-${campo.nome}" placeholder="Digite o novo motivo...">
                     <button type="button" class="btn-add-outro" onclick="adicionarOpcaoCustom('${categoria.id}', '${campo.nome}')">Adicionar</button>
+                </div>
+            `;
+        } else if (campo.tipo === 'select_bairro') {
+            let opcoesListHTML = `<div class="dropdown-search" style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
+            opcoesListHTML += `<div id="lista-bairros-${campo.nome}" class="bairros-container" style="max-height: 200px; overflow-y: auto;">`;
+            
+            if (bairrosSistema.length > 0) {
+                bairrosSistema.forEach(bairro => {
+                    opcoesListHTML += `<div class="dropdown-item dropdown-bairro-item" onclick="selecionarOpcao('${campo.nome}', '${bairro.replace(/'/g, "\\'")}')">${bairro}</div>`;
+                });
+            } else {
+                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 10px;">Carregando bairros...</div>`;
+            }
+            opcoesListHTML += `</div>`;
+            
+            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 10px; white-space: normal; line-height: 1.4;">
+                ⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.
+            </div>`;
+
+            inputHTML = `
+                <input type="hidden" id="campo-${campo.nome}" value="">
+                <div class="dropdown-custom" id="dropdown-${campo.nome}">
+                    <div class="dropdown-trigger" onclick="toggleDropdown('${campo.nome}')">
+                        <span class="dropdown-texto">Selecione o bairro...</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                    <div class="dropdown-lista" id="dropdown-lista-${campo.nome}">
+                        ${opcoesListHTML}
+                    </div>
                 </div>
             `;
         } else if (campo.tipo === 'file') {
@@ -886,14 +931,19 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
         if (campo.obrigatorio && !valor) {
             todosPreenchidos = false;
-            if (campo.tipo === 'select_custom') {
+            if (campo.tipo === 'select_custom' || campo.tipo === 'select_bairro') {
                 const trigger = document.querySelector(`#dropdown-${campo.nome} .dropdown-trigger`);
                 if (trigger) trigger.style.borderColor = '#ef4444';
             } else {
                 input.style.borderColor = '#ef4444';
             }
         } else {
-            input.style.borderColor = '#e2e8f0';
+            if (campo.tipo === 'select_custom' || campo.tipo === 'select_bairro') {
+                const trigger = document.querySelector(`#dropdown-${campo.nome} .dropdown-trigger`);
+                if (trigger) trigger.style.borderColor = '#e2e8f0';
+            } else {
+                input.style.borderColor = '#e2e8f0';
+            }
         }
 
         if (!campo.ignorarNoBanco) {
@@ -1724,6 +1774,23 @@ function mostrarInputOutro(campoNome) {
     document.getElementById(`campo-${campoNome}`).value = '';
     document.querySelector(`#dropdown-${campoNome} .dropdown-texto`).textContent = 'Outro...';
 }
+
+window.filtrarBairros = function(campoNome) {
+    const input = document.getElementById(`search-${campoNome}`);
+    const filter = input.value.toLowerCase();
+    const container = document.getElementById(`lista-bairros-${campoNome}`);
+    if (!container) return;
+    const items = container.getElementsByClassName('dropdown-bairro-item');
+    
+    for (let i = 0; i < items.length; i++) {
+        let textValue = items[i].textContent || items[i].innerText;
+        if (textValue.toLowerCase().indexOf(filter) > -1) {
+            items[i].style.display = "";
+        } else {
+            items[i].style.display = "none";
+        }
+    }
+};
 
 function adicionarOpcaoCustom(catId, campoNome) {
     const input = document.getElementById(`outro-input-${campoNome}`);
@@ -3364,6 +3431,8 @@ async function processarWordNotificacao(event) {
         if (dadosExtraidos.bairro) {
             const el = document.getElementById('campo-bairro');
             if (el) el.value = dadosExtraidos.bairro;
+            const txt = document.querySelector('#dropdown-bairro .dropdown-texto');
+            if (txt) txt.textContent = dadosExtraidos.bairro;
         }
 
         if (dadosExtraidos.data) {
@@ -4723,4 +4792,7 @@ function renderizarListaNPAI() {
 }
 
 // Executa quando a página carregar
-document.addEventListener('DOMContentLoaded', inicializarProdutividade);
+document.addEventListener('DOMContentLoaded', () => {
+    carregarBairrosSistema();
+    inicializarProdutividade();
+});

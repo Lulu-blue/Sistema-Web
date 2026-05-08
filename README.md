@@ -1154,12 +1154,11 @@ SEMAC/
 - **Flexibilização da Conclusão**: A regra de conclusão foi alterada para aceitar **Anexo OU Resposta**. Subtarefas agora podem ser finalizadas se houver pelo menos uma dessas informações registradas.
 - **Visualização Estilizada**: Respostas salvas são exibidas em um card destacado (verde claro) com identificação visual, facilitando o acompanhamento por outros membros da equipe.
 
-<<<<<<< Updated upstream
 ### 🤖 Automação de Produtividade (Notificação Preliminar)
 - **Registro Automático de Atendimento**: Ao editar uma Notificação Preliminar no Histórico Geral e alterar a resposta para "ATENDIDO" (via select ou texto), o sistema agora identifica automaticamente a mudança.
 - **Pontuação Garantida**: Insere instantaneamente 20 pontos referentes à categoria "Notificação Preliminar regularizados (atendidos)" para o fiscal responsável, evitando retrabalho e agilizando a prestação de contas.
 - **Feedback Padronizado**: O alerta de sucesso foi ajustado para detalhar a pontuação incluída, seguindo o mesmo padrão visual de lista (`•`) utilizado na geração original dos documentos.
-=======
+
 ---
 
 ## 🆕 Atualizações Recentes (05/05/2026) — Datas no Relatório, Limpeza e Pontuação
@@ -1190,4 +1189,14 @@ SEMAC/
 - **Botão Salvar**: exibe "Carregando..." imediatamente ao iniciar o salvamento, com timeout de conexão reduzido para 2000ms.
 - **Modal de Edição**: fecha instantaneamente ao confirmar, exibe toast "Alteração salva" e rola suavemente até a seção de histórico.
 - **Anexos preservados**: em modo de edição, inputs do tipo `file` são ocultados e os campos existentes são mantidos via spread operator (`{ ...registroSelecionado.campos }`).
->>>>>>> Stashed changes
+
+---
+
+## 🆕 Atualizações Recentes (08/05/2026) — Automação de Busca de Bairros
+
+### 🏙️ Integração com Banco de Dados de Bairros
+- **Campo Inteligente**: Os campos de "Bairro" nos formulários (ex: Notificação Preliminar, Auto de Infração, Protocolo, etc.) foram transformados de inputs de texto livre para campos de seleção interativos (`select_bairro`).
+- **Busca em Tempo Real**: Adicionado filtro de pesquisa integrado ao dropdown, permitindo localizar rapidamente o bairro desejado na lista.
+- **Carregamento Automático**: O sistema agora puxa automaticamente os bairros mapeados na tabela oficial `bairros` do Supabase assim que a aplicação é iniciada.
+- **Aviso Dinâmico**: Caso o fiscal não encontre o bairro na lista, um alerta integrado aparece instruindo-o a notificar o Gerente de Posturas para cadastro, garantindo consistência na base de dados.
+- **Integração com Auto-Preenchimento (Word)**: A automação de extração de dados de arquivos DOCX foi atualizada para suportar o novo componente dropdown, atualizando visualmente o bairro extraído do documento Word na tela.
