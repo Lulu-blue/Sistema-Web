@@ -1830,9 +1830,22 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     if (selectAno) selectAno.value = '';
     atualizarIndicadorFiltro();
     carregarHistoricoGeral(categoriaId);
+    atualizarVisibilidadeBotoesVencidosAtendidos();
 }
 
 let buscaIdGlobal = 0; // Para cancelar buscas sobrepostas
+
+// Detecta registros de NP que na verdade são Autos de Infração
+function pareceAutoDeInfracaoNP(reg) {
+    const nNotif = (reg.campos && reg.campos.n_notificacao || '').toLowerCase().trim();
+    return nNotif.includes('auto de infração') ||
+        nNotif.includes('auto de infracao') ||
+        nNotif.includes('auto deinfração') ||
+        nNotif.includes('auto deinfracao') ||
+        nNotif.includes('n.º') && nNotif.includes('auto') ||
+        /^ai\s*\d/.test(nNotif) ||
+        /^ai\d/.test(nNotif);
+}
 
 async function carregarHistoricoGeral(categoriaId) {
     const container = document.getElementById('historico-geral-lista');
@@ -1929,6 +1942,37 @@ async function carregarHistoricoGeral(categoriaId) {
         return;
     }
 
+    // Reclassificação inteligente: NP com número de AI → tratados como AI
+    if (categoriaId === '1.1') {
+        todosOsRegistros = todosOsRegistros.filter(r => !pareceAutoDeInfracaoNP(r));
+    } else if (categoriaId === '1.2') {
+        // Buscar registros de NP que são na verdade AI (má classificação no banco)
+        let queryNP = supabaseClient.from('controle_processual').select('*').eq('categoria_id', '1.1');
+        if (bairroSelecionado) queryNP = queryNP.filter('campos->>bairro', 'eq', bairroSelecionado);
+        if (termoFiscal) queryNP = queryNP.ilike('fiscal_nome', `%${termoFiscal}%`);
+        if (anoSelecionado) {
+            queryNP = queryNP.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
+                .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
+        }
+        if (termo) {
+            const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'n_certidao', 'nome', 'bairro', 'n_inscricao'];
+            const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`);
+            orConditions.push(`numero_sequencial.ilike.%${termo}%`);
+            queryNP = queryNP.or(orConditions.join(','));
+        }
+
+        try {
+            const { data: registrosNP, error: erroNP } = await queryNP;
+            if (!erroNP && registrosNP && registrosNP.length > 0) {
+                if (buscaIdLocal !== buscaIdGlobal) return;
+                const npComoAI = registrosNP.filter(r => pareceAutoDeInfracaoNP(r));
+                todosOsRegistros = todosOsRegistros.concat(npComoAI);
+            }
+        } catch (e) {
+            console.error('Erro ao buscar NP reclassificados como AI:', e);
+        }
+    }
+
     // Ordenar final no JS
     const registrosOrdenados = todosOsRegistros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
     registrosGeralAtual = registrosOrdenados;
@@ -1939,6 +1983,7 @@ async function carregarHistoricoGeral(categoriaId) {
     }
 
     renderizarTabelaGeral(registrosOrdenados, categoriaId);
+    atualizarVisibilidadeBotoesVencidosAtendidos();
 }
 
 // Extrai bairros únicos e preenche o dropdown
@@ -2081,13 +2126,9 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 }
             }
 
-            if (vResposta !== '') {
-                qtdVerde++;
-            } else if (vHistoricoInfo !== '') {
-                qtdVermelha++;
-            } else if (dtVencimentoVencida) {
-                qtdCinza++;
-            }
+            if (vResposta !== '') qtdVerde++;
+            if (vHistoricoInfo !== '') qtdVermelha++;
+            if (dtVencimentoVencida) qtdCinza++;
         });
     }
 
@@ -2133,7 +2174,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                         }
                     });
                 }
-            }, 50);
+            }, 150);
         }
     };
 
@@ -2253,7 +2294,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     if (!categoria) return;
 
     // Colunas: Nº (se tiver), campos da categoria + Fiscal + Data
-    const temNumero = registros.some(r => r.numero_sequencial);
+    const temNumero = registros.some(r => r.numero_sequencial || (pareceAutoDeInfracaoNP(r) && r.campos && r.campos.n_notificacao));
 
     let headerHTML = '<tr>';
     if (temNumero) headerHTML += '<th class="col-curta">N°</th>';
@@ -2310,7 +2351,10 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
         }
         bodyHTML += `<tr${rowAttributes}>`;
-        if (temNumero) bodyHTML += renderizarTd(reg.numero_sequencial || '-', 'col-curta');
+        if (temNumero) {
+            const numExibido = reg.numero_sequencial || (pareceAutoDeInfracaoNP(reg) && reg.campos && reg.campos.n_notificacao) || '-';
+            bodyHTML += renderizarTd(numExibido, 'col-curta');
+        }
         categoria.campos.forEach(campo => {
             if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
                 const cls = classeColunaHistorico(campo.label);
@@ -2458,7 +2502,7 @@ async function abrirDetalhesAdminHist(id) {
     if (reg.categoria_id !== '11') {
         if (isCargoGerencia) {
             htmlCampos += `<div style="margin-bottom:12px;">
-                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de Entrada (Admin)</label>
+                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de recebimento pelo proprietário: (Admin)</label>
                 <input type="date" id="admin-data-entrada" value="${vEntrada}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
             </div>`;
             htmlCampos += `<div style="margin-bottom:12px;">
@@ -2485,7 +2529,7 @@ async function abrirDetalhesAdminHist(id) {
                 <textarea id="admin-historico-texto" rows="3" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${vHistorico}</textarea>
             </div>`;
         } else {
-            htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Entrada:</strong> ${vEntrada ? vEntrada.split('-').reverse().join('/') : '—'}</div>`;
+            htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de recebimento pelo proprietário:</strong> ${vEntrada ? vEntrada.split('-').reverse().join('/') : '—'}</div>`;
             htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento:</strong> ${vVencimento ? vVencimento.split('-').reverse().join('/') : '—'}</div>`;
             htmlCampos += `<div style="margin-bottom:8px;"><strong>AR:</strong> ${vAR || '—'}</div>`;
             if (campos.anexo_ar) {
@@ -2835,7 +2879,7 @@ async function salvarDetalhesHist(id) {
         }
 
         await carregarHistorico(); // atualiza pontuação e gráfico em tempo real
-        
+
         if (pontosAdicionadosAutom) {
             alert('Alterações salvas com sucesso!\n\n' + pontosAddTxt);
         } else {
@@ -3064,7 +3108,7 @@ async function abrirRelatorio() {
     // Filtrar registros pelo mês/ano do relatório E omitindo pontuação 0
     const registrosFiltrados = todosRegistros.filter(r => {
         if ((r.pontuacao || 0) === 0) return false;
-        
+
         // Controle Processual: usar created_at
         // Registros comuns: usar o campo 'data' dos campos
         let dt;
@@ -4714,6 +4758,696 @@ function renderizarListaNPAI() {
     });
 
     container.innerHTML = html;
+}
+
+// ============================
+// MODAL VENCIDOS / ATENDIDOS (Histórico Geral — GP+)
+// ============================
+
+let registrosModalAtual = []; // registros filtrados do modal aberto
+let tipoModalAtual = ''; // 'vencidos' ou 'atendidos'
+let vencidosComAIGlobal = [];
+let vencidosSemAIGlobal = [];
+let aisVinculadosGlobal = [];
+let registrosModalOriginal = []; // backup da ordem original para reset
+
+function reordenarModalVencidos(criterio) {
+    const ordenar = (a, b) => {
+        switch (criterio) {
+            case 'data_desc': {
+                const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                return db - da;
+            }
+            case 'data_asc': {
+                const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                return da - db;
+            }
+            case 'fiscal':
+                return (a.fiscal_nome || '').localeCompare(b.fiscal_nome || '');
+            case 'fiscal_desc':
+                return (b.fiscal_nome || '').localeCompare(a.fiscal_nome || '');
+            case 'bairro':
+                return ((a.campos && a.campos.bairro) || '').localeCompare((b.campos && b.campos.bairro) || '');
+            case 'bairro_desc':
+                return ((b.campos && b.campos.bairro) || '').localeCompare((a.campos && a.campos.bairro) || '');
+            case 'nome':
+                return ((a.campos && a.campos.nome) || '').localeCompare((b.campos && b.campos.nome) || '');
+            case 'nome_desc':
+                return ((b.campos && b.campos.nome) || '').localeCompare((a.campos && a.campos.nome) || '');
+            default:
+                return 0;
+        }
+    };
+
+    if (vencidosComAIGlobal.length > 0 || vencidosSemAIGlobal.length > 0) {
+        // Modal customizado com duas seções
+        vencidosComAIGlobal.sort(ordenar);
+        vencidosSemAIGlobal.sort(ordenar);
+        renderizarModalVencidosComAI('Notificações Preliminares Vencidas', vencidosComAIGlobal, vencidosSemAIGlobal, aisVinculadosGlobal);
+    } else {
+        // Modal padrão (AI ou sem NP reclassificados)
+        const ordenados = [...registrosModalOriginal].sort(ordenar);
+        const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
+        renderizarModalRelatorio(`${tipoDoc} Vencidas`, ordenados, 'vencidos');
+    }
+}
+
+function atualizarVisibilidadeBotoesVencidosAtendidos() {
+    const container = document.getElementById('botoes-vencidos-atendidos');
+    if (!container) return;
+
+    const role = window.userRoleGlobal || '';
+    const podeVer = isGerenteOuSuperior(role);
+    const abaNPouAI = (subAbaAtual === '1.1' || subAbaAtual === '1.2');
+
+    if (podeVer && abaNPouAI) {
+        container.style.display = 'flex';
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+async function buscarAIsPorNumerosNP(numerosNP) {
+    if (!numerosNP || numerosNP.length === 0) return [];
+
+    const chunkSize = 20;
+    let todosAIs = [];
+
+    for (let i = 0; i < numerosNP.length; i += chunkSize) {
+        const chunk = numerosNP.slice(i, i + chunkSize);
+        const orConditions = chunk.map(n => `campos->>n_notificacao.eq.${n}`);
+
+        const { data, error } = await supabaseClient
+            .from('controle_processual')
+            .select('*')
+            .eq('categoria_id', '1.2')
+            .or(orConditions.join(','));
+
+        if (error) {
+            console.error('Erro ao buscar AIs vinculados:', error);
+            continue;
+        }
+        if (data) todosAIs = todosAIs.concat(data);
+    }
+
+    return todosAIs;
+}
+
+function ordenarVencidos(criterio) {
+    const ordenar = (a, b) => {
+        switch (criterio) {
+            case 'data_desc': {
+                const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                return db - da; // mais recente/próxima primeiro
+            }
+            case 'data_asc': {
+                const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                return da - db; // mais antiga/distante primeiro
+            }
+            case 'fiscal':
+                return (a.fiscal_nome || '').localeCompare(b.fiscal_nome || '');
+            case 'fiscal_desc':
+                return (b.fiscal_nome || '').localeCompare(a.fiscal_nome || '');
+            case 'bairro':
+                return ((a.campos && a.campos.bairro) || '').localeCompare((b.campos && b.campos.bairro) || '');
+            case 'bairro_desc':
+                return ((b.campos && b.campos.bairro) || '').localeCompare((a.campos && a.campos.bairro) || '');
+            case 'nome':
+                return ((a.campos && a.campos.nome) || '').localeCompare((b.campos && b.campos.nome) || '');
+            case 'nome_desc':
+                return ((b.campos && b.campos.nome) || '').localeCompare((a.campos && a.campos.nome) || '');
+            default:
+                return 0;
+        }
+    };
+    vencidosComAIGlobal.sort(ordenar);
+    vencidosSemAIGlobal.sort(ordenar);
+    renderizarModalVencidosComAI('Notificações Preliminares Vencidas', vencidosComAIGlobal, vencidosSemAIGlobal, aisVinculadosGlobal);
+}
+
+function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
+    registrosModalAtual = comAI.concat(semAI);
+    tipoModalAtual = 'vencidos';
+    vencidosComAIGlobal = comAI;
+    vencidosSemAIGlobal = semAI;
+    aisVinculadosGlobal = aisVinculados;
+
+    const modalExistente = document.getElementById('modal-vencidos-atendidos');
+    if (modalExistente) modalExistente.remove();
+
+    const hojeFmt = new Date().toLocaleDateString('pt-BR');
+    const mapaAI = {};
+    aisVinculados.forEach(ai => {
+        const n = ai.campos && ai.campos.n_notificacao ? ai.campos.n_notificacao.trim() : '';
+        if (n) mapaAI[n] = ai;
+    });
+
+    const total = comAI.length + semAI.length;
+
+    function montarTabela(registros, secaoId, corBadge, textoBadge, bgSecao) {
+        let headerHTML = '<tr>';
+        headerHTML += '<th class="col-curta">N°</th>';
+        headerHTML += '<th>Nome / Identificador</th>';
+        headerHTML += '<th class="col-curta">Bairro</th>';
+        headerHTML += '<th class="col-curta">Fiscal</th>';
+        headerHTML += '<th class="col-curta">Data Venc.</th>';
+        headerHTML += '<th class="col-curta">AI Vinculado</th>';
+        headerHTML += '<th class="col-curta">Anexos</th>';
+        headerHTML += '</tr>';
+
+        let bodyHTML = '';
+        registros.forEach(reg => {
+            const nome = (reg.campos && reg.campos.nome) || '-';
+            const bairro = (reg.campos && reg.campos.bairro) || '-';
+            const fiscal = reg.fiscal_nome || '-';
+            const numSeq = (reg.campos && reg.campos.n_notificacao) || (reg.numero_sequencial || '-');
+            const dataVenc = reg.campos && reg.campos.data_vencimento
+                ? reg.campos.data_vencimento.split('-').reverse().join('/')
+                : '-';
+
+            const aiVinculado = mapaAI[numSeq];
+            let aiHTML = '<span style="color:#94a3b8;font-size:12px;">—</span>';
+            if (aiVinculado) {
+                const numAI = aiVinculado.numero_sequencial || '-';
+                aiHTML = `<span style="background:#f59e0b; color:white; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600;">${numAI}</span>`;
+                if (aiVinculado.campos && aiVinculado.campos.anexo_pdf) {
+                    aiHTML += ` <button onclick="abrirAnexoGerente('${aiVinculado.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:3px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin-left:4px;">📎</button>`;
+                }
+            }
+
+            const anexos = coletarTodosAnexos(reg);
+            let anexoHTML = '';
+            if (anexos.length === 0) {
+                anexoHTML = '<span style="color:#94a3b8;font-size:12px;">—</span>';
+            } else if (anexos.length === 1) {
+                anexoHTML = `<button onclick="abrirAnexoGerente('${anexos[0]}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📎 Abrir</button>`;
+            } else {
+                anexoHTML = anexos.map((url, i) =>
+                    `<button onclick="abrirAnexoGerente('${url}')" style="background:#10b981;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin:2px;">${i+1}</button>`
+                ).join('');
+            }
+
+            bodyHTML += `<tr style="transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${numSeq}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${nome}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${bairro}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${fiscal}</td>`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${dataVenc}</td>`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${aiHTML}</td>`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${anexoHTML}</td>`;
+            bodyHTML += `</tr>`;
+        });
+
+        return `
+            <div style="margin-bottom: 24px; padding: 16px; background: ${bgSecao}; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <h3 style="margin:0; color:#1e293b; font-size:16px;">${textoBadge}</h3>
+                    <span style="background:${corBadge}; color:white; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">
+                        ${registros.length} registro(s)
+                    </span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="historico-tabela" style="min-width:700px;">
+                        <thead>${headerHTML}</thead>
+                        <tbody>${bodyHTML}</tbody>
+                    </table>
+                </div>
+                ${registros.length === 0 ? '<div style="text-align:center; padding:20px; color:#64748b; font-size:13px;">Nenhum registro nesta seção.</div>' : ''}
+            </div>
+        `;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-vencidos-atendidos';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = `
+        <div style="background:white;border-radius:12px;width:95%;max-width:1100px;max-height:90vh;overflow:auto;padding:24px;position:relative;">
+            <button onclick="document.getElementById('modal-vencidos-atendidos').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">✕</button>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                <div>
+                    <h2 style="margin:0; color:#1e293b; font-size:20px;">${titulo}</h2>
+                    <p style="margin:4px 0 0 0; color:#64748b; font-size:13px;">Gerado em ${hojeFmt}</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <span style="background:#dc2626; color:white; padding:6px 14px; border-radius:20px; font-size:14px; font-weight:700;">
+                        ${total} Vencidos
+                    </span>
+                    <select id="select-ordenar-vencidos" onchange="reordenarModalVencidos(this.value)" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; outline: none; background: white; cursor: pointer; color: #334155;">
+                        <option value="">Ordenar por...</option>
+                        <option value="data_desc">Data Venc. (próxima → distante)</option>
+                        <option value="data_asc">Data Venc. (distante → próxima)</option>
+                        <option value="fiscal">Fiscal (A → Z)</option>
+                        <option value="fiscal_desc">Fiscal (Z → A)</option>
+                        <option value="bairro">Bairro (A → Z)</option>
+                        <option value="bairro_desc">Bairro (Z → A)</option>
+                        <option value="nome">Nome (A → Z)</option>
+                        <option value="nome_desc">Nome (Z → A)</option>
+                    </select>
+                    <div style="position:relative;">
+                        <button id="btn-baixar-modal-rel" style="padding: 0.55rem 1.2rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="toggleMenuDownloadModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Baixar Relatório
+                        </button>
+                        <div id="menu-download-modal" style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:10px; z-index:101; min-width:220px; border:1px solid #e2e8f0;">
+                            <button onclick="baixarRelatorioModal('relatorio')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                Somente Relatório
+                            </button>
+                            <button onclick="baixarRelatorioModal('completo')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                Relatório + Anexos (ZIP)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            ${montarTabela(comAI, 'secao-com-ai', '#f59e0b', '⚠️ Vencidas com Auto de Infração vinculado', '#fffbeb')}
+            ${montarTabela(semAI, 'secao-sem-ai', '#dc2626', '🔴 Vencidas sem Auto de Infração', '#fef2f2')}
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+    document.addEventListener('click', function fecharMenu(e) {
+        const menu = document.getElementById('menu-download-modal');
+        const btn = document.getElementById('btn-baixar-modal-rel');
+        if (!menu || !btn) {
+            document.removeEventListener('click', fecharMenu);
+            return;
+        }
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    });
+}
+
+async function abrirModalVencidos() {
+    if (!registrosGeralAtual || registrosGeralAtual.length === 0) {
+        Swal.fire('Aviso', 'Nenhum registro carregado para análise.', 'info');
+        return;
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const vencidos = registrosGeralAtual.filter(reg => {
+        const venc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.trim() : '';
+        if (!venc) return false;
+        const partes = venc.split('-');
+        if (partes.length !== 3) return false;
+        const dtVenc = new Date(partes[0], partes[1] - 1, partes[2]);
+        if (dtVenc >= hoje) return false;
+        const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+        return resp === '';
+    });
+
+    // Se for aba NP, verificar se há AIs vinculados às NPs vencidas
+    if (subAbaAtual === '1.1' && vencidos.length > 0) {
+        const numerosNP = vencidos
+            .map(r => r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
+            .filter(n => n !== '');
+
+        if (numerosNP.length > 0) {
+            Swal.fire({
+                title: 'Verificando vínculos...',
+                text: 'Buscando Autos de Infração vinculados',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            const aisVinculados = await buscarAIsPorNumerosNP(numerosNP);
+            Swal.close();
+
+            const numerosComAI = new Set(aisVinculados.map(ai =>
+                ai.campos && ai.campos.n_notificacao ? ai.campos.n_notificacao.trim() : ''
+            ).filter(n => n !== ''));
+
+            const vencidosComAI = vencidos.filter(r =>
+                numerosComAI.has(r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
+            );
+            const vencidosSemAI = vencidos.filter(r =>
+                !numerosComAI.has(r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
+            );
+
+            renderizarModalVencidosComAI('Notificações Preliminares Vencidas', vencidosComAI, vencidosSemAI, aisVinculados);
+            return;
+        }
+    }
+
+    const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
+    renderizarModalRelatorio(`${tipoDoc} Vencidas`, vencidos, 'vencidos');
+}
+
+function abrirModalAtendidos() {
+    if (!registrosGeralAtual || registrosGeralAtual.length === 0) {
+        Swal.fire('Aviso', 'Nenhum registro carregado para análise.', 'info');
+        return;
+    }
+
+    const atendidos = registrosGeralAtual.filter(reg => {
+        const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+        return resp.toLowerCase().includes('atendido');
+    });
+
+    const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
+    renderizarModalRelatorio(`${tipoDoc} Atendidas`, atendidos, 'atendidos');
+}
+
+function coletarTodosAnexos(reg) {
+    const anexos = [];
+    if (reg.campos) {
+        if (reg.campos.anexo_pdf) anexos.push(reg.campos.anexo_pdf);
+        if (reg.campos.anexo_ar) anexos.push(reg.campos.anexo_ar);
+        if (Array.isArray(reg.campos.anexos_extras)) {
+            reg.campos.anexos_extras.forEach(url => {
+                if (url && typeof url === 'string') anexos.push(url);
+            });
+        }
+    }
+    return [...new Set(anexos)]; // remover duplicatas
+}
+
+function renderizarModalRelatorio(titulo, registros, tipo) {
+    registrosModalAtual = registros;
+    tipoModalAtual = tipo;
+    if (tipo === 'vencidos') {
+        registrosModalOriginal = [...registros];
+        vencidosComAIGlobal = [];
+        vencidosSemAIGlobal = [];
+        aisVinculadosGlobal = [];
+    }
+
+    const modalExistente = document.getElementById('modal-vencidos-atendidos');
+    if (modalExistente) modalExistente.remove();
+
+    const hojeFmt = new Date().toLocaleDateString('pt-BR');
+
+    let headerHTML = '<tr>';
+    headerHTML += '<th class="col-curta">N°</th>';
+    headerHTML += '<th>Nome / Identificador</th>';
+    headerHTML += '<th class="col-curta">Bairro</th>';
+    headerHTML += '<th class="col-curta">Fiscal</th>';
+    headerHTML += '<th class="col-curta">Data Venc.</th>';
+    headerHTML += '<th class="col-curta">Resposta</th>';
+    headerHTML += '<th class="col-curta">Anexos</th>';
+    headerHTML += '</tr>';
+
+    let bodyHTML = '';
+    registros.forEach(reg => {
+        const nome = (reg.campos && reg.campos.nome) || '-';
+        const bairro = (reg.campos && reg.campos.bairro) || '-';
+        const fiscal = reg.fiscal_nome || '-';
+        const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+            ? reg.campos.n_notificacao
+            : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
+        const dataVenc = reg.campos && reg.campos.data_vencimento
+            ? reg.campos.data_vencimento.split('-').reverse().join('/')
+            : '-';
+        const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+
+        const anexos = coletarTodosAnexos(reg);
+        let anexoHTML = '';
+        if (anexos.length === 0) {
+            anexoHTML = '<span style="color:#94a3b8;font-size:12px;">—</span>';
+        } else if (anexos.length === 1) {
+            anexoHTML = `<button onclick="abrirAnexoGerente('${anexos[0]}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📎 Abrir</button>`;
+        } else {
+            anexoHTML = anexos.map((url, i) =>
+                `<button onclick="abrirAnexoGerente('${url}')" style="background:#10b981;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin:2px;">${i + 1}</button>`
+            ).join('');
+        }
+
+        bodyHTML += `<tr style="transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">`;
+        bodyHTML += `<td style="text-align:center; vertical-align:middle;">${numSeq}</td>`;
+        bodyHTML += `<td style="vertical-align:middle;">${nome}</td>`;
+        bodyHTML += `<td style="vertical-align:middle;">${bairro}</td>`;
+        bodyHTML += `<td style="vertical-align:middle;">${fiscal}</td>`;
+        bodyHTML += `<td style="text-align:center; vertical-align:middle;">${dataVenc}</td>`;
+        bodyHTML += `<td style="vertical-align:middle;">${resposta}</td>`;
+        bodyHTML += `<td style="text-align:center; vertical-align:middle;">${anexoHTML}</td>`;
+        bodyHTML += `</tr>`;
+    });
+
+    const total = registros.length;
+    const corBadge = tipo === 'vencidos' ? '#dc2626' : '#16a34a';
+    const textoBadge = tipo === 'vencidos' ? 'Vencidos' : 'Atendidos';
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-vencidos-atendidos';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = `
+        <div style="background:white;border-radius:12px;width:95%;max-width:1100px;max-height:90vh;overflow:auto;padding:24px;position:relative;">
+            <button onclick="document.getElementById('modal-vencidos-atendidos').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">✕</button>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                <div>
+                    <h2 style="margin:0; color:#1e293b; font-size:20px;">${titulo}</h2>
+                    <p style="margin:4px 0 0 0; color:#64748b; font-size:13px;">Gerado em ${hojeFmt}</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <span style="background:${corBadge}; color:white; padding:6px 14px; border-radius:20px; font-size:14px; font-weight:700;">
+                        ${total} ${textoBadge}
+                    </span>
+                    ${tipo === 'vencidos' ? `
+                    <select id="select-ordenar-vencidos" onchange="reordenarModalVencidos(this.value)" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; outline: none; background: white; cursor: pointer; color: #334155;">
+                        <option value="">Ordenar por...</option>
+                        <option value="data_desc">Data Venc. (próxima → distante)</option>
+                        <option value="data_asc">Data Venc. (distante → próxima)</option>
+                        <option value="fiscal">Fiscal (A → Z)</option>
+                        <option value="fiscal_desc">Fiscal (Z → A)</option>
+                        <option value="bairro">Bairro (A → Z)</option>
+                        <option value="bairro_desc">Bairro (Z → A)</option>
+                        <option value="nome">Nome (A → Z)</option>
+                        <option value="nome_desc">Nome (Z → A)</option>
+                    </select>` : ''}
+                    <div style="position:relative;">
+                        <button id="btn-baixar-modal-rel" style="padding: 0.55rem 1.2rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="toggleMenuDownloadModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Baixar Relatório
+                        </button>
+                        <div id="menu-download-modal" style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:10px; z-index:101; min-width:220px; border:1px solid #e2e8f0;">
+                            <button onclick="baixarRelatorioModal('relatorio')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                Somente Relatório
+                            </button>
+                            <button onclick="baixarRelatorioModal('completo')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                Relatório + Anexos (ZIP)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="overflow-x:auto;">
+                <table class="historico-tabela" style="min-width:700px;">
+                    <thead>${headerHTML}</thead>
+                    <tbody>${bodyHTML}</tbody>
+                </table>
+            </div>
+
+            ${total === 0 ? '<div style="text-align:center; padding:30px; color:#64748b;">Nenhum registro encontrado.</div>' : ''}
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Fechar ao clicar fora
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.remove();
+    });
+
+    // Fechar menu ao clicar fora
+    document.addEventListener('click', function fecharMenu(e) {
+        const menu = document.getElementById('menu-download-modal');
+        const btn = document.getElementById('btn-baixar-modal-rel');
+        if (!menu || !btn) {
+            document.removeEventListener('click', fecharMenu);
+            return;
+        }
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    });
+}
+
+function toggleMenuDownloadModal() {
+    const menu = document.getElementById('menu-download-modal');
+    if (menu) menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+}
+
+async function baixarRelatorioModal(tipoDownload) {
+    const menu = document.getElementById('menu-download-modal');
+    if (menu) menu.style.display = 'none';
+
+    if (!registrosModalAtual || registrosModalAtual.length === 0) {
+        Swal.fire('Aviso', 'Nenhum registro para gerar relatório.', 'info');
+        return;
+    }
+
+    const titulo = tipoModalAtual === 'vencidos' ? 'Relatório de Vencidos' : 'Relatório de Atendidos';
+    const tipoDoc = subAbaAtual === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração';
+    const hoje = new Date().toLocaleDateString('pt-BR');
+
+    // Montar HTML do relatório
+    let rowsHTML = '';
+    registrosModalAtual.forEach((reg, idx) => {
+        const nome = (reg.campos && reg.campos.nome) || '-';
+        const bairro = (reg.campos && reg.campos.bairro) || '-';
+        const fiscal = reg.fiscal_nome || '-';
+        const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+            ? reg.campos.n_notificacao
+            : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
+        const dataVenc = reg.campos && reg.campos.data_vencimento
+            ? reg.campos.data_vencimento.split('-').reverse().join('/')
+            : '-';
+        const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+        const dataEntrada = reg.created_at
+            ? new Date(reg.created_at).toLocaleDateString('pt-BR')
+            : '-';
+
+        rowsHTML += `
+            <tr>
+                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px;">${numSeq}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px;">${nome}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataVenc}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
+            </tr>
+        `;
+    });
+
+    const htmlRelatorio = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>${titulo}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
+                h1 { font-size: 18px; margin-bottom: 6px; }
+                h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                td { border: 1px solid #cbd5e1; padding: 8px; }
+                tr:nth-child(even) { background: #f8fafc; }
+                .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
+                @media print { body { margin: 15px; } }
+            </style>
+        </head>
+        <body>
+            <h1>${titulo} — ${tipoDoc}</h1>
+            <h2>Total: ${registrosModalAtual.length} registro(s) &nbsp;|&nbsp; Emitido em ${hoje}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>N°</th>
+                        <th>Nome / Identificador</th>
+                        <th>Bairro</th>
+                        <th>Fiscal</th>
+                        <th>Data Entrada</th>
+                        <th>Data Venc.</th>
+                        <th>Resposta</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHTML}</tbody>
+            </table>
+            <div class="footer">SEMAC — Sistema de Gestão da Fiscalização de Posturas</div>
+        </body>
+        </html>
+    `;
+
+    if (tipoDownload === 'relatorio') {
+        // Abrir em iframe e imprimir
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+        document.body.appendChild(iframe);
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(htmlRelatorio);
+        iframe.contentDocument.close();
+        iframe.onload = function () {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => { iframe.remove(); }, 1000);
+        };
+        return;
+    }
+
+    if (tipoDownload === 'completo') {
+        // ZIP com relatório HTML + anexos
+        if (typeof JSZip === 'undefined') {
+            Swal.fire('Erro', 'Biblioteca JSZip não carregada. Não é possível gerar o ZIP.', 'error');
+            return;
+        }
+
+        const zip = new JSZip();
+        const pastaAnexos = zip.folder('anexos');
+        const nomeArquivoRelatorio = `${tipoModalAtual === 'vencidos' ? 'Vencidos' : 'Atendidos'}_${tipoDoc.replace(/\s+/g, '_')}_${Date.now()}.html`;
+        zip.file(nomeArquivoRelatorio, htmlRelatorio);
+
+        Swal.fire({
+            title: 'Baixando anexos...',
+            text: 'Isso pode levar alguns instantes.',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        let processados = 0;
+        let falhas = 0;
+        const totalAnexos = registrosModalAtual.reduce((acc, reg) => acc + coletarTodosAnexos(reg).length, 0);
+
+        for (const reg of registrosModalAtual) {
+            const anexos = coletarTodosAnexos(reg);
+            const numSeq = ((subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+                ? reg.campos.n_notificacao
+                : (reg.numero_sequencial || reg.id)).toString().replace(/[\\\\/:*?"<>|]/g, '-');
+            for (let i = 0; i < anexos.length; i++) {
+                const url = anexos[i];
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Falha no download');
+                    const blob = await response.blob();
+                    const extensao = url.split('.').pop().split('?')[0] || 'pdf';
+                    const nomeArq = `${numSeq}_anexo${i + 1}.${extensao}`;
+                    pastaAnexos.file(nomeArq, blob);
+                    processados++;
+                } catch (err) {
+                    console.error(`Erro ao baixar anexo ${url}:`, err);
+                    falhas++;
+                }
+            }
+        }
+
+        Swal.close();
+
+        const blobZip = await zip.generateAsync({ type: 'blob' });
+        const urlZip = URL.createObjectURL(blobZip);
+        const a = document.createElement('a');
+        a.href = urlZip;
+        a.download = `${tipoModalAtual === 'vencidos' ? 'Vencidos' : 'Atendidos'}_${tipoDoc.replace(/\s+/g, '_')}_${Date.now()}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(urlZip);
+
+        if (falhas > 0) {
+            Swal.fire('Aviso', `ZIP gerado, mas ${falhas} de ${totalAnexos} anexos falharam.`, 'warning');
+        }
+    }
 }
 
 // Executa quando a página carregar

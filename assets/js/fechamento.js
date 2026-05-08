@@ -45,7 +45,7 @@ async function executarFechamentoAnual() {
                 .range(from, from + pageSize - 1);
 
             if (error) throw error;
-            
+
             if (chunk && chunk.length > 0) {
                 todosRegistros = todosRegistros.concat(chunk);
                 from += pageSize;
@@ -81,7 +81,7 @@ async function executarFechamentoAnual() {
 
         let processados = 0;
         let falhas = 0;
-        
+
         // Exibir Barra de Progresso no painel
         const divProgresso = document.getElementById('progresso-fechamento');
         const txtProgresso = document.getElementById('progresso-fechamento-texto');
@@ -107,9 +107,9 @@ async function executarFechamentoAnual() {
             }
 
             registrosProcessados++;
-            
+
             const urlAnexo = reg.campos && reg.campos.anexo_pdf;
-            
+
             if (urlAnexo) {
                 const catId = reg.categoria_id || 'Outros';
                 const catNome = categoriasMap[catId] || ('Categoria ' + catId);
@@ -136,7 +136,7 @@ async function executarFechamentoAnual() {
             }
 
             // Atualizamos apenas a UI de progresso na tela
-            
+
             // Atualizar UI de progresso na tela
             if (txtProgresso && totalRegistros > 0) {
                 const perc = Math.round((registrosProcessados / totalRegistros) * 100);
@@ -184,7 +184,7 @@ async function executarFechamentoAnual() {
             // Colunas extras para NP (1.1) e Auto de Infração (1.2)
             const isNPOuAuto = catId === '1.1' || catId === '1.2';
             if (isNPOuAuto) {
-                headers.push("Data de Entrada", "Data de Vencimento", "Histórico Administrativo", "Resposta do Fiscal");
+                headers.push("Data de recebimento pelo proprietário", "Data de Vencimento", "Histórico Administrativo", "Resposta do Fiscal");
             }
 
             // Criar Matriz de Dados (AOA)
@@ -381,7 +381,7 @@ async function iniciarFluxoEmail(zipBlob, anoAtual) {
                     continue;
                 }
             }
-            
+
             // Se chegou aqui, está validado e verificado
             break;
         }
