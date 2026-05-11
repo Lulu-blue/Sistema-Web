@@ -440,6 +440,56 @@ Uso: `SELECT public.transferir_para_secretario_do_secretario('UUID-AQUI');`
 
 **Resumo:** Qualquer usuário autenticado pode criar, editar e excluir eventos. Controle de criação é feito no frontend (apenas Diretor/Secretário).
 
+#### Schema da Tabela `eventos`
+
+```sql
+-- Criação completa (para novas instalações)
+CREATE TABLE IF NOT EXISTS public.eventos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo TEXT DEFAULT 'evento',
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    data_inicio TIMESTAMP WITH TIME ZONE,
+    data_fim TIMESTAMP WITH TIME ZONE,
+    cor TEXT DEFAULT '#3b82f6',
+    criado_por UUID REFERENCES auth.users(id),
+    responsavel_id UUID REFERENCES auth.users(id),
+    localizacao TEXT,
+    parcerias JSONB DEFAULT '[]'::jsonb,
+    orcamentos JSONB DEFAULT '[]'::jsonb,
+    patrocinios JSONB DEFAULT '[]'::jsonb,
+    responsaveis TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Adicionar colunas faltantes em bancos existentes (executar no SQL Editor do Supabase)
+ALTER TABLE public.eventos
+ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'evento',
+ADD COLUMN IF NOT EXISTS localizacao TEXT,
+ADD COLUMN IF NOT EXISTS parcerias JSONB DEFAULT '[]'::jsonb,
+ADD COLUMN IF NOT EXISTS orcamentos JSONB DEFAULT '[]'::jsonb,
+ADD COLUMN IF NOT EXISTS patrocinios JSONB DEFAULT '[]'::jsonb,
+ADD COLUMN IF NOT EXISTS responsaveis TEXT;
+```
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID | PK, auto |
+| `tipo` | TEXT | `evento` ou `projeto` |
+| `titulo` | TEXT | Título do evento |
+| `descricao` | TEXT | Descrição detalhada |
+| `data_inicio` | TIMESTAMPTZ | Data/hora de início |
+| `data_fim` | TIMESTAMPTZ | Data/hora de término |
+| `cor` | TEXT | Cor hexadecimal do evento |
+| `criado_por` | UUID | FK → auth.users |
+| `responsavel_id` | UUID | FK → auth.users (responsável principal) |
+| `localizacao` | TEXT | Endereço/local do evento |
+| `parcerias` | JSONB | Array de strings com parceiros |
+| `orcamentos` | JSONB | Array de objetos `{descricao, valor, data}` |
+| `patrocinios` | JSONB | Array de objetos `{descricao, valor, data}` |
+| `responsaveis` | TEXT | Nomes dos responsáveis (exibição rápida) |
+| `created_at` | TIMESTAMPTZ | Data de criação |
+
 ---
 
 ### Tabela: `exclusao_logs` (Logs de Exclusão)
@@ -966,3 +1016,114 @@ const allowedRoles = [
 | Analista do Consórcio | 0 (ou 1)* | — | Secretário, Diretor, Consórcio |
 
 > \* Depende da escala numérica adotada na função SQL `get_nivel_hierarquico()` do projeto.
+
+
+---
+
+## 🆕 Tabela: `controle_denuncias` (Controle Interno de Denúncias)
+
+> **Adicionado:** Maio/2026
+
+Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo).
+
+### Estrutura SQL
+
+```sql
+create table if not exists controle_denuncias (
+  id uuid default gen_random_uuid() primary key,
+  tipo text not null check (tipo in ('comunicacao_interna','vereadores','mp','app','ouvidoria','protocolo')),
+  data date,
+  tarefa text,
+  origem text,
+  descricao text,
+  endereco text,
+  bairro text,
+  encaminhado_para uuid references auth.users(id),
+  encaminhado_para_nome text,
+  data_entrega date,
+  prazo_conclusao date,
+  protocolo text,
+  solicitante text,
+  obs text,
+  concluido boolean default false,
+  created_at timestamp with time zone default now(),
+  created_by uuid references auth.users(id)
+);
+
+-- Índices úteis
+create index if not exists idx_controle_denuncias_tipo on controle_denuncias(tipo);
+create index if not exists idx_controle_denuncias_data on controle_denuncias(data);
+create index if not exists idx_controle_denuncias_encaminhado on controle_denuncias(encaminhado_para);
+
+-- Habilitar RLS
+alter table controle_denuncias enable row level security;
+```
+
+### Políticas RLS
+
+```sql
+-- SELECT: todos os usuários autenticados podem visualizar
+CREATE POLICY "controle_denuncias_select_all"
+ON controle_denuncias FOR SELECT
+TO authenticated
+USING (true);
+
+-- INSERT: todos os usuários autenticados podem inserir
+CREATE POLICY "controle_denuncias_insert_all"
+ON controle_denuncias FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- UPDATE: apenas o criador ou cargos gerenciais (Gerente, Diretor, Secretário)
+CREATE POLICY "controle_denuncias_update_gerencia"
+ON controle_denuncias FOR UPDATE
+TO authenticated
+USING (
+  created_by = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND (
+      profiles.role ILIKE '%gerente%'
+      OR profiles.role ILIKE '%diretor%'
+      OR profiles.role ILIKE '%secretario%'
+      OR profiles.role ILIKE '%secretário%'
+    )
+  )
+);
+
+-- DELETE: apenas o criador ou cargos gerenciais
+CREATE POLICY "controle_denuncias_delete_gerencia"
+ON controle_denuncias FOR DELETE
+TO authenticated
+USING (
+  created_by = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND (
+      profiles.role ILIKE '%gerente%'
+      OR profiles.role ILIKE '%diretor%'
+      OR profiles.role ILIKE '%secretario%'
+      OR profiles.role ILIKE '%secretário%'
+    )
+  )
+);
+```
+
+### Campos por Tipo
+
+| Tipo | Campos Obrigatórios | Campos Opcionais |
+|------|---------------------|------------------|
+| Comunicação Interna | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, data_entrega, prazo_conclusao, obs, concluido |
+| Vereadores | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
+| MP | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
+| APP | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, data_entrega, protocolo, prazo_conclusao, obs, concluido |
+| Ouvidoria | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
+| Protocolo | data, protocolo, solicitante, descricao, encaminhado_para | endereco, bairro, data_entrega, prazo_conclusao, concluido |
+
+### Regras de Interface (Frontend)
+- **Linha verde** (`#dcfce7`) quando `concluido = true` (sobrepõe qualquer outra cor).
+- **Linha vermelha** (`#fee2e2`) quando `prazo_conclusao < hoje` e `concluido = false`.
+- Todos os usuários autenticados podem inserir registros.
+- Apenas o criador ou cargos gerenciais podem editar/excluir.
