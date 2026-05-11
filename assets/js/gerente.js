@@ -528,14 +528,275 @@ async function carregarGraficoDocumentos() {
 }
 
 // Inicializa variaveis para graficos de bairros
-var chartBairrosNP = null;
-var chartBairrosAI = null;
+var chartBairrosPeso = null;
+var chartBairrosTodos = null;
+var dadosGraficoBairros = { np: {}, ai: {}, denuncias: {} };
+var filtroBairrosAtivo = 'todos'; // 'todos' | 'np' | 'ai' | 'denuncias'
+var subFiltroDenunciasAtivo = null; // tipo especifico de denuncia
+
+function atualizarEstiloFiltroBairros() {
+    var mapa = { 'todos': 'btn-filtro-bairros-todos', 'np': 'btn-filtro-bairros-np', 'ai': 'btn-filtro-bairros-ai', 'denuncias': 'btn-filtro-bairros-denuncias' };
+    Object.keys(mapa).forEach(function (key) {
+        var btn = document.getElementById(mapa[key]);
+        if (btn) {
+            if (key === filtroBairrosAtivo) {
+                btn.style.background = '#0f172a';
+                btn.style.color = '#ffffff';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = '#475569';
+            }
+        }
+    });
+
+    // Mostrar/esconder sub-filtros de denuncias
+    var subContainer = document.getElementById('sub-filtros-denuncias-grafico');
+    if (subContainer) {
+        subContainer.style.display = (filtroBairrosAtivo === 'denuncias') ? 'flex' : 'none';
+    }
+
+    // Atualizar estilo dos sub-botoes
+    var subBotoes = document.querySelectorAll('.btn-sub-filtro-den');
+    subBotoes.forEach(function (btn) {
+        var tipoBtn = btn.getAttribute('onclick').match(/setSubFiltroDenuncias\('(.+?)'\)/);
+        var tipo = tipoBtn ? tipoBtn[1] : '';
+        if (tipo === subFiltroDenunciasAtivo) {
+            btn.style.background = '#d97706';
+            btn.style.color = '#ffffff';
+        } else {
+            btn.style.background = '#ffffff';
+            btn.style.color = '#d97706';
+        }
+    });
+}
+
+function setFiltroBairros(tipo) {
+    filtroBairrosAtivo = tipo;
+    if (tipo !== 'denuncias') subFiltroDenunciasAtivo = null;
+    else if (!subFiltroDenunciasAtivo) subFiltroDenunciasAtivo = 'comunicacao_interna';
+    atualizarEstiloFiltroBairros();
+    renderizarGraficoBairrosPequeno();
+}
+
+function setSubFiltroDenuncias(tipo) {
+    subFiltroDenunciasAtivo = tipo;
+    filtroBairrosAtivo = 'denuncias';
+    atualizarEstiloFiltroBairros();
+    renderizarGraficoBairrosPequeno();
+}
+
+function normalizarNomeBairro(str) {
+    if (!str) return '';
+    // Remove "Bairro" do início (qualquer caso) e espaços extras
+    var limpo = str.replace(/^bairro\s+/i, '').trim();
+    // Remove acentos/diacríticos
+    limpo = limpo.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Converte para maiúsculas para comparação padronizada
+    return limpo.toUpperCase();
+}
+
+function calcularPesoBairros(contagemNP, contagemAI, contagemDenuncias, filtro) {
+    var todosBairros = {};
+    var bairros = new Set(
+        Object.keys(contagemNP || {})
+            .concat(Object.keys(contagemAI || {}))
+            .concat(Object.keys(contagemDenuncias || {}))
+    );
+    bairros.forEach(function (b) {
+        var vNP = (contagemNP && contagemNP[b]) || 0;
+        var vAI = (contagemAI && contagemAI[b]) || 0;
+        var vDen = 0;
+        if (contagemDenuncias && contagemDenuncias[b]) {
+            if (subFiltroDenunciasAtivo && contagemDenuncias[b][subFiltroDenunciasAtivo]) {
+                vDen = contagemDenuncias[b][subFiltroDenunciasAtivo];
+            } else if (!subFiltroDenunciasAtivo) {
+                Object.keys(contagemDenuncias[b]).forEach(function (t) {
+                    vDen += contagemDenuncias[b][t];
+                });
+            }
+        }
+        if (filtro === 'todos') {
+            todosBairros[b] = vNP + vAI + vDen;
+        } else if (filtro === 'np') {
+            todosBairros[b] = vNP;
+        } else if (filtro === 'ai') {
+            todosBairros[b] = vAI;
+        } else if (filtro === 'denuncias') {
+            todosBairros[b] = vDen;
+        }
+    });
+    var arr = Object.keys(todosBairros).map(function (k) {
+        // Tentar usar o nome cadastrado no bairro para exibição
+        var nomeExibicao = k;
+        if (globalBairros && globalBairros.length > 0) {
+            var bairroCadastrado = globalBairros.find(function (b) {
+                return normalizarNomeBairro(b.nome) === k;
+            });
+            if (bairroCadastrado) {
+                nomeExibicao = bairroCadastrado.nome;
+            }
+        }
+        return { bairro: nomeExibicao, qtde: todosBairros[k] };
+    });
+    arr.sort(function (a, b) { return b.qtde - a.qtde; });
+    return arr;
+}
+
+function renderizarGraficoBairrosPequeno() {
+    var arr = calcularPesoBairros(dadosGraficoBairros.np, dadosGraficoBairros.ai, dadosGraficoBairros.denuncias, filtroBairrosAtivo);
+    var top10 = arr.slice(0, 10);
+    var labels = top10.map(function (i) { return i.bairro; });
+    var data = top10.map(function (i) { return i.qtde; });
+
+    var cores = { 'todos': '#0f172a', 'np': '#3b82f6', 'ai': '#ef4444', 'denuncias': '#d97706' };
+    var labelMap = { 'comunicacao_interna': 'Comunicação Interna', 'vereadores': 'Vereadores', 'mp': 'MP', 'app': 'APP', 'ouvidoria': 'Ouvidoria', 'protocolo': 'Protocolo' };
+    var label = { 'todos': 'Peso Total (NP + AI + Denúncias)', 'np': 'Notificações Preliminares', 'ai': 'Autos de Infração', 'denuncias': 'Denúncias' + (subFiltroDenunciasAtivo ? ': ' + labelMap[subFiltroDenunciasAtivo] : '') };
+
+    var ctx = document.getElementById('grafico-bairros-peso');
+    if (!ctx) return;
+    if (chartBairrosPeso) chartBairrosPeso.destroy();
+    chartBairrosPeso = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: label[filtroBairrosAtivo],
+                data: data,
+                backgroundColor: cores[filtroBairrosAtivo],
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                x: {
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 45,
+                        minRotation: 45,
+                        font: { size: 11 }
+                    }
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function abrirModalGraficoBairros() {
+    var modal = document.getElementById('modal-grafico-bairros');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    modal.classList.add('ativo');
+
+    var tituloMap = { 'todos': 'Peso por Bairro — Todos', 'np': 'Notificações Preliminares por Bairro — Todos', 'ai': 'Autos de Infração por Bairro — Todos', 'denuncias': 'Denúncias por Bairro — Todos' };
+    var elTitulo = document.getElementById('titulo-modal-bairros');
+    if (elTitulo) elTitulo.innerText = tituloMap[filtroBairrosAtivo] || tituloMap['todos'];
+
+    renderizarGraficoBairrosTodos();
+}
+
+function fecharModalGraficoBairros() {
+    var modal = document.getElementById('modal-grafico-bairros');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('ativo');
+}
+
+function renderizarGraficoBairrosTodos() {
+    var arr = calcularPesoBairros(dadosGraficoBairros.np, dadosGraficoBairros.ai, dadosGraficoBairros.denuncias, filtroBairrosAtivo);
+    // Filtra bairros com peso 0
+    arr = arr.filter(function (i) { return i.qtde > 0; });
+    var labels = arr.map(function (i) { return i.bairro; });
+    var data = arr.map(function (i) { return i.qtde; });
+
+    var cores = { 'todos': '#0f172a', 'np': '#3b82f6', 'ai': '#ef4444', 'denuncias': '#d97706' };
+    var label = { 'todos': 'Peso Total (NP + AI + Denúncias)', 'np': 'Notificações Preliminares', 'ai': 'Autos de Infração', 'denuncias': 'Denúncias' };
+
+    var ctx = document.getElementById('grafico-bairros-todos');
+    if (!ctx) return;
+    if (chartBairrosTodos) chartBairrosTodos.destroy();
+    chartBairrosTodos = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: label[filtroBairrosAtivo],
+                data: data,
+                backgroundColor: cores[filtroBairrosAtivo],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                x: {
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 90,
+                        minRotation: 90,
+                        font: { size: 10 }
+                    }
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function baixarDadosBairros() {
+    try {
+        var arr = calcularPesoBairros(dadosGraficoBairros.np, dadosGraficoBairros.ai, dadosGraficoBairros.denuncias, 'todos');
+        arr = arr.filter(function (i) { return i.qtde > 0; });
+        if (arr.length === 0) {
+            Swal.fire({ icon: 'warning', title: 'Sem dados', text: 'Não há dados de bairros para exportar no momento.', confirmButtonColor: '#0f172a' });
+            return;
+        }
+
+        var rows = arr.map(function (item) {
+            var chave = normalizarNomeBairro(item.bairro);
+            return {
+                'Bairro': item.bairro,
+                'Notificações Preliminares': (dadosGraficoBairros.np && dadosGraficoBairros.np[chave]) || 0,
+                'Autos de Infração': (dadosGraficoBairros.ai && dadosGraficoBairros.ai[chave]) || 0,
+                'Denúncias': (dadosGraficoBairros.denuncias && dadosGraficoBairros.denuncias[chave]) || 0,
+                'Peso Total': item.qtde
+            };
+        });
+
+        var worksheet = XLSX.utils.json_to_sheet(rows);
+        worksheet['!cols'] = [
+            { wch: 35 },
+            { wch: 26 },
+            { wch: 20 },
+            { wch: 16 },
+            { wch: 16 }
+        ];
+
+        var workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Peso por Bairro');
+
+        var hoje = new Date();
+        var dataStr = hoje.toISOString().slice(0, 10).replace(/-/g, '_');
+        var buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        var blob = new Blob([buffer], { type: 'application/octet-stream' });
+        saveAs(blob, 'Peso_por_Bairro_' + dataStr + '.xlsx');
+    } catch (err) {
+        console.error('Erro ao baixar dados de bairros:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível gerar o arquivo. Tente novamente.', confirmButtonColor: '#0f172a' });
+    }
+}
 
 async function carregarGraficoBairros() {
     try {
         var hoje = new Date();
         var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
+        // Buscar NP + AI
         var { data: registrosCP, error } = await supabaseClient
             .from('controle_processual')
             .select('categoria_id, campos')
@@ -549,8 +810,8 @@ async function carregarGraficoBairros() {
         var contagemAI = {};
 
         registrosCP.forEach(function (r) {
-            var bairro = (r.campos && r.campos.bairro) ? r.campos.bairro.trim().toUpperCase() : 'NÃO INFORMADO';
-            if (!bairro) bairro = 'NÃO INFORMADO';
+            var bairro = (r.campos && r.campos.bairro) ? normalizarNomeBairro(r.campos.bairro) : '';
+            if (!bairro) return; // Ignora registros sem bairro
 
             if (r.categoria_id === '1.1') {
                 contagemNP[bairro] = (contagemNP[bairro] || 0) + 1;
@@ -559,90 +820,552 @@ async function carregarGraficoBairros() {
             }
         });
 
-        // Funcao auxiliar para pegar TOP 10
-        function pegarTop10(objContagem) {
-            var arr = Object.keys(objContagem).map(function (k) { return { bairro: k, qtde: objContagem[k] }; });
-            arr.sort(function (a, b) { return b.qtde - a.qtde; });
-            return arr.slice(0, 10);
-        }
+        // Buscar Denúncias
+        var { data: registrosDen, errorDen } = await supabaseClient
+            .from('controle_denuncias')
+            .select('bairro, tipo')
+            .gte('created_at', trintaDiasAtras);
 
-        var topNP = pegarTop10(contagemNP);
-        var labelsNP = topNP.map(function (i) { return i.bairro; });
-        var dataNP = topNP.map(function (i) { return i.qtde; });
-
-        var topAI = pegarTop10(contagemAI);
-        var labelsAI = topAI.map(function (i) { return i.bairro; });
-        var dataAI = topAI.map(function (i) { return i.qtde; });
-
-        // Grafico NP
-        var ctxNP = document.getElementById('grafico-bairros-np');
-        if (ctxNP) {
-            if (chartBairrosNP) chartBairrosNP.destroy();
-            chartBairrosNP = new Chart(ctxNP, {
-                type: 'bar',
-                data: {
-                    labels: labelsNP,
-                    datasets: [{
-                        label: 'Notificações Preliminares',
-                        data: dataNP,
-                        backgroundColor: '#3b82f6', // Azul
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1 } },
-                        x: {
-                            ticks: {
-                                autoSkip: false,
-                                maxRotation: 45,
-                                minRotation: 45,
-                                font: { size: 11 }
-                            }
-                        }
-                    },
-                    plugins: { legend: { display: false } }
-                }
+        var contagemDenuncias = {};
+        if (!errorDen && registrosDen) {
+            registrosDen.forEach(function (r) {
+                var bairro = r.bairro ? normalizarNomeBairro(r.bairro) : '';
+                if (!bairro) return; // Ignora denúncias sem bairro
+                if (!contagemDenuncias[bairro]) contagemDenuncias[bairro] = {};
+                var t = r.tipo || 'outro';
+                contagemDenuncias[bairro][t] = (contagemDenuncias[bairro][t] || 0) + 1;
             });
         }
 
-        // Grafico AI
-        var ctxAI = document.getElementById('grafico-bairros-ai');
-        if (ctxAI) {
-            if (chartBairrosAI) chartBairrosAI.destroy();
-            chartBairrosAI = new Chart(ctxAI, {
-                type: 'bar',
-                data: {
-                    labels: labelsAI,
-                    datasets: [{
-                        label: 'Autos de Infração',
-                        data: dataAI,
-                        backgroundColor: '#ef4444', // Vermelho
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    indexAxis: 'y', // Grafico horizontal (mais simples)
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { beginAtZero: true, ticks: { stepSize: 1 } },
-                        y: {
-                            ticks: { font: { size: 11 } }
-                        }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
+        dadosGraficoBairros.np = contagemNP;
+        dadosGraficoBairros.ai = contagemAI;
+        dadosGraficoBairros.denuncias = contagemDenuncias;
+
+        atualizarEstiloFiltroBairros();
+        renderizarGraficoBairrosPequeno();
 
     } catch (err) {
-        console.error("Erro ao carregar grafico de documentos:", err);
+        console.error("Erro ao carregar grafico de bairros:", err);
     }
 }
 
+
+// ============ CONTROLE INTERNO DE DENUNCIAS ============
+
+var subAbaDenunciasAtual = 'comunicacao_interna';
+var registrosDenunciasAtual = [];
+var fiscaisPosturasGlobal = [];
+
+function mudarSubAbaDenuncias(tipo, btnEl) {
+    subAbaDenunciasAtual = tipo;
+    var container = document.getElementById('sub-abas-denuncias');
+    if (container) {
+        var botoes = container.querySelectorAll('.sub-aba-btn');
+        botoes.forEach(function (b) { b.classList.remove('active'); });
+    }
+    if (btnEl) btnEl.classList.add('active');
+    carregarControleDenuncias(tipo);
+}
+
+async function carregarControleDenuncias(tipo) {
+    var container = document.getElementById('controle-denuncias-lista');
+    if (!container) return;
+    container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
+
+    try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
+        var { data, error } = await supabaseClient
+            .from('controle_denuncias')
+            .select('*')
+            .eq('tipo', tipo)
+            .order('data', { ascending: false });
+
+        if (error) throw error;
+        registrosDenunciasAtual = data || [];
+        atualizarSelectsFiltroDenuncias();
+        aplicarFiltrosDenuncias();
+    } catch (err) {
+        console.error('Erro ao carregar denúncias:', err);
+        container.innerHTML = '<div class="historico-vazio">Erro ao carregar dados.</div>';
+    }
+}
+
+function atualizarSelectsFiltroDenuncias() {
+    var selectOrigem = document.getElementById('filtro-denuncias-origem');
+    var selectEnc = document.getElementById('filtro-denuncias-encaminhado');
+
+    var origens = new Set();
+    var encaminhados = new Set();
+    registrosDenunciasAtual.forEach(function (r) {
+        if (r.origem) origens.add(r.origem);
+        if (r.encaminhado_para_nome) encaminhados.add(r.encaminhado_para_nome);
+    });
+
+    if (selectOrigem) {
+        var valAtual = selectOrigem.value;
+        selectOrigem.innerHTML = '<option value="">Todas as Origens</option>';
+        Array.from(origens).sort().forEach(function (o) {
+            var opt = document.createElement('option');
+            opt.value = o;
+            opt.textContent = o;
+            selectOrigem.appendChild(opt);
+        });
+        selectOrigem.value = valAtual;
+    }
+
+    if (selectEnc) {
+        var valAtual2 = selectEnc.value;
+        selectEnc.innerHTML = '<option value="">Todos os Responsáveis</option>';
+        Array.from(encaminhados).sort().forEach(function (e) {
+            var opt = document.createElement('option');
+            opt.value = e;
+            opt.textContent = e;
+            selectEnc.appendChild(opt);
+        });
+        selectEnc.value = valAtual2;
+    }
+}
+
+function aplicarFiltrosDenuncias() {
+    var termo = (document.getElementById('busca-denuncias-geral')?.value || '').toLowerCase().trim();
+    var origem = document.getElementById('filtro-denuncias-origem')?.value || '';
+    var enc = document.getElementById('filtro-denuncias-encaminhado')?.value || '';
+    var concl = document.getElementById('filtro-denuncias-concluido')?.value || '';
+
+    var filtrados = registrosDenunciasAtual.filter(function (r) {
+        if (origem && r.origem !== origem) return false;
+        if (enc && r.encaminhado_para_nome !== enc) return false;
+        if (concl !== '') {
+            var esperado = concl === 'true';
+            if (r.concluido !== esperado) return false;
+        }
+        if (termo) {
+            var texto = JSON.stringify(r).toLowerCase();
+            if (!texto.includes(termo)) return false;
+        }
+        return true;
+    });
+
+    renderizarTabelaDenuncias(filtrados, subAbaDenunciasAtual);
+}
+
+function limparFiltrosDenuncias() {
+    var elBusca = document.getElementById('busca-denuncias-geral');
+    var elOrigem = document.getElementById('filtro-denuncias-origem');
+    var elEnc = document.getElementById('filtro-denuncias-encaminhado');
+    var elConcl = document.getElementById('filtro-denuncias-concluido');
+    if (elBusca) elBusca.value = '';
+    if (elOrigem) elOrigem.value = '';
+    if (elEnc) elEnc.value = '';
+    if (elConcl) elConcl.value = '';
+    aplicarFiltrosDenuncias();
+}
+
+function renderizarTabelaDenuncias(registros, tipo) {
+    var container = document.getElementById('controle-denuncias-lista');
+    if (!container) return;
+
+    if (!registros || registros.length === 0) {
+        container.innerHTML = '<div class="historico-vazio">Nenhum registro encontrado.</div>';
+        return;
+    }
+
+    // Definir colunas por tipo
+    var colunas = [{ chave: 'data', label: 'Data', tipo: 'date' }];
+
+    if (tipo === 'protocolo') {
+        colunas.push({ chave: 'protocolo', label: 'Protocolo' });
+        colunas.push({ chave: 'solicitante', label: 'Solicitante' });
+    }
+
+    if (tipo === 'protocolo') {
+        colunas.push({ chave: 'descricao', label: 'Descrição' });
+        colunas.push({ chave: 'endereco', label: 'Endereço' });
+        colunas.push({ chave: 'bairro', label: 'Bairro' });
+    }
+
+    colunas.push({ chave: 'tarefa', label: 'Tarefa' });
+    colunas.push({ chave: 'origem', label: 'Origem' });
+
+    if (tipo === 'comunicacao_interna' || tipo === 'app') {
+        colunas.push({ chave: 'endereco', label: 'Endereço' });
+        colunas.push({ chave: 'bairro', label: 'Bairro' });
+    }
+
+    if (tipo !== 'protocolo') {
+        colunas.push({ chave: 'descricao', label: 'Descrição' });
+    }
+
+    if (tipo === 'vereadores' || tipo === 'mp' || tipo === 'ouvidoria') {
+        colunas.push({ chave: 'bairro', label: 'Bairro' });
+    }
+
+    colunas.push({ chave: 'encaminhado_para_nome', label: 'Encaminhado para' });
+
+    if (tipo === 'app') {
+        colunas.push({ chave: 'protocolo', label: 'Protocolo' });
+    }
+
+    colunas.push({ chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' });
+    colunas.push({ chave: 'prazo_conclusao', label: 'Prazo', tipo: 'date' });
+    colunas.push({ chave: 'obs', label: 'Obs' });
+    colunas.push({ chave: 'concluido', label: 'Concluído', tipo: 'boolean' });
+    colunas.push({ chave: 'acoes', label: 'Ações', tipo: 'acoes' });
+
+    var role = window.userRoleGlobal || '';
+    var podeGerenciar = isGerenteOuSuperior(role);
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var html = '<div class="tabela-wrapper" style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
+    colunas.forEach(function (c) {
+        html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap;">' + c.label + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    registros.forEach(function (reg) {
+        var corFundo = '';
+        var corTexto = '';
+        if (reg.concluido) {
+            corFundo = '#dcfce7'; // verde claro
+            corTexto = '#14532d';
+        } else if (reg.prazo_conclusao) {
+            var partes = reg.prazo_conclusao.split('-');
+            if (partes.length === 3) {
+                var dPrazo = new Date(partes[0], partes[1] - 1, partes[2]);
+                if (dPrazo < hoje) {
+                    corFundo = '#fee2e2'; // vermelho claro
+                    corTexto = '#7f1d1d';
+                }
+            }
+        }
+
+        var styleLinha = '';
+        if (corFundo) styleLinha = 'background:' + corFundo + '; color:' + corTexto + ';';
+
+        html += '<tr style="border-bottom:1px solid #e2e8f0; ' + styleLinha + '" onmouseover="this.style.filter=\'brightness(0.97)\'" onmouseout="this.style.filter=\'none\'">';
+
+        colunas.forEach(function (c) {
+            var val = '-';
+            if (c.tipo === 'acoes') {
+                val = '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
+                if (podeGerenciar || reg.created_by === (window.userIdGlobal || '')) {
+                    val += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
+                }
+            } else if (c.tipo === 'boolean') {
+                val = reg[c.chave] ? '<span style="color:#16a34a; font-weight:600;">Sim</span>' : '<span style="color:#64748b;">Não</span>';
+            } else if (c.tipo === 'date') {
+                if (reg[c.chave]) {
+                    var p = reg[c.chave].split('-');
+                    val = p[2] + '/' + p[1] + '/' + p[0];
+                }
+            } else {
+                val = reg[c.chave] || '-';
+            }
+            html += '<td style="padding:10px 12px; border:1px solid #e2e8f0; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis;">' + val + '</td>';
+        });
+
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+async function carregarSelectFiscaisPosturas() {
+    var select = document.getElementById('denuncia-encaminhado');
+    if (!select) return;
+    if (fiscaisPosturasGlobal.length > 0) {
+        popularSelectFiscais(select);
+        return;
+    }
+    try {
+        var { data, error } = await supabaseClient
+            .from('profiles')
+            .select('id, full_name')
+            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura'])
+            .order('full_name', { ascending: true });
+        if (error) throw error;
+        fiscaisPosturasGlobal = data || [];
+        popularSelectFiscais(select);
+    } catch (err) {
+        console.error('Erro ao carregar fiscais:', err);
+    }
+}
+
+function popularSelectFiscais(select) {
+    var valorAtual = select.value;
+    select.innerHTML = '<option value="">Selecione um fiscal...</option>';
+    fiscaisPosturasGlobal.forEach(function (f) {
+        var opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.full_name || f.id;
+        select.appendChild(opt);
+    });
+    select.value = valorAtual;
+}
+
+function ajustarCamposFormDenuncia() {
+    var tipo = document.getElementById('denuncia-tipo').value;
+    var wrapProtocolo = document.getElementById('wrap-denuncia-protocolo');
+    var wrapEndereco = document.getElementById('wrap-denuncia-endereco');
+    var wrapBairro = document.getElementById('wrap-denuncia-bairro');
+    var wrapSolicitante = document.getElementById('wrap-denuncia-solicitante');
+    var body = document.getElementById('modal-denuncia-body');
+
+    if (!body) return;
+
+    // Visibilidade
+    if (wrapProtocolo) wrapProtocolo.style.display = (tipo === 'app' || tipo === 'protocolo') ? 'block' : 'none';
+    if (wrapEndereco) wrapEndereco.style.display = (tipo === 'comunicacao_interna' || tipo === 'app' || tipo === 'protocolo') ? 'block' : 'none';
+    if (wrapSolicitante) wrapSolicitante.style.display = (tipo === 'protocolo') ? 'block' : 'none';
+    if (wrapBairro) wrapBairro.style.display = 'block';
+
+    // Reordenar campos no body conforme o tipo
+    var elTipo = document.getElementById('denuncia-tipo').parentNode;
+    var elDataConcl = elTipo.nextElementSibling; // grid data/concluido
+    var elTarefa = document.getElementById('denuncia-tarefa').parentNode;
+    var elOrigemProtocolo = elTarefa.nextElementSibling; // grid origem/protocolo
+    var elDescricao = document.getElementById('denuncia-descricao').parentNode;
+    var elEndereco = document.getElementById('wrap-denuncia-endereco');
+    var elBairro = document.getElementById('wrap-denuncia-bairro');
+    var elSolicitante = document.getElementById('wrap-denuncia-solicitante');
+    var elEncaminhado = document.getElementById('denuncia-encaminhado').parentNode;
+    var elDataPrazo = elEncaminhado.nextElementSibling; // grid data/prazo
+    var elObs = document.getElementById('denuncia-obs').parentNode;
+
+    function colocarDepois(ref, el) {
+        if (ref && el && ref.nextElementSibling !== el) {
+            ref.parentNode.insertBefore(el, ref.nextElementSibling);
+        }
+    }
+
+    // Sempre: tipo -> data/concluido -> tarefa -> origem/protocolo
+    // Depois varia conforme tipo
+    if (tipo === 'comunicacao_interna') {
+        // Endereço -> Bairro -> Descrição -> Encaminhado...
+        colocarDepois(elOrigemProtocolo, elEndereco);
+        colocarDepois(elEndereco, elBairro);
+        colocarDepois(elBairro, elDescricao);
+        colocarDepois(elDescricao, elEncaminhado);
+    } else if (tipo === 'vereadores' || tipo === 'mp' || tipo === 'ouvidoria') {
+        // Descrição -> Bairro -> Encaminhado...
+        colocarDepois(elOrigemProtocolo, elDescricao);
+        colocarDepois(elDescricao, elBairro);
+        colocarDepois(elBairro, elEncaminhado);
+    } else if (tipo === 'app') {
+        // Endereço -> Bairro -> Descrição -> Encaminhado...
+        colocarDepois(elOrigemProtocolo, elEndereco);
+        colocarDepois(elEndereco, elBairro);
+        colocarDepois(elBairro, elDescricao);
+        colocarDepois(elDescricao, elEncaminhado);
+    } else if (tipo === 'protocolo') {
+        // Descrição -> Endereço -> Bairro -> Solicitante -> Encaminhado...
+        colocarDepois(elOrigemProtocolo, elDescricao);
+        colocarDepois(elDescricao, elEndereco);
+        colocarDepois(elEndereco, elBairro);
+        colocarDepois(elBairro, elSolicitante);
+        colocarDepois(elSolicitante, elEncaminhado);
+    }
+
+    // Sempre no final: data/prazo -> obs
+    colocarDepois(elEncaminhado, elDataPrazo);
+    colocarDepois(elDataPrazo, elObs);
+}
+
+async function carregarDatalistBairrosDenuncia() {
+    var datalist = document.getElementById('datalist-bairros-denuncia');
+    if (!datalist) return;
+    if (datalist.children.length > 0) return; // já carregado
+    try {
+        var { data, error } = await supabaseClient
+            .from('bairros')
+            .select('nome')
+            .order('nome', { ascending: true });
+        if (error) throw error;
+        (data || []).forEach(function (b) {
+            var opt = document.createElement('option');
+            opt.value = b.nome;
+            datalist.appendChild(opt);
+        });
+    } catch (err) {
+        console.error('Erro ao carregar bairros para datalist:', err);
+    }
+}
+
+function abrirModalNovaDenuncia() {
+    var modal = document.getElementById('modal-denuncia');
+    if (!modal) return;
+    document.getElementById('denuncia-id').value = '';
+    document.getElementById('denuncia-tipo').value = subAbaDenunciasAtual;
+    document.getElementById('denuncia-data').value = '';
+    document.getElementById('denuncia-tarefa').value = '';
+    document.getElementById('denuncia-origem').value = '';
+    document.getElementById('denuncia-descricao').value = '';
+    document.getElementById('denuncia-endereco').value = '';
+    document.getElementById('denuncia-bairro').value = '';
+    document.getElementById('denuncia-encaminhado').value = '';
+    document.getElementById('denuncia-data-entrega').value = '';
+    document.getElementById('denuncia-prazo').value = '';
+    document.getElementById('denuncia-protocolo').value = '';
+    document.getElementById('denuncia-solicitante').value = '';
+    document.getElementById('denuncia-obs').value = '';
+    document.getElementById('denuncia-concluido').value = 'false';
+    document.getElementById('titulo-modal-denuncia').innerText = 'Nova Linha';
+
+    ajustarCamposFormDenuncia();
+    carregarSelectFiscaisPosturas();
+    carregarDatalistBairrosDenuncia();
+
+    modal.style.display = 'flex';
+    modal.classList.add('ativo');
+}
+
+function fecharModalNovaDenuncia() {
+    var modal = document.getElementById('modal-denuncia');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('ativo');
+}
+
+async function salvarDenuncia() {
+    try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
+        var id = document.getElementById('denuncia-id').value;
+        var tipo = document.getElementById('denuncia-tipo').value;
+        var data = document.getElementById('denuncia-data').value;
+        var tarefa = document.getElementById('denuncia-tarefa').value.trim();
+        var origem = document.getElementById('denuncia-origem').value.trim();
+        var descricao = document.getElementById('denuncia-descricao').value.trim();
+        var endereco = document.getElementById('denuncia-endereco').value.trim();
+        var bairro = document.getElementById('denuncia-bairro').value.trim();
+        var encaminhado = document.getElementById('denuncia-encaminhado').value;
+        var dataEntrega = document.getElementById('denuncia-data-entrega').value;
+        var prazo = document.getElementById('denuncia-prazo').value;
+        var protocolo = document.getElementById('denuncia-protocolo').value.trim();
+        var solicitante = document.getElementById('denuncia-solicitante').value.trim();
+        var obs = document.getElementById('denuncia-obs').value.trim();
+        var concluido = document.getElementById('denuncia-concluido').value === 'true';
+
+        // Validar obrigatórios
+        if (!data) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Data.', confirmButtonColor: '#0f172a' }); return; }
+        if (!tarefa) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Tarefa.', confirmButtonColor: '#0f172a' }); return; }
+        if (!origem) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Origem.', confirmButtonColor: '#0f172a' }); return; }
+        if (!encaminhado) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Selecione para quem foi Encaminhado.', confirmButtonColor: '#0f172a' }); return; }
+        if (tipo === 'protocolo') {
+            if (!protocolo) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha o Protocolo.', confirmButtonColor: '#0f172a' }); return; }
+            if (!solicitante) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha o Solicitante.', confirmButtonColor: '#0f172a' }); return; }
+        }
+        if ((tipo === 'vereadores' || tipo === 'mp' || tipo === 'ouvidoria') && !descricao) {
+            Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Descrição.', confirmButtonColor: '#0f172a' }); return;
+        }
+
+        var fiscalNome = '';
+        var fiscalEncontrado = fiscaisPosturasGlobal.find(function (f) { return f.id === encaminhado; });
+        if (fiscalEncontrado) fiscalNome = fiscalEncontrado.full_name;
+
+        var payload = {
+            tipo: tipo,
+            data: data,
+            tarefa: tarefa,
+            origem: origem,
+            descricao: descricao,
+            endereco: endereco,
+            bairro: bairro,
+            encaminhado_para: encaminhado,
+            encaminhado_para_nome: fiscalNome,
+            data_entrega: dataEntrega || null,
+            prazo_conclusao: prazo || null,
+            protocolo: protocolo,
+            solicitante: solicitante,
+            obs: obs,
+            concluido: concluido
+        };
+
+        var result;
+        if (id) {
+            result = await supabaseClient.from('controle_denuncias').update(payload).eq('id', id).select();
+        } else {
+            payload.created_by = window.userIdGlobal || null;
+            result = await supabaseClient.from('controle_denuncias').insert([payload]).select();
+        }
+
+        if (result.error) throw result.error;
+
+        Swal.fire({ icon: 'success', title: 'Salvo!', text: 'Registro salvo com sucesso.', confirmButtonColor: '#0f172a', timer: 1500 });
+        fecharModalNovaDenuncia();
+        carregarControleDenuncias(subAbaDenunciasAtual);
+    } catch (err) {
+        console.error('Erro ao salvar denúncia:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível salvar. Tente novamente.', confirmButtonColor: '#0f172a' });
+    }
+}
+
+async function editarDenuncia(id) {
+    try {
+        var reg = registrosDenunciasAtual.find(function (r) { return r.id === id; });
+        if (!reg) {
+            var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
+            if (error) throw error;
+            reg = data;
+        }
+        if (!reg) return;
+
+        document.getElementById('denuncia-id').value = reg.id;
+        document.getElementById('denuncia-tipo').value = reg.tipo;
+        document.getElementById('denuncia-data').value = reg.data || '';
+        document.getElementById('denuncia-tarefa').value = reg.tarefa || '';
+        document.getElementById('denuncia-origem').value = reg.origem || '';
+        document.getElementById('denuncia-descricao').value = reg.descricao || '';
+        document.getElementById('denuncia-endereco').value = reg.endereco || '';
+        document.getElementById('denuncia-bairro').value = reg.bairro || '';
+        document.getElementById('denuncia-data-entrega').value = reg.data_entrega || '';
+        document.getElementById('denuncia-prazo').value = reg.prazo_conclusao || '';
+        document.getElementById('denuncia-protocolo').value = reg.protocolo || '';
+        document.getElementById('denuncia-solicitante').value = reg.solicitante || '';
+        document.getElementById('denuncia-obs').value = reg.obs || '';
+        document.getElementById('denuncia-concluido').value = reg.concluido ? 'true' : 'false';
+        document.getElementById('titulo-modal-denuncia').innerText = 'Editar Linha';
+
+        ajustarCamposFormDenuncia();
+        await carregarSelectFiscaisPosturas();
+        document.getElementById('denuncia-encaminhado').value = reg.encaminhado_para || '';
+
+        var modal = document.getElementById('modal-denuncia');
+        modal.style.display = 'flex';
+        modal.classList.add('ativo');
+    } catch (err) {
+        console.error('Erro ao editar denúncia:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível carregar o registro.', confirmButtonColor: '#0f172a' });
+    }
+}
+
+async function excluirDenuncia(id) {
+    var confirmar = await Swal.fire({
+        title: 'Tem certeza?',
+        text: 'Deseja excluir este registro permanentemente?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Sim, excluir',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!confirmar.isConfirmed) return;
+
+    try {
+        var { error } = await supabaseClient.from('controle_denuncias').delete().eq('id', id);
+        if (error) throw error;
+        Swal.fire({ icon: 'success', title: 'Excluído!', text: 'Registro removido.', confirmButtonColor: '#0f172a', timer: 1500 });
+        carregarControleDenuncias(subAbaDenunciasAtual);
+    } catch (err) {
+        console.error('Erro ao excluir denúncia:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível excluir.', confirmButtonColor: '#0f172a' });
+    }
+}
 
 // ============ GESTÃO DE ÁREAS E BAIRROS ============
 
@@ -650,6 +1373,7 @@ var globalAreas = [];
 var globalBairros = [];
 
 var globalRegistrosCP = []; // Para armazenar todos os documentos e contar
+var globalDenunciasPorBairro = {}; // contagem de denuncias por bairro
 
 async function carregarGestaoBairrosAreas() {
     try {
@@ -684,9 +1408,27 @@ async function carregarGestaoBairrosAreas() {
             .in('categoria_id', ['1.1', '1.2']) // NP e AI
             .gte('created_at', trintaDiasAtras);
 
+        // 3.1 Buscar Denúncias para contagem por bairro
+        var { data: registrosDen, error: errDen } = await supabaseClient
+            .from('controle_denuncias')
+            .select('bairro, tipo')
+            .gte('created_at', trintaDiasAtras);
+
+        var denPorBairro = {};
+        if (!errDen && registrosDen) {
+            registrosDen.forEach(function (r) {
+                var b = r.bairro ? normalizarNomeBairro(r.bairro) : '';
+                if (!b) return; // Ignora denúncias sem bairro
+                if (!denPorBairro[b]) denPorBairro[b] = {};
+                var t = r.tipo || 'outro';
+                denPorBairro[b][t] = (denPorBairro[b][t] || 0) + 1;
+            });
+        }
+
         globalAreas = areasData || [];
         globalBairros = bairrosData || [];
         globalRegistrosCP = registrosCP || [];
+        globalDenunciasPorBairro = denPorBairro;
 
         // Ordenar áreas numericamente pelo número extraído do nome (ex: "Área 1", "Área 2" ... "Área 10")
         globalAreas.sort(function(a, b) {
@@ -720,25 +1462,37 @@ async function carregarGestaoBairrosAreas() {
 function processarContagemBairro(nomeBairro) {
     var contNP = 0;
     var contAI = 0;
-    var bn = nomeBairro.toUpperCase();
+    var contDenuncias = {};
+    var bn = normalizarNomeBairro(nomeBairro);
     globalRegistrosCP.forEach(function (r) {
-        var rb = (r.campos && r.campos.bairro) ? r.campos.bairro.trim().toUpperCase() : '';
+        var rb = (r.campos && r.campos.bairro) ? normalizarNomeBairro(r.campos.bairro) : '';
         if (rb === bn) {
             if (r.categoria_id === '1.1') contNP++;
             if (r.categoria_id === '1.2') contAI++;
         }
     });
-    return { np: contNP, ai: contAI };
+    var denBairro = globalDenunciasPorBairro[bn];
+    if (denBairro) {
+        Object.keys(denBairro).forEach(function (tipo) {
+            contDenuncias[tipo] = denBairro[tipo];
+        });
+    }
+    return { np: contNP, ai: contAI, denuncias: contDenuncias };
 }
 
 function processarContagemArea(areaId) {
     // Todos os bairros da area
     var bairrosArea = globalBairros.filter(function (b) { return b.area_id === areaId; });
-    var totais = { np: 0, ai: 0 };
+    var totais = { np: 0, ai: 0, denuncias: 0 };
     bairrosArea.forEach(function (b) {
         var c = processarContagemBairro(b.nome);
         totais.np += c.np;
         totais.ai += c.ai;
+        if (c.denuncias) {
+            Object.keys(c.denuncias).forEach(function (t) {
+                totais.denuncias += c.denuncias[t];
+            });
+        }
     });
     return totais;
 }
@@ -756,10 +1510,11 @@ function renderizarListaAreas() {
     globalAreas.forEach(function (a) {
         var c = processarContagemArea(a.id);
         var textDocs = '';
-        if (c.np > 0 || c.ai > 0) {
-            var partes = [];
-            if (c.np > 0) partes.push('Notificação Preliminar = ' + c.np);
-            if (c.ai > 0) partes.push('Auto de Infração = ' + c.ai);
+        var partes = [];
+        if (c.np > 0) partes.push('Notificação Preliminar = ' + c.np);
+        if (c.ai > 0) partes.push('Auto de Infração = ' + c.ai);
+        if (c.denuncias > 0) partes.push('Denúncias = ' + c.denuncias);
+        if (partes.length > 0) {
             textDocs = '<div style="font-size:11px; color:#3b82f6; margin-top:2px;">(' + partes.join(' | ') + ')</div>';
         }
 
@@ -811,10 +1566,23 @@ function renderizarListaBairros() {
 
         var c = processarContagemBairro(b.nome);
         var textDocs = '';
-        if (c.np > 0 || c.ai > 0) {
-            var partes = [];
-            if (c.np > 0) partes.push('Notificação Preliminar = ' + c.np);
-            if (c.ai > 0) partes.push('Auto de Infração = ' + c.ai);
+        var partes = [];
+        if (c.np > 0) partes.push('Notificação Preliminar = ' + c.np);
+        if (c.ai > 0) partes.push('Auto de Infração = ' + c.ai);
+        if (c.denuncias && Object.keys(c.denuncias).length > 0) {
+            Object.keys(c.denuncias).forEach(function (tipo) {
+                var nomeTipo = {
+                    'comunicacao_interna': 'Comunicação Interna',
+                    'vereadores': 'Vereadores',
+                    'mp': 'MP',
+                    'app': 'APP',
+                    'ouvidoria': 'Ouvidoria',
+                    'protocolo': 'Protocolo'
+                }[tipo] || tipo;
+                partes.push(nomeTipo + ' = ' + c.denuncias[tipo]);
+            });
+        }
+        if (partes.length > 0) {
             textDocs = '<div style="font-size:11px; color:#3b82f6; margin-top:2px;">(' + partes.join(' | ') + ')</div>';
         }
 
@@ -1986,7 +2754,7 @@ async function carregarDadosGerencia() {
             let bairro = p.campos['Bairro'] || p.campos['bairro'] || p.campos['Local / Bairro'];
 
             if (bairro && typeof bairro === 'string') {
-                bairro = bairro.trim().toUpperCase(); // Normalização pesada
+                bairro = normalizarNomeBairro(bairro);
                 if (bairro.length > 2) {
                     if (!mapBairros[bairro]) mapBairros[bairro] = 0;
                     mapBairros[bairro]++;
@@ -2018,7 +2786,17 @@ function renderizarGraficoBairrosMaster(mapBairros) {
 
     // Converter Objeto Hash num Array de tuplas para ordenação e pegar Top 10
     const arrayBairros = Object.entries(mapBairros)
-        .map(([bairro, qtd]) => ({ bairro, qtd }))
+        .map(([bairro, qtd]) => {
+            // Tentar usar nome cadastrado para exibição
+            var nomeExibicao = bairro;
+            if (globalBairros && globalBairros.length > 0) {
+                var bCad = globalBairros.find(function (b) {
+                    return normalizarNomeBairro(b.nome) === bairro;
+                });
+                if (bCad) nomeExibicao = bCad.nome;
+            }
+            return { bairro: nomeExibicao, qtd };
+        })
         .sort((a, b) => b.qtd - a.qtd)
         .slice(0, 10); // Somente o Top 10
 
@@ -2483,11 +3261,17 @@ function baixarRotacaoAtual() {
         });
         html += '</ul>';
 
-        // Contar ocorrências da área
+        // Contar ocorrências da área (inclui denúncias no relatório de distribuição de bairros)
         var totalArea = 0;
         grupo.bairros.forEach(function (nomeBairro) {
             var c = processarContagemBairro(nomeBairro);
-            totalArea += c.np + c.ai;
+            var pesoDen = 0;
+            if (c.denuncias) {
+                Object.keys(c.denuncias).forEach(function (t) {
+                    pesoDen += c.denuncias[t];
+                });
+            }
+            totalArea += c.np + c.ai + pesoDen;
         });
 
         html += '<p class="total-area">&gt;&gt; Total de ocorrências na área: ' + totalArea + '</p>';
@@ -2515,14 +3299,20 @@ async function atualizarRotacaoInteligente() {
     const backupAnterior = globalBairros.map(b => ({ id: b.id, area_id: b.area_id }));
     localStorage.setItem('backup_rotacao_bairros', JSON.stringify(backupAnterior));
 
-    // 2. Calcular pesos
+    // 2. Calcular pesos (inclui denúncias na distribuição de bairros para áreas)
     let bairrosComPeso = globalBairros.map(b => {
         let cont = processarContagemBairro(b.nome);
+        let pesoDenuncias = 0;
+        if (cont.denuncias) {
+            Object.keys(cont.denuncias).forEach(function (t) {
+                pesoDenuncias += cont.denuncias[t];
+            });
+        }
         return {
             id: b.id,
             nome: b.nome,
             area_id: b.area_id,
-            peso: cont.np + cont.ai
+            peso: cont.np + cont.ai + pesoDenuncias
         };
     });
 

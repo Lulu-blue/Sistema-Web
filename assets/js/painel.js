@@ -1106,6 +1106,13 @@ function mudarAba(idAba) {
         if (typeof inicializarCalendario === 'function') inicializarCalendario();
         if (typeof carregarEventos === 'function') carregarEventos();
     }
+
+    if (idAba === 'controle-denuncias') {
+        if (typeof mudarSubAbaDenuncias === 'function') {
+            var btnAtivo = document.querySelector('#sub-abas-denuncias .sub-aba-btn.active');
+            mudarSubAbaDenuncias(subAbaDenunciasAtual || 'comunicacao_interna', btnAtivo);
+        }
+    }
 }
 
 // Inicializa

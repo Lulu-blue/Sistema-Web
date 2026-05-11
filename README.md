@@ -23,7 +23,7 @@ Sistema web para a Secretaria Municipal, migrando o controle de produtividade do
 | | `protecao.js` | Conexão com Supabase centralizada + Redirecionamento de não logados |
 | | `painel.js` | Lógica de troca de abas, controle de cargo, dados do perfil, upload de avatar, redefinição de senha e carregamento das Tarefas de Eventos na Home |
 | | `produtividade.js` | Todo o motor de produtividade: gráficos, envio ao banco, manipulação de modal, formatação e lógicas WYSIWYG de exportação de documento |
-| | `gerente.js` | **Gestão de Fiscais e Hierarquia Visual**: Ranking de desempenho, gráficos de pontuação, cadastro/exclusão de fiscais, visualização de documentos por tipo, e **árvore hierárquica completa da SEMAC** para Secretários |
+| | `gerente.js` | **Gestão de Fiscais, Bairros/Áreas e Denúncias**: Ranking de desempenho, gráficos de pontuação, cadastro/exclusão de fiscais, visualização de documentos por tipo, **árvore hierárquica completa da SEMAC** para Secretários, **gestão de bairros e áreas** com rotação inteligente, **gráfico de peso por bairro** (NP/AI/Denúncias) com filtros e exportação Excel, e **Controle Interno de Denúncias** (6 tipos) com CRUD completo |
 | | `tarefas.js` | Módulo completo de Tarefas e Calendário: Kanban, eventos, subtarefas, anexos PDF, permissões por role |
 | | `projetos.js` | **Calendário de Eventos**: Lógica vanilla JS para calendário mensal, navegação entre meses, filtros por data e visualização de eventos |
 | | `fechamento.js` | **Fechamento Anual**: Consolidação de registros em ZIP, geração de planilhas Excel formatadas, envio via Google Apps Script |
@@ -183,28 +183,42 @@ Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projeto
 
 ## 🗺️ Módulo de Bairros e Áreas (`gerente.js`)
 
-Gestão completa de áreas de atuação e mapeamento de bairros para fiscais.
+Gestão completa de áreas de atuação, mapeamento de bairros para fiscais, e controle interno de denúncias.
 
 ### Áreas de Atuação
 - **Cadastro de áreas**: Nome da área e fiscal responsável.
-- **Lista de áreas**: Visualização com fiscal vinculado e quantidade de bairros.
+- **Lista de áreas**: Visualização com fiscal vinculado, quantidade de bairros, e totais de NP / AI / Denúncias por área.
 - **Edição/Exclusão**: Modificar dados ou remover áreas existentes.
 
 ### Mapeamento de Bairros
-- **Cadastro de bairros**: Nome do bairro, área vinculada, fiscal responsável.
+- **Cadastro de bairros**: Nome do bairro, área vinculada.
 - **Ordenação de áreas**: Áreas exibidas em ordem crescente numérica (`Área 1`, `Área 2` … `Área 10`).
 - **Agrupamento de bairros**: Bairros ordenados primeiro por área (numérico) e, dentro de cada área, em ordem alfabética. Bairros sem área ficam ao final.
 - **Busca rápida**: Filtro de bairros por nome.
 - **Contador**: Total de bairros cadastrados.
+- **Normalização inteligente de nomes**: Ao contar ocorrências por bairro, o sistema ignora diferenças de maiúsculas/minúsculas, remove acentos e despreza o prefixo "Bairro" (ex: "Bairro Centro" e "CENTRO" são agrupados no mesmo bairro).
+- **Registros sem bairro ignorados**: Registros onde o campo bairro está NULL ou vazio não aparecem no gráfico nem nas contagens.
 
 ### Sistema de Rotação
-- **Rotação de Áreas**: Troca automática de fiscais entre áreas de atuação.
-- **Rotação de Bairros**: Realocação de responsáveis por bairros específicos.
-- **Painel visual**: Interface dedicada para gerenciar rotações.
+- **Rotação de Áreas (Fiscais)**: Troca automática de fiscais entre áreas de atuação. **Não utiliza peso de denúncias** — apenas distribui os fiscais existentes.
+- **Rotação Inteligente de Bairros**: Redistribuição automática de bairros entre áreas baseada no **peso total (NP + AI + Denúncias)** dos últimos 30 dias. Bairros mais pesados são distribuídos para balancear a carga entre as áreas.
+- **Painel visual**: Interface dedicada para gerenciar rotações, com backup automático no `localStorage` e opção de reversão.
 
 ### Gráficos Estatísticos
-- **Top 10 Bairros - NP**: Gráfico de barras horizontais com os bairros com mais Notificações Preliminares.
-- **Top 10 Bairros - AI**: Gráfico de barras horizontais com os bairros com mais Autos de Infração.
+- **Peso por Bairro**: Gráfico de barras verticais com os Top 10 bairros mais problemáticos, combinando **NP + AI + Denúncias**.
+  - **Filtros dinâmicos**: Botões para alternar entre `Todos`, `NP`, `AI` e `Denúncias`.
+  - **Sub-filtros de denúncias**: Quando o filtro "Denúncias" está ativo, aparecem botões para filtrar por tipo específico (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo).
+- **Modal "Ver Todos"**: Gráfico completo em barras verticais exibindo **todos os bairros**, respeitando o filtro ativo.
+- **Download Excel**: Exporta os dados do gráfico em `.xlsx` com as colunas Bairro, NP, AI, Denúncias e Peso Total.
+
+### 📢 Controle Interno de Denúncias
+Módulo com 6 sub-abas independentes para acompanhamento de demandas externas:
+- **Comunicação Interna**, **Vereadores**, **MP**, **APP**, **Ouvidoria**, **Protocolo**
+- **CRUD completo**: Formulário modal para criar/editar/excluir registros por tipo.
+- **Campos por tipo**: Protocolo usa `protocolo` + `solicitante`; os demais usam `tarefa` + `origem`.
+- **Filtros e busca**: Busca textual global + dropdowns para filtrar por Origem, Responsável e Status (concluído/pendente).
+- **Campo Bairro**: Datalist populada com os bairros cadastrados, permitindo também texto livre.
+- **Linha verde automática**: Registros concluídos (`concluido = true`) são destacados em verde na tabela.
 
 ---
 
@@ -358,7 +372,7 @@ A segurança ocorre camada a camada no banco de dados. O sistema possui **14 tab
 > 📋 **Para o catálogo completo de todas as políticas RLS por tabela**, consulte o arquivo **`PERMISSOES_SETUP.md`** (Anexo B).
 
 ### `eventos` (Módulo de Tarefas)
-Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_inicio`, `data_fim`, `cor` (hex), `criado_por` (FK → auth.users), `responsavel_id`.
+Tabela de eventos do calendário. Campos: `titulo`, `descricao`, `data_inicio`, `data_fim`, `cor` (hex), `criado_por` (FK → auth.users), `responsavel_id`, `tipo` (`evento`/`projeto`), `localizacao`, `parcerias` (JSONB), `orcamentos` (JSONB), `patrocinios` (JSONB), `responsaveis` (texto).
 
 ### `tarefas` (Módulo de Tarefas)
 Tabela de tarefas e subtarefas. Campos: `titulo`, `descricao`, `status` (pendente/em_progresso/concluida), `prazo` (date), `criado_por`, `tarefa_pai_id` (FK → tarefas, para subtarefas), `evento_id` (FK → eventos). RLS permite leitura para todos autenticados. Todas as foreign keys possuem `ON DELETE CASCADE`.
@@ -386,6 +400,9 @@ Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → a
 
 ### `bairros` (Módulo de Bairros)
 Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `fiscal_id` (FK → auth.users), `created_at`.
+
+### `controle_denuncias` (Controle Interno de Denúncias)
+Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo). Campos: `tipo` (text, com check constraint), `data` (date), `tarefa` (text), `protocolo` (text), `origem` (text), `solicitante` (text), `descricao` (text), `endereco` (text), `bairro` (text), `encaminhado_para` (FK → auth.users), `encaminhado_para_nome` (text), `data_entrega` (date), `prazo_conclusao` (date), `obs` (text), `concluido` (boolean), `created_by` (FK → auth.users).
 
 ### `exclusao_logs` (Auditoria)
 Tabela de logs de exclusão de usuários. Substituíu a antiga `log_exclusoes`. Campos: dados do registro de auditoria.
