@@ -262,6 +262,7 @@ async function carregarDadosIniciais() {
             var userRole = perfil ? perfil.role : '';
             window.userRoleGlobal = userRole;
             window.userIdGlobal = user.id;
+            window.userNameGlobal = perfil ? perfil.full_name || '' : '';
             console.log("DEBUG - window.userRoleGlobal:", window.userRoleGlobal);
 
             // Carregar notificações
@@ -461,8 +462,8 @@ async function carregarDadosIniciais() {
             var isAdminPostura = roleLower.includes('administrativo') && roleLower.includes('postura') ||
                 roleLower.includes('administrador') && roleLower.includes('postura');
             if (isAdminPostura) {
-                // Apenas exibe o botão do Histórico Geral no menu lateral.
-                console.log("DEBUG - Cargo admin reconhecido! Exibindo Histórico Geral.");
+                // Admin de Posturas: Histórico Geral + Bairros (visualização)
+                console.log("DEBUG - Cargo admin reconhecido! Exibindo Histórico Geral e Bairros.");
                 var ghg = document.getElementById('gerente-historico-geral');
                 if (ghg) {
                     ghg.style.display = 'block';
@@ -470,6 +471,8 @@ async function carregarDadosIniciais() {
                 } else {
                     console.error("DEBUG - Elemento gerente-historico-geral não encontrado!");
                 }
+                var gOpts = document.getElementById('gerente-options');
+                if (gOpts) gOpts.style.display = 'block';
             } else {
                 console.log("DEBUG - Cargo não corresponde ao admin:", roleLower);
             }
@@ -1094,8 +1097,7 @@ function mudarAba(idAba) {
     }
 
     if (idAba === 'bairros') {
-        if (typeof carregarGraficoBairros === 'function') carregarGraficoBairros();
-        if (typeof carregarGestaoBairrosAreas === 'function') carregarGestaoBairrosAreas();
+        if (typeof carregarAbaBairros === 'function') carregarAbaBairros();
     }
 
     if (idAba === 'tarefas') {

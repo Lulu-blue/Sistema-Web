@@ -1328,7 +1328,7 @@
                     </div>
                 </div>
 
-                <!-- Botões Vencidos / Atendidos (visíveis apenas para GP+ nas abas NP/AI) -->
+                <!-- Botões Vencidos / Atendidos (visíveis para GP+ e Fiscais de Posturas nas abas NP/AI) -->
                 <div id="botoes-vencidos-atendidos" style="display:none; margin-bottom: 15px; gap: 10px; flex-wrap: wrap;">
                     <button id="btn-vencidos-hg" onclick="abrirModalVencidos()" style="padding: 0.55rem 1.2rem; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#b91d1d'" onmouseout="this.style.background='#dc2626'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -1426,38 +1426,51 @@
                     </button>
                 </div>
 
-                <!-- GRAFICO DE PESO POR BAIRRO -->
-                <div class="grafico-container" style="padding: 20px; margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">Peso por Bairro (Top 10)</h3>
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <div style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 3px;">
-                                <button id="btn-filtro-bairros-todos" class="btn-filtro-bairros ativo" onclick="setFiltroBairros('todos')" style="padding: 6px 12px; border: none; border-radius: 6px; background: #0f172a; color: white; font-size: 13px; cursor: pointer; transition: 0.2s;">Todos</button>
-                                <button id="btn-filtro-bairros-np" class="btn-filtro-bairros" onclick="setFiltroBairros('np')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">NP</button>
-                                <button id="btn-filtro-bairros-ai" class="btn-filtro-bairros" onclick="setFiltroBairros('ai')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">AI</button>
-                                <button id="btn-filtro-bairros-denuncias" class="btn-filtro-bairros" onclick="setFiltroBairros('denuncias')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">Denúncias</button>
+                <!-- GRAFICO DE PESO POR BAIRRO + AREAS DEMANDA -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <!-- Gráfico de Bairros -->
+                    <div class="grafico-container" style="padding: 20px; flex: 1.5; min-width: 320px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                            <h3 style="margin: 0;">Peso por Bairro (Top 10)</h3>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <div style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 3px;">
+                                    <button id="btn-filtro-bairros-todos" class="btn-filtro-bairros ativo" onclick="setFiltroBairros('todos')" style="padding: 6px 12px; border: none; border-radius: 6px; background: #0f172a; color: white; font-size: 13px; cursor: pointer; transition: 0.2s;">Todos</button>
+                                    <button id="btn-filtro-bairros-np" class="btn-filtro-bairros" onclick="setFiltroBairros('np')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">NP</button>
+                                    <button id="btn-filtro-bairros-ai" class="btn-filtro-bairros" onclick="setFiltroBairros('ai')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">AI</button>
+                                    <button id="btn-filtro-bairros-denuncias" class="btn-filtro-bairros" onclick="setFiltroBairros('denuncias')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">Denúncias</button>
+                                </div>
+                                <!-- SUB-FILTROS DENUNCIAS -->
+                                <div id="sub-filtros-denuncias-grafico" style="display: none; flex-wrap: wrap; gap: 6px; margin-left: auto;">
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('comunicacao_interna')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Com. Interna</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('vereadores')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Vereadores</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('mp')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">MP</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('app')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">APP</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('ouvidoria')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Ouvidoria</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('protocolo')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Protocolo</button>
+                                </div>
+                                <button onclick="abrirModalGraficoBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                                    Ver Todos
+                                </button>
+                                <button onclick="baixarDadosBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    Baixar Dados
+                                </button>
                             </div>
-                            <!-- SUB-FILTROS DENUNCIAS -->
-                            <div id="sub-filtros-denuncias-grafico" style="display: none; flex-wrap: wrap; gap: 6px; margin-left: auto;">
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('comunicacao_interna')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Com. Interna</button>
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('vereadores')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Vereadores</button>
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('mp')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">MP</button>
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('app')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">APP</button>
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('ouvidoria')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Ouvidoria</button>
-                                <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('protocolo')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Protocolo</button>
-                            </div>
-                            <button onclick="abrirModalGraficoBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-                                Ver Todos
-                            </button>
-                            <button onclick="baixarDadosBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                Baixar Dados
-                            </button>
+                        </div>
+                        <div style="position: relative; height: 320px; width: 100%;">
+                            <canvas id="grafico-bairros-peso"></canvas>
                         </div>
                     </div>
-                    <div style="position: relative; height: 320px; width: 100%;">
-                        <canvas id="grafico-bairros-peso"></canvas>
+
+                    <!-- Áreas com Maior Demanda -->
+                    <div class="grafico-container" style="padding: 20px; flex: 1; min-width: 280px; max-width: 420px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                            <h3 style="margin: 0;">Áreas com Maior Demanda</h3>
+                        </div>
+                        <div id="lista-areas-demanda" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">Carregando...</div>
+                        </div>
                     </div>
                 </div>
 
@@ -1484,10 +1497,10 @@
                                     Áreas de Atuação
                                 </h3>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button onclick="abrirModalNovaArea()"
+                                    <button id="btn-nova-area-gerencia" onclick="abrirModalNovaArea()"
                                         style="background:#10b981; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer;">+
                                         Nova Área</button>
-                                    <button onclick="abrirModalRotacaoAreas()"
+                                    <button id="btn-rotacao-areas-gerencia" onclick="abrirModalRotacaoAreas()"
                                         style="background:#8b5cf6; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px;"
                                         title="Rotação de Fiscais nas Áreas">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -1525,7 +1538,7 @@
                                     <button onclick="abrirModalNovoBairro()"
                                         style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer;">+
                                         Novo Bairro</button>
-                                    <button onclick="abrirModalRotacaoBairros()"
+                                    <button id="btn-rotacao-bairros-gerencia" onclick="abrirModalRotacaoBairros()"
                                         style="background:#8b5cf6; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px;"
                                         title="Painel de Rotação Automática">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -1972,19 +1985,19 @@
 
                 <div>
                     <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Encaminhado para *</label>
-                    <select id="denuncia-encaminhado" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
-                        <option value="">Selecione um fiscal...</option>
-                    </select>
+                    <input type="text" id="denuncia-encaminhado-busca" list="datalist-usuarios-denuncia" placeholder="Digite para buscar um usuário..." autocomplete="off" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                    <input type="hidden" id="denuncia-encaminhado">
+                    <datalist id="datalist-usuarios-denuncia"></datalist>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data Entrega</label>
-                        <input type="date" id="denuncia-data-entrega" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
-                    </div>
-                    <div>
                         <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Prazo para Conclusão</label>
                         <input type="date" id="denuncia-prazo" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data Entrega</label>
+                        <input type="date" id="denuncia-data-entrega" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                 </div>
 

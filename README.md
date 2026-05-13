@@ -402,7 +402,7 @@ Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → a
 Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `fiscal_id` (FK → auth.users), `created_at`.
 
 ### `controle_denuncias` (Controle Interno de Denúncias)
-Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo). Campos: `tipo` (text, com check constraint), `data` (date), `tarefa` (text), `protocolo` (text), `origem` (text), `solicitante` (text), `descricao` (text), `endereco` (text), `bairro` (text), `encaminhado_para` (FK → auth.users), `encaminhado_para_nome` (text), `data_entrega` (date), `prazo_conclusao` (date), `obs` (text), `concluido` (boolean), `created_by` (FK → auth.users).
+Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo). Campos: `tipo` (text, com check constraint), `data` (date), `tarefa` (text), `protocolo` (text), `origem` (text), `solicitante` (text), `descricao` (text), `endereco` (text), `bairro` (text), `encaminhado_para` (FK → auth.users), `encaminhado_para_nome` (text), `prazo_conclusao` (date), `data_entrega` (date), `obs` (text), `concluido` (boolean), `created_by` (FK → auth.users).
 
 ### `exclusao_logs` (Auditoria)
 Tabela de logs de exclusão de usuários. Substituíu a antiga `log_exclusoes`. Campos: dados do registro de auditoria.
@@ -1299,3 +1299,119 @@ SEMAC/
 ### 🔧 Inteligência de Edição
 - **Modo Edição Preservado**: O sistema detecta automaticamente quando o usuário está apenas corrigindo um registro existente (`modoEdicao`), permitindo o salvamento sem disparar o bloqueio de duplicidade contra o próprio registro.
 - **Tratamento de Texto**: Implementação de normalização (`trim` e `toLowerCase`) para garantir que espaços extras ou variações entre maiúsculas e minúsculas não burlem a segurança.
+
+## 🆕 Atualizações Recentes (12/05/2026) — Fiscais de Posturas, Filtro de Bairros, Áreas com Demanda e Scroll Mirror
+
+### 🔴🟢 Botões Vencidos e Atendidos agora disponíveis para Fiscais de Posturas
+- **Antes**: os botões "Vencidos" e "Atendidos" no Histórico Geral eram visíveis apenas para **Gerente de Posturas (GP) ou superior**.
+- **Agora**: **Fiscais de Posturas** também visualizam os botões nas abas NP (1.1) e AI (1.2).
+- **Filtro por fiscal**: para Fiscais de Posturas, os modais mostram **apenas os registros atribuídos a ele** (comparação por `fiscal_nome === nome do usuário logado`).
+- GP+ continuam vendo todos os registros sem restrição.
+
+---
+
+### 🏘️ Filtro por Bairro no Histórico Geral — Mais Inteligente
+- O filtro de bairro foi **movido do banco (Supabase) para o cliente (JavaScript)**, permitindo comparações mais flexíveis.
+- **Ignora maiúsculas/minúsculas**: "centro" encontra "Centro".
+- **Ignora acentos**: "Sao Joao" encontra "São João".
+- **Ignora a palavra "Bairro" no início**: "Centro" encontra "Bairro Centro" e vice-versa.
+- Aplica-se também na reclassificação inteligente de NP → AI.
+
+---
+
+### 📊 Áreas com Maior Demanda (aba Bairros)
+- Nova lista exibida **ao lado do gráfico "Peso por Bairro (Top 10)"** na aba Bairros.
+- Calcula a demanda total (NP + AI + Denúncias dos últimos 30 dias) de cada **Área** somando seus bairros vinculados.
+- Exibe o **Top 10** áreas com ranking numerado, barra de progresso visual e total de demandas.
+- Se houver **mais de 10 áreas com demanda**, aparece o botão **"Ver todos"** para expandir a lista completa.
+
+---
+
+### 🔧 Correção de Erro de Lock no Carregamento da aba Bairros
+- Resolvido erro `"AbortError: Lock broken by another request with the 'steal' option"` do IndexedDB/Supabase.
+- Causa: `carregarGraficoBairros()` e `carregarGestaoBairrosAreas()` eram chamadas **em paralelo**.
+- Solução: criada função `carregarAbaBairros()` que **serializa** os carregamentos (um depois do outro).
+- Adicionada proteção contra execuções simultâneas e **retry automático** (até 3 tentativas) em caso de erro de lock.
+
+---
+
+### ↔️ Barra de Rolagem Horizontal Sticky — Controle Interno de Denúncias
+- Reestruturada a planilha de denúncias com **scroll mirror**:
+  - Barra de rolagem horizontal posicionada **acima do cabeçalho** da tabela.
+  - Barra usa `position: sticky; top: 0;` — desce junto com a tela.
+  - Sincronização via JavaScript entre a barra de cima e o scroll da tabela.
+
+---
+
+### ↔️ Barra de Rolagem Horizontal Sticky — Histórico Geral
+- Aplicada a mesma técnica de scroll mirror na tabela do **Histórico Geral**.
+- Substituída a abordagem antiga de `transform: rotateX(180deg)` por uma solução mais robusta com sincronização via JS.
+- Funciona tanto na visualização **"Todos"** quanto em **categorias específicas** (NP, AI, AR, Ofício, etc.).
+
+---
+
+### 📝 Ajuste de Textos no Modal de Vencidos (aba NP)
+- Subtítulos das seções no modal de vencidos agora mencionam explicitamente **"Notificações Preliminares"** em vez de texto genérico:
+  - "⚠️ Notificações Preliminares vencidas com Auto de Infração vinculado"
+  - "🔴 Notificações Preliminares vencidas sem Auto de Infração"
+
+## 🆕 Atualizações Recentes (12/05/2026) — Permissões do Administrativo de Posturas
+
+### 👤 Administrativo de Posturas — Acesso à Aba Bairros (Somente Visualização)
+- **Antes**: o cargo **Administrativo de Posturas** não tinha acesso à aba **Bairros**.
+- **Agora**: o menu **"Bairros"** é exibido na sidebar para Administrativo de Posturas.
+- **Restrições de gerenciamento** (todos os botões abaixo são **ocultos** automaticamente):
+  - ❌ **Nova Área**
+  - ❌ **Rotação de Áreas**
+  - ❌ **Rotação de Bairros**
+  - ❌ **Atribuir Fiscal** (dentro de cada área)
+  - ❌ **Excluir Área** (dentro de cada área)
+  - ❌ **Vincular Área** (dropdown dentro de cada bairro)
+  - ❌ **Excluir Bairro** (dentro de cada bairro)
+- **Permissão mantida**:
+  - ✅ **Novo Bairro**: Administrativo de Posturas **pode adicionar** novos bairros.
+- **Recursos visíveis**:
+  - ✅ Gráfico **"Peso por Bairro (Top 10)"**
+  - ✅ Ranking **"Áreas com Maior Demanda"**
+  - ✅ Botão **"Baixar Dados"** (exportação Excel)
+  - ✅ Botão **"Controle Interno de Denúncias"** (navegação para a aba de denúncias)
+
+---
+
+### 🔒 Controle Interno de Denúncias — Permissões por Perfil
+- **Gerente de Posturas (GP) ou superior** (Diretor, Secretário): pode **criar, editar e excluir** qualquer registro sem restrição de tempo.
+- **Administrativo de Posturas**:
+  - ✅ **Pode criar** novas linhas normalmente.
+  - ⚠️ **Edição/Exclusão completa limitada a 24h**: só pode editar todos os campos ou excluir registros **que ele criou** há **menos de 24 horas**.
+  - ⏰ **Após 24h**: o botão **"Concluir"** (verde) aparece para **qualquer registro** (independente de quem criou). Ao clicar, abre um modal onde **apenas o campo "Concluído" (Sim/Não) está habilitado**; todos os demais campos aparecem desabilitados (somente leitura).
+  - 🔒 **Tentativa de burla**: as funções `editarDenuncia()`, `editarDenunciaConcluido()` e `excluirDenuncia()` possuem **verificação server-side** que bloqueia a ação e exibe alerta caso o prazo/permisão tenha expirado.
+- **Demais usuários** (Fiscais, etc.): só podem editar/excluir registros **criados por eles mesmos** (`created_by === userId`).
+
+---
+
+
+---
+
+### 👥 Campo "Encaminhado para" — Busca Livre por Usuário
+- **Antes**: campo era um `<select>` limitado apenas a **Fiscais de Posturas**.
+- **Agora**: campo transformado em **input de busca com autocomplete** (`<input>` + `<datalist>`).
+  - A pessoa digita o nome e o sistema sugere usuários cadastrados.
+  - Ao selecionar (ou sair do campo), o ID do usuário é sincronizado automaticamente para um campo hidden.
+- **Quem aparece na lista**: **todos os usuários do sistema** cadastrados na tabela `profiles`, **exceto**:
+  - ❌ Consórcio
+  - ❌ Analistas do Consórcio
+- Inclusive o **próprio usuário logado** aparece na lista (pode encaminhar para si mesmo).
+- No salvamento, o sistema continua registrando o `id` do usuário selecionado e seu `full_name` no banco.
+
+---
+
+
+### 🔄 Ordem das Colunas "Prazo" e "Data Entrega" Invertida
+- **Antes**: na tabela e no modal de denúncias, a ordem era **Data Entrega → Prazo**.
+- **Agora**: a ordem foi invertida para **Prazo → Data Entrega** em todos os lugares:
+  - Tabela do **Controle Interno de Denúncias** (`renderizarTabelaDenuncias`)
+  - Modal de **criação/edição** de denúncias
+  - Documentação de campos opcionais por tipo de demanda
+
+---
+
