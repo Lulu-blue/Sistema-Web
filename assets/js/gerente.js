@@ -20,8 +20,46 @@ function isDiretorOuSuperior(role) {
     return getNivelHierarquico(role) >= 2;
 }
 
+function isAdminPosturas(role) {
+    var r = (role || window.userRoleGlobal || '').toLowerCase();
+    return (r.includes('administrativo') && r.includes('postura')) ||
+           (r.includes('administrador') && r.includes('postura'));
+}
+
 function isSecretario(role) {
     return getNivelHierarquico(role) >= 3;
+}
+
+function podeEditarDenuncia(reg) {
+    var role = window.userRoleGlobal || '';
+    // Gerente, Diretor e Secretário podem editar/excluir tudo
+    if (isGerenteOuSuperior(role)) return true;
+    // Administrativo de Posturas pode editar/excluir apenas dentro de 24h da criação e apenas o que criou
+    if (isAdminPosturas()) {
+        if (!reg || !reg.created_at) return false;
+        if (reg.created_by !== (window.userIdGlobal || '')) return false;
+        var criado = new Date(reg.created_at);
+        var agora = new Date();
+        var diffHoras = (agora - criado) / (1000 * 60 * 60);
+        return diffHoras <= 24;
+    }
+    // Demais usuários só podem editar/excluir o que criaram
+    return reg && reg.created_by === (window.userIdGlobal || '');
+}
+
+function podeEditarDenunciaConcluido(reg) {
+    var role = window.userRoleGlobal || '';
+    // Gerente+ já tem permissão total via podeEditarDenuncia; esta função é para casos especiais
+    if (isGerenteOuSuperior(role)) return false; // evita duplicar botão, já têm "Editar"
+    // Administrativo de Posturas: após 24h, pode alterar apenas o campo Concluído de QUALQUER registro
+    if (isAdminPosturas()) {
+        if (!reg || !reg.created_at) return false;
+        var criado = new Date(reg.created_at);
+        var agora = new Date();
+        var diffHoras = (agora - criado) / (1000 * 60 * 60);
+        return diffHoras > 24; // somente quando passou das 24h (independente de quem criou)
+    }
+    return false;
 }
 
 function podeGerenciarFiscais(role) {
@@ -791,7 +829,87 @@ function baixarDadosBairros() {
     }
 }
 
-async function carregarGraficoBairros() {
+var areasDemandaExpandido = false;
+var dadosGraficoBairrosCarregados = false;
+var graficoBairrosCarregando = false;
+
+function calcularDemandaAreas() {
+    var demandas = [];
+    globalAreas.forEach(function (area) {
+        var bairrosArea = globalBairros.filter(function (b) { return b.area_id === area.id; });
+        var total = 0;
+        bairrosArea.forEach(function (b) {
+            var chave = normalizarNomeBairro(b.nome);
+            var np = (dadosGraficoBairros.np && dadosGraficoBairros.np[chave]) || 0;
+            var ai = (dadosGraficoBairros.ai && dadosGraficoBairros.ai[chave]) || 0;
+            var den = 0;
+            var denBairro = dadosGraficoBairros.denuncias && dadosGraficoBairros.denuncias[chave];
+            if (denBairro) {
+                Object.keys(denBairro).forEach(function (t) {
+                    den += denBairro[t];
+                });
+            }
+            total += np + ai + den;
+        });
+        demandas.push({ area: area, total: total });
+    });
+    demandas.sort(function (a, b) { return b.total - a.total; });
+    return demandas;
+}
+
+function renderizarAreasDemanda() {
+    var container = document.getElementById('lista-areas-demanda');
+    if (!container) return;
+    // Só renderiza quando ambos os carregamentos terminaram
+    if (!globalAreas || globalAreas.length === 0 || !dadosGraficoBairrosCarregados) {
+        return;
+    }
+    var demandas = calcularDemandaAreas();
+    var comDemanda = demandas.filter(function (d) { return d.total > 0; });
+    if (comDemanda.length === 0) {
+        container.innerHTML = '<div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">Nenhuma demanda nos últimos 30 dias.</div>';
+        return;
+    }
+
+    var limite = areasDemandaExpandido ? comDemanda.length : 10;
+    var mostrar = comDemanda.slice(0, limite);
+    var max = comDemanda[0].total || 1;
+
+    var html = '';
+    mostrar.forEach(function (d, idx) {
+        var pct = (d.total / max) * 100;
+        html += '<div style="display: flex; align-items: center; gap: 10px; font-size: 13px;">';
+        html += '<span style="min-width: 24px; text-align: right; font-weight: 700; color: #334155;">' + (idx + 1) + '.</span>';
+        html += '<div style="flex: 1;">';
+        html += '<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">';
+        html += '<span style="font-weight: 600; color: #1e293b;">' + d.area.nome + '</span>';
+        html += '<span style="font-weight: 700; color: #0f172a;">' + d.total + '</span>';
+        html += '</div>';
+        html += '<div style="background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">';
+        html += '<div style="background: #0f172a; height: 100%; width: ' + pct + '%; border-radius: 4px; transition: width 0.4s;"></div>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+    });
+
+    if (comDemanda.length > 10) {
+        var btnText = areasDemandaExpandido ? 'Ver menos' : 'Ver todos';
+        html += '<button onclick="toggleVerTodasAreas()" style="margin-top: 8px; width: 100%; padding: 8px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background=\'#e2e8f0\'" onmouseout="this.style.background=\'#f1f5f9\'">' + btnText + '</button>';
+    }
+
+    container.innerHTML = html;
+}
+
+function toggleVerTodasAreas() {
+    areasDemandaExpandido = !areasDemandaExpandido;
+    renderizarAreasDemanda();
+}
+
+async function carregarGraficoBairros(tentativa) {
+    tentativa = tentativa || 1;
+    if (graficoBairrosCarregando) return;
+    graficoBairrosCarregando = true;
+
     try {
         var hoje = new Date();
         var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -840,13 +958,40 @@ async function carregarGraficoBairros() {
         dadosGraficoBairros.np = contagemNP;
         dadosGraficoBairros.ai = contagemAI;
         dadosGraficoBairros.denuncias = contagemDenuncias;
+        dadosGraficoBairrosCarregados = true;
 
         atualizarEstiloFiltroBairros();
         renderizarGraficoBairrosPequeno();
+        renderizarAreasDemanda();
 
     } catch (err) {
-        console.error("Erro ao carregar grafico de bairros:", err);
+        console.error("Erro ao carregar grafico de bairros (tentativa " + tentativa + "):", err);
+        var isLockError = err && (err.message || '').toLowerCase().includes('lock');
+        if (isLockError && tentativa < 3) {
+            graficoBairrosCarregando = false;
+            setTimeout(function () { carregarGraficoBairros(tentativa + 1); }, 500);
+            return;
+        }
+        // Mesmo com erro, marca como carregado para não travar a lista de areas
+        dadosGraficoBairrosCarregados = true;
+        renderizarAreasDemanda();
     }
+    graficoBairrosCarregando = false;
+}
+
+async function carregarAbaBairros() {
+    // Serializa os carregamentos para evitar erro de lock no IndexedDB do Supabase
+    await carregarGraficoBairros();
+    await carregarGestaoBairrosAreas();
+
+    // Controle de visibilidade para Administrativo de Posturas (somente visualização)
+    var isAdmin = isAdminPosturas();
+    var btnNovaArea = document.getElementById('btn-nova-area-gerencia');
+    var btnRotacaoAreas = document.getElementById('btn-rotacao-areas-gerencia');
+    var btnRotacaoBairros = document.getElementById('btn-rotacao-bairros-gerencia');
+    if (btnNovaArea) btnNovaArea.style.display = isAdmin ? 'none' : 'inline-block';
+    if (btnRotacaoAreas) btnRotacaoAreas.style.display = isAdmin ? 'none' : 'inline-flex';
+    if (btnRotacaoBairros) btnRotacaoBairros.style.display = isAdmin ? 'none' : 'inline-flex';
 }
 
 
@@ -855,6 +1000,7 @@ async function carregarGraficoBairros() {
 var subAbaDenunciasAtual = 'comunicacao_interna';
 var registrosDenunciasAtual = [];
 var fiscaisPosturasGlobal = [];
+var usuariosDenunciasGlobal = [];
 
 function mudarSubAbaDenuncias(tipo, btnEl) {
     subAbaDenunciasAtual = tipo;
@@ -1007,21 +1153,28 @@ function renderizarTabelaDenuncias(registros, tipo) {
         colunas.push({ chave: 'protocolo', label: 'Protocolo' });
     }
 
-    colunas.push({ chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' });
     colunas.push({ chave: 'prazo_conclusao', label: 'Prazo', tipo: 'date' });
+    colunas.push({ chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' });
     colunas.push({ chave: 'obs', label: 'Obs' });
     colunas.push({ chave: 'concluido', label: 'Concluído', tipo: 'boolean' });
     colunas.push({ chave: 'acoes', label: 'Ações', tipo: 'acoes' });
 
     var role = window.userRoleGlobal || '';
     var podeGerenciar = isGerenteOuSuperior(role);
+    var isAdminPostura = isAdminPosturas();
 
     var hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
-    var html = '<div class="tabela-wrapper" style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
+    var wrapperId = 'denuncias-wrapper-' + Date.now();
+    var html = '<div id="' + wrapperId + '" style="position:relative;">';
+    html += '<div class="denuncias-scroll-top" style="position:sticky; top:0; z-index:20; overflow-x:auto; overflow-y:hidden; height:14px; background:#fff; border-bottom:1px solid #e2e8f0; scrollbar-width:thin;">';
+    html += '<div class="denuncias-scroll-dummy" style="height:1px;"></div>';
+    html += '</div>';
+    html += '<div class="denuncias-scroll-bottom" style="overflow-x:auto; overflow-y:visible;">';
+    html += '<table style="width:100%; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
     colunas.forEach(function (c) {
-        html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap;">' + c.label + '</th>';
+        html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap; position:sticky; top:14px; background:#f8fafc; z-index:10;">' + c.label + '</th>';
     });
     html += '</tr></thead><tbody>';
 
@@ -1050,9 +1203,17 @@ function renderizarTabelaDenuncias(registros, tipo) {
         colunas.forEach(function (c) {
             var val = '-';
             if (c.tipo === 'acoes') {
-                val = '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
-                if (podeGerenciar || reg.created_by === (window.userIdGlobal || '')) {
+                var podeEditar = podeEditarDenuncia(reg);
+                var podeConcluir = podeEditarDenunciaConcluido(reg);
+                if (podeEditar) {
+                    val = '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
                     val += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
+                } else if (podeConcluir) {
+                    val = '<button onclick="editarDenunciaConcluido(\'' + reg.id + '\')" style="background:#10b981; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Concluir</button>';
+                } else if (isAdminPostura) {
+                    val = '<span style="color:#94a3b8; font-size:11px;">Bloqueado</span>';
+                } else {
+                    val = '<span style="color:#94a3b8; font-size:11px;">—</span>';
                 }
             } else if (c.tipo === 'boolean') {
                 val = reg[c.chave] ? '<span style="color:#16a34a; font-weight:600;">Sim</span>' : '<span style="color:#64748b;">Não</span>';
@@ -1070,41 +1231,133 @@ function renderizarTabelaDenuncias(registros, tipo) {
         html += '</tr>';
     });
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
     container.innerHTML = html;
+
+    // Sincronizar scroll horizontal e ajustar largura do dummy
+    setTimeout(function () {
+        sincronizarScrollDenuncias(wrapperId);
+    }, 0);
 }
 
-async function carregarSelectFiscaisPosturas() {
-    var select = document.getElementById('denuncia-encaminhado');
-    if (!select) return;
-    if (fiscaisPosturasGlobal.length > 0) {
-        popularSelectFiscais(select);
+function sincronizarScrollDenuncias(wrapperId) {
+    var wrapper = document.getElementById(wrapperId);
+    if (!wrapper) return;
+    var scrollTop = wrapper.querySelector('.denuncias-scroll-top');
+    var scrollBottom = wrapper.querySelector('.denuncias-scroll-bottom');
+    var dummy = wrapper.querySelector('.denuncias-scroll-dummy');
+    var table = wrapper.querySelector('table');
+    if (!scrollTop || !scrollBottom || !dummy || !table) return;
+
+    // Ajusta largura do dummy para igualar a largura real da tabela
+    dummy.style.width = table.scrollWidth + 'px';
+
+    // Sincroniza scrollTop -> scrollBottom
+    scrollTop.addEventListener('scroll', function () {
+        scrollBottom.scrollLeft = scrollTop.scrollLeft;
+    });
+
+    // Sincroniza scrollBottom -> scrollTop
+    scrollBottom.addEventListener('scroll', function () {
+        scrollTop.scrollLeft = scrollBottom.scrollLeft;
+    });
+}
+
+async function carregarUsuariosDenuncias() {
+    var inputBusca = document.getElementById('denuncia-encaminhado-busca');
+    var datalist = document.getElementById('datalist-usuarios-denuncia');
+    if (!inputBusca || !datalist) return;
+    if (usuariosDenunciasGlobal.length > 0) {
+        popularDatalistUsuariosDenuncias();
         return;
     }
     try {
         var { data, error } = await supabaseClient
             .from('profiles')
-            .select('id, full_name')
-            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura'])
+            .select('id, full_name, role')
             .order('full_name', { ascending: true });
         if (error) throw error;
-        fiscaisPosturasGlobal = data || [];
-        popularSelectFiscais(select);
+        // Filtrar: excluir Consórcio e Analistas do Consórcio
+        usuariosDenunciasGlobal = (data || []).filter(function (u) {
+            if (!u.role) return true;
+            var roleNorm = u.role.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            // Excluir se contiver "consorcio"
+            return !roleNorm.includes('consorcio');
+        });
+        popularDatalistUsuariosDenuncias();
     } catch (err) {
-        console.error('Erro ao carregar fiscais:', err);
+        console.error('Erro ao carregar usuários:', err);
     }
 }
 
-function popularSelectFiscais(select) {
-    var valorAtual = select.value;
-    select.innerHTML = '<option value="">Selecione um fiscal...</option>';
-    fiscaisPosturasGlobal.forEach(function (f) {
+function popularDatalistUsuariosDenuncias() {
+    var datalist = document.getElementById('datalist-usuarios-denuncia');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    usuariosDenunciasGlobal.forEach(function (u) {
         var opt = document.createElement('option');
-        opt.value = f.id;
-        opt.textContent = f.full_name || f.id;
-        select.appendChild(opt);
+        opt.value = u.full_name || '';
+        opt.dataset.id = u.id;
+        datalist.appendChild(opt);
     });
-    select.value = valorAtual;
+    // Garante que o listener de sincronização esteja ativo
+    var inputBusca = document.getElementById('denuncia-encaminhado-busca');
+    if (inputBusca && !inputBusca._listenerAdicionado) {
+        inputBusca.addEventListener('input', function () {
+            var inputHidden = document.getElementById('denuncia-encaminhado');
+            if (inputHidden) inputHidden.value = '';
+        });
+        inputBusca.addEventListener('change', sincronizarEncaminhadoId);
+        inputBusca._listenerAdicionado = true;
+    }
+}
+
+// Mapear nome digitado/selecionado ao ID correspondente
+function sincronizarEncaminhadoId() {
+    var inputBusca = document.getElementById('denuncia-encaminhado-busca');
+    var inputHidden = document.getElementById('denuncia-encaminhado');
+    if (!inputBusca || !inputHidden) return;
+    var nomeDigitado = inputBusca.value.trim().toLowerCase();
+    if (!nomeDigitado) {
+        inputHidden.value = '';
+        return;
+    }
+    // Tenta match exato primeiro
+    var encontrado = usuariosDenunciasGlobal.find(function (u) {
+        return (u.full_name || '').toLowerCase() === nomeDigitado;
+    });
+    // Se não achou, tenta match parcial (includes)
+    if (!encontrado) {
+        encontrado = usuariosDenunciasGlobal.find(function (u) {
+            return (u.full_name || '').toLowerCase().includes(nomeDigitado);
+        });
+    }
+    if (encontrado) {
+        inputHidden.value = encontrado.id;
+        // Atualiza o input de busca com o nome exato para evitar ambiguidade
+        inputBusca.value = encontrado.full_name || '';
+    } else {
+        inputHidden.value = '';
+    }
+}
+
+// Hook de evento para sincronizar o ID ao digitar/selecionar
+(function () {
+    var inputBusca = document.getElementById('denuncia-encaminhado-busca');
+    if (inputBusca) {
+        // Ao digitar: apenas limpa o ID (evita match prematuro)
+        inputBusca.addEventListener('input', function () {
+            var inputHidden = document.getElementById('denuncia-encaminhado');
+            if (inputHidden) inputHidden.value = '';
+        });
+        // Ao sair do campo ou selecionar do datalist: sincroniza o ID
+        inputBusca.addEventListener('change', sincronizarEncaminhadoId);
+    }
+})();
+
+// Função legada: redireciona para a nova
+async function carregarSelectFiscaisPosturas() {
+    await carregarUsuariosDenuncias();
 }
 
 function ajustarCamposFormDenuncia() {
@@ -1198,6 +1451,7 @@ async function carregarDatalistBairrosDenuncia() {
 function abrirModalNovaDenuncia() {
     var modal = document.getElementById('modal-denuncia');
     if (!modal) return;
+    window.denunciaModoEdicao = 'completo';
     document.getElementById('denuncia-id').value = '';
     document.getElementById('denuncia-tipo').value = subAbaDenunciasAtual;
     document.getElementById('denuncia-data').value = '';
@@ -1207,6 +1461,7 @@ function abrirModalNovaDenuncia() {
     document.getElementById('denuncia-endereco').value = '';
     document.getElementById('denuncia-bairro').value = '';
     document.getElementById('denuncia-encaminhado').value = '';
+    document.getElementById('denuncia-encaminhado-busca').value = '';
     document.getElementById('denuncia-data-entrega').value = '';
     document.getElementById('denuncia-prazo').value = '';
     document.getElementById('denuncia-protocolo').value = '';
@@ -1228,6 +1483,18 @@ function fecharModalNovaDenuncia() {
     if (!modal) return;
     modal.style.display = 'none';
     modal.classList.remove('ativo');
+
+    // Resetar modo de edição
+    window.denunciaModoEdicao = 'completo';
+
+    // Reabilitar todos os campos do form para a próxima abertura
+    var campos = modal.querySelectorAll('input, select, textarea');
+    campos.forEach(function (el) {
+        if (el.id !== 'denuncia-id') {
+            el.disabled = false;
+        }
+    });
+    document.getElementById('titulo-modal-denuncia').innerText = 'Nova Linha';
 }
 
 async function salvarDenuncia() {
@@ -1235,6 +1502,30 @@ async function salvarDenuncia() {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
 
         var id = document.getElementById('denuncia-id').value;
+        var concluido = document.getElementById('denuncia-concluido').value === 'true';
+
+        // Modo edição parcial (apenas status) — Administrativo de Posturas após 24h
+        var modoConcluido = (window.denunciaModoEdicao === 'concluido');
+
+        if (modoConcluido && id) {
+            // Verificar permissão novamente no server-side
+            var reg = registrosDenunciasAtual.find(function (r) { return r.id === id; });
+            if (!reg) {
+                var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
+                if (!error && data) reg = data;
+            }
+            if (!podeEditarDenunciaConcluido(reg)) {
+                Swal.fire({ icon: 'warning', title: 'Ação não permitida', text: 'Você não tem permissão para alterar o status deste registro.', confirmButtonColor: '#0f172a' });
+                return;
+            }
+            var result = await supabaseClient.from('controle_denuncias').update({ concluido: concluido }).eq('id', id).select();
+            if (result.error) throw result.error;
+            Swal.fire({ icon: 'success', title: 'Salvo!', text: 'Status atualizado com sucesso.', confirmButtonColor: '#0f172a', timer: 1500 });
+            fecharModalNovaDenuncia();
+            carregarControleDenuncias(subAbaDenunciasAtual);
+            return;
+        }
+
         var tipo = document.getElementById('denuncia-tipo').value;
         var data = document.getElementById('denuncia-data').value;
         var tarefa = document.getElementById('denuncia-tarefa').value.trim();
@@ -1248,7 +1539,6 @@ async function salvarDenuncia() {
         var protocolo = document.getElementById('denuncia-protocolo').value.trim();
         var solicitante = document.getElementById('denuncia-solicitante').value.trim();
         var obs = document.getElementById('denuncia-obs').value.trim();
-        var concluido = document.getElementById('denuncia-concluido').value === 'true';
 
         // Validar obrigatórios
         if (!data) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Data.', confirmButtonColor: '#0f172a' }); return; }
@@ -1264,7 +1554,7 @@ async function salvarDenuncia() {
         }
 
         var fiscalNome = '';
-        var fiscalEncontrado = fiscaisPosturasGlobal.find(function (f) { return f.id === encaminhado; });
+        var fiscalEncontrado = usuariosDenunciasGlobal.find(function (f) { return f.id === encaminhado; });
         if (fiscalEncontrado) fiscalNome = fiscalEncontrado.full_name;
 
         var payload = {
@@ -1306,6 +1596,7 @@ async function salvarDenuncia() {
 
 async function editarDenuncia(id) {
     try {
+        window.denunciaModoEdicao = 'completo';
         var reg = registrosDenunciasAtual.find(function (r) { return r.id === id; });
         if (!reg) {
             var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
@@ -1313,6 +1604,11 @@ async function editarDenuncia(id) {
             reg = data;
         }
         if (!reg) return;
+
+        if (!podeEditarDenuncia(reg)) {
+            Swal.fire({ icon: 'warning', title: 'Ação não permitida', text: 'Você não tem permissão para editar este registro.', confirmButtonColor: '#0f172a' });
+            return;
+        }
 
         document.getElementById('denuncia-id').value = reg.id;
         document.getElementById('denuncia-tipo').value = reg.tipo;
@@ -1331,8 +1627,10 @@ async function editarDenuncia(id) {
         document.getElementById('titulo-modal-denuncia').innerText = 'Editar Linha';
 
         ajustarCamposFormDenuncia();
-        await carregarSelectFiscaisPosturas();
+        await carregarUsuariosDenuncias();
         document.getElementById('denuncia-encaminhado').value = reg.encaminhado_para || '';
+        var usuarioEnc = usuariosDenunciasGlobal.find(function (u) { return u.id === reg.encaminhado_para; });
+        document.getElementById('denuncia-encaminhado-busca').value = usuarioEnc ? (usuarioEnc.full_name || '') : (reg.encaminhado_para_nome || '');
 
         var modal = document.getElementById('modal-denuncia');
         modal.style.display = 'flex';
@@ -1343,7 +1641,74 @@ async function editarDenuncia(id) {
     }
 }
 
+async function editarDenunciaConcluido(id) {
+    try {
+        var reg = registrosDenunciasAtual.find(function (r) { return r.id === id; });
+        if (!reg) {
+            var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
+            if (error) throw error;
+            reg = data;
+        }
+        if (!reg) return;
+
+        if (!podeEditarDenunciaConcluido(reg)) {
+            Swal.fire({ icon: 'warning', title: 'Ação não permitida', text: 'Você não tem permissão para alterar o status deste registro.', confirmButtonColor: '#0f172a' });
+            return;
+        }
+
+        // Preencher apenas o campo concluído; desabilitar todos os outros
+        // Nota: Administrativo de Posturas pode alterar "Concluído" de qualquer registro após 24h
+        document.getElementById('denuncia-id').value = reg.id;
+        document.getElementById('denuncia-tipo').value = reg.tipo;
+        document.getElementById('denuncia-data').value = reg.data || '';
+        document.getElementById('denuncia-tarefa').value = reg.tarefa || '';
+        document.getElementById('denuncia-origem').value = reg.origem || '';
+        document.getElementById('denuncia-descricao').value = reg.descricao || '';
+        document.getElementById('denuncia-endereco').value = reg.endereco || '';
+        document.getElementById('denuncia-bairro').value = reg.bairro || '';
+        document.getElementById('denuncia-data-entrega').value = reg.data_entrega || '';
+        document.getElementById('denuncia-prazo').value = reg.prazo_conclusao || '';
+        document.getElementById('denuncia-protocolo').value = reg.protocolo || '';
+        document.getElementById('denuncia-solicitante').value = reg.solicitante || '';
+        document.getElementById('denuncia-obs').value = reg.obs || '';
+        document.getElementById('denuncia-concluido').value = reg.concluido ? 'true' : 'false';
+        document.getElementById('titulo-modal-denuncia').innerText = 'Alterar Status';
+
+        ajustarCamposFormDenuncia();
+        await carregarUsuariosDenuncias();
+        document.getElementById('denuncia-encaminhado').value = reg.encaminhado_para || '';
+        var usuarioEnc = usuariosDenunciasGlobal.find(function (u) { return u.id === reg.encaminhado_para; });
+        document.getElementById('denuncia-encaminhado-busca').value = usuarioEnc ? (usuarioEnc.full_name || '') : (reg.encaminhado_para_nome || '');
+
+        // Desabilitar todos os campos exceto concluído
+        var modal = document.getElementById('modal-denuncia');
+        var campos = modal.querySelectorAll('input, select, textarea');
+        campos.forEach(function (el) {
+            if (el.id !== 'denuncia-concluido' && el.id !== 'denuncia-id') {
+                el.disabled = true;
+            }
+        });
+
+        window.denunciaModoEdicao = 'concluido';
+        modal.style.display = 'flex';
+        modal.classList.add('ativo');
+    } catch (err) {
+        console.error('Erro ao editar status da denúncia:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível carregar o registro.', confirmButtonColor: '#0f172a' });
+    }
+}
+
 async function excluirDenuncia(id) {
+    var reg = registrosDenunciasAtual.find(function (r) { return r.id === id; });
+    if (!reg) {
+        var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
+        if (!error && data) reg = data;
+    }
+    if (!podeEditarDenuncia(reg)) {
+        Swal.fire({ icon: 'warning', title: 'Ação não permitida', text: 'Você não tem permissão para excluir este registro.', confirmButtonColor: '#0f172a' });
+        return;
+    }
+
     var confirmar = await Swal.fire({
         title: 'Tem certeza?',
         text: 'Deseja excluir este registro permanentemente?',
@@ -1374,8 +1739,11 @@ var globalBairros = [];
 
 var globalRegistrosCP = []; // Para armazenar todos os documentos e contar
 var globalDenunciasPorBairro = {}; // contagem de denuncias por bairro
+var gestaoBairrosCarregando = false;
 
 async function carregarGestaoBairrosAreas() {
+    if (gestaoBairrosCarregando) return;
+    gestaoBairrosCarregando = true;
     try {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
         var listaAreasEl = document.getElementById('lista-areas-gerencia');
@@ -1451,12 +1819,16 @@ async function carregarGestaoBairrosAreas() {
 
         renderizarListaAreas();
         renderizarListaBairros();
+        renderizarAreasDemanda();
 
     } catch (err) {
         console.error("Erro ao carregar Gestão de Áreas e Bairros. (As tabelas existem?):", err);
         var listaAreasEl = document.getElementById('lista-areas-gerencia');
         if (listaAreasEl) listaAreasEl.innerHTML = '<div style="color:#ef4444; padding:15px; text-align:center;">Erro ao carregar. Execute o script SQL no Supabase.</div>';
+        // Mesmo com erro, tenta renderizar areas de demanda se o grafico ja tiver carregado
+        renderizarAreasDemanda();
     }
+    gestaoBairrosCarregando = false;
 }
 
 function processarContagemBairro(nomeBairro) {
@@ -1506,6 +1878,7 @@ function renderizarListaAreas() {
         return;
     }
 
+    var isAdmin = isAdminPosturas();
     var html = '';
     globalAreas.forEach(function (a) {
         var c = processarContagemArea(a.id);
@@ -1524,10 +1897,12 @@ function renderizarListaAreas() {
         html += '<div style="font-size: 12px; color: #64748b; margin-top: 4px;">Fiscal: <strong style="color:#10b981;">' + (a.fiscal_nome || 'Não atribuído') + '</strong></div>';
         html += textDocs;
         html += '</div>';
-        html += '<div style="display:flex; gap:6px;">';
-        html += '<button onclick="abrirModalAtribuirFiscal(\'' + a.id + '\', \'' + a.nome + '\', \'' + (a.fiscal_nome || '') + '\')" title="Atribuir Fiscal" style="background:none; border:none; cursor:pointer; color:#3b82f6;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m-3-3h6"/></svg></button>';
-        html += '<button onclick="excluirArea(\'' + a.id + '\', \'' + a.nome + '\')" title="Excluir Área" style="background:none; border:none; cursor:pointer; color:#ef4444;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
-        html += '</div>';
+        if (!isAdmin) {
+            html += '<div style="display:flex; gap:6px;">';
+            html += '<button onclick="abrirModalAtribuirFiscal(\'' + a.id + '\', \'' + a.nome + '\', \'' + (a.fiscal_nome || '') + '\')" title="Atribuir Fiscal" style="background:none; border:none; cursor:pointer; color:#3b82f6;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m-3-3h6"/></svg></button>';
+            html += '<button onclick="excluirArea(\'' + a.id + '\', \'' + a.nome + '\')" title="Excluir Área" style="background:none; border:none; cursor:pointer; color:#ef4444;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+            html += '</div>';
+        }
         html += '</div>';
     });
 
@@ -1592,17 +1967,19 @@ function renderizarListaBairros() {
         html += '<div style="font-size: 11px; color: ' + corArea + '; font-weight:600; margin-top: 2px;">' + nomeArea + '</div>';
         html += textDocs;
         html += '</div>';
-        html += '<div style="display:flex; gap:6px;">';
-        // Dropdown map
-        html += '<select onchange="vincularBairroArea(\'' + b.id + '\', this.value)" style="font-size:11px; padding:2px; border-radius:4px; max-width:80px; border:1px solid #cbd5e1;">';
-        html += '<option value="">Sem Área</option>';
-        globalAreas.forEach(function (a) {
-            var selected = (b.area_id === a.id) ? 'selected' : '';
-            html += '<option value="' + a.id + '" ' + selected + '>' + a.nome + '</option>';
-        });
-        html += '</select>';
-        html += '<button onclick="excluirBairro(\'' + b.id + '\', \'' + b.nome.replace(/'/g, "\\'") + '\')" title="Excluir Bairro" style="background:none; border:none; cursor:pointer; color:#ef4444;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>';
-        html += '</div>';
+        if (!isAdminPosturas()) {
+            html += '<div style="display:flex; gap:6px;">';
+            // Dropdown map
+            html += '<select onchange="vincularBairroArea(\'' + b.id + '\', this.value)" style="font-size:11px; padding:2px; border-radius:4px; max-width:80px; border:1px solid #cbd5e1;">';
+            html += '<option value="">Sem Área</option>';
+            globalAreas.forEach(function (a) {
+                var selected = (b.area_id === a.id) ? 'selected' : '';
+                html += '<option value="' + a.id + '" ' + selected + '>' + a.nome + '</option>';
+            });
+            html += '</select>';
+            html += '<button onclick="excluirBairro(\'' + b.id + '\', \'' + b.nome.replace(/'/g, "\\'") + '\')" title="Excluir Bairro" style="background:none; border:none; cursor:pointer; color:#ef4444;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>';
+            html += '</div>';
+        }
         html += '</div>';
     });
 

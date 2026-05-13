@@ -1040,8 +1040,8 @@ create table if not exists controle_denuncias (
   bairro text,
   encaminhado_para uuid references auth.users(id),
   encaminhado_para_nome text,
-  data_entrega date,
   prazo_conclusao date,
+  data_entrega date,
   protocolo text,
   solicitante text,
   obs text,
@@ -1115,12 +1115,12 @@ USING (
 
 | Tipo | Campos Obrigatórios | Campos Opcionais |
 |------|---------------------|------------------|
-| Comunicação Interna | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, data_entrega, prazo_conclusao, obs, concluido |
-| Vereadores | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
-| MP | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
-| APP | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, data_entrega, protocolo, prazo_conclusao, obs, concluido |
-| Ouvidoria | data, tarefa, origem, descricao, encaminhado_para | bairro, data_entrega, prazo_conclusao, obs, concluido |
-| Protocolo | data, protocolo, solicitante, descricao, encaminhado_para | endereco, bairro, data_entrega, prazo_conclusao, concluido |
+| Comunicação Interna | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, prazo_conclusao, data_entrega, obs, concluido |
+| Vereadores | data, tarefa, origem, descricao, encaminhado_para | bairro, prazo_conclusao, data_entrega, obs, concluido |
+| MP | data, tarefa, origem, descricao, encaminhado_para | bairro, prazo_conclusao, data_entrega, obs, concluido |
+| APP | data, tarefa, origem, encaminhado_para | endereco, bairro, descricao, protocolo, prazo_conclusao, data_entrega, obs, concluido |
+| Ouvidoria | data, tarefa, origem, descricao, encaminhado_para | bairro, prazo_conclusao, data_entrega, obs, concluido |
+| Protocolo | data, protocolo, solicitante, descricao, encaminhado_para | endereco, bairro, prazo_conclusao, data_entrega, concluido |
 
 ### Regras de Interface (Frontend)
 - **Linha verde** (`#dcfce7`) quando `concluido = true` (sobrepõe qualquer outra cor).

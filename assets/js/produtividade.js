@@ -123,6 +123,7 @@ const CATEGORIAS = [
             { nome: 'n_notificacao', label: 'Nº da notificação', tipo: 'text', obrigatorio: false, ignorarNoBanco: true },
             { nome: 'prazo_defesa', label: 'Prazo p/ Defesa (Dias)', tipo: 'number', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'fundamentacao_legal', label: 'Fundamentação Legal (Lei/Decreto Descumprido)', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'sob_pena', label: 'Sob pena do Artigo', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'valor_multa', label: 'Valor da Multa (R$)', tipo: 'text', obrigatorio: true, ignorarNoBanco: true }
         ]
     },
@@ -193,7 +194,9 @@ const CATEGORIAS = [
             { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'digitado', label: 'Referente ao', tipo: 'textarea', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_ciencia', label: 'Data da Ciência', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true }
+            { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'data_vistoria', label: 'Vistoria realizada dia', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
+            { nome: 'obrigacao', label: 'Obrigação não cumprida', tipo: 'text', obrigatorio: true, ignorarNoBanco: true }
         ]
     },
     // === CATEGORIAS GERAIS (1° a 29°) ===
@@ -540,7 +543,7 @@ async function carregarBairrosSistema() {
             .from('bairros')
             .select('nome')
             .order('nome');
-            
+
         if (!error && data) {
             bairrosSistema = data.map(b => b.nome);
         }
@@ -688,7 +691,7 @@ function abrirFormulario(categoria) {
         } else if (campo.tipo === 'select_bairro') {
             let opcoesListHTML = `<div class="dropdown-search" style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
             opcoesListHTML += `<div id="lista-bairros-${campo.nome}" class="bairros-container" style="max-height: 200px; overflow-y: auto;">`;
-            
+
             if (bairrosSistema.length > 0) {
                 bairrosSistema.forEach(bairro => {
                     opcoesListHTML += `<div class="dropdown-item dropdown-bairro-item" onclick="selecionarOpcao('${campo.nome}', '${bairro.replace(/'/g, "\\'")}')">${bairro}</div>`;
@@ -697,7 +700,7 @@ function abrirFormulario(categoria) {
                 opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 10px;">Carregando bairros...</div>`;
             }
             opcoesListHTML += `</div>`;
-            
+
             opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 10px; white-space: normal; line-height: 1.4;">
                 ⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.
             </div>`;
@@ -1775,13 +1778,13 @@ function mostrarInputOutro(campoNome) {
     document.querySelector(`#dropdown-${campoNome} .dropdown-texto`).textContent = 'Outro...';
 }
 
-window.filtrarBairros = function(campoNome) {
+window.filtrarBairros = function (campoNome) {
     const input = document.getElementById(`search-${campoNome}`);
     const filter = input.value.toLowerCase();
     const container = document.getElementById(`lista-bairros-${campoNome}`);
     if (!container) return;
     const items = container.getElementsByClassName('dropdown-bairro-item');
-    
+
     for (let i = 0; i < items.length; i++) {
         let textValue = items[i].textContent || items[i].innerText;
         if (textValue.toLowerCase().indexOf(filter) > -1) {
@@ -1914,6 +1917,15 @@ function pareceAutoDeInfracaoNP(reg) {
         /^ai\d/.test(nNotif);
 }
 
+function normalizarBairro(texto) {
+    if (!texto) return '';
+    return texto
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/^bairro\s+/i, '')
+        .trim();
+}
+
 async function carregarHistoricoGeral(categoriaId) {
     const container = document.getElementById('historico-geral-lista');
     if (!container) return;
@@ -1924,6 +1936,7 @@ async function carregarHistoricoGeral(categoriaId) {
     const termo = (document.getElementById('busca-historico-geral')?.value || '').toLowerCase().trim();
     const termoFiscal = (document.getElementById('busca-fiscal-geral')?.value || '').toLowerCase().trim();
     const bairroSelecionado = document.getElementById('filtro-bairro-historico')?.value || '';
+    const bairroNormalizado = normalizarBairro(bairroSelecionado);
     const anoSelecionado = document.getElementById('busca-ano-geral')?.value || '';
 
     // 2. Constrói Query
@@ -1932,11 +1945,6 @@ async function carregarHistoricoGeral(categoriaId) {
     // Categoria
     if (categoriaId !== 'todos') {
         query = query.eq('categoria_id', categoriaId);
-    }
-
-    // Filtro por Bairro (Remoto via JSON field)
-    if (bairroSelecionado) {
-        query = query.filter('campos->>bairro', 'eq', bairroSelecionado);
     }
 
     // Filtro por Fiscal
@@ -2015,7 +2023,6 @@ async function carregarHistoricoGeral(categoriaId) {
     } else if (categoriaId === '1.2') {
         // Buscar registros de NP que são na verdade AI (má classificação no banco)
         let queryNP = supabaseClient.from('controle_processual').select('*').eq('categoria_id', '1.1');
-        if (bairroSelecionado) queryNP = queryNP.filter('campos->>bairro', 'eq', bairroSelecionado);
         if (termoFiscal) queryNP = queryNP.ilike('fiscal_nome', `%${termoFiscal}%`);
         if (anoSelecionado) {
             queryNP = queryNP.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
@@ -2038,6 +2045,14 @@ async function carregarHistoricoGeral(categoriaId) {
         } catch (e) {
             console.error('Erro ao buscar NP reclassificados como AI:', e);
         }
+    }
+
+    // Filtro por Bairro (client-side: ignora case, acentos e palavra "Bairro")
+    if (bairroNormalizado) {
+        todosOsRegistros = todosOsRegistros.filter(reg => {
+            const bairroReg = normalizarBairro(reg.campos && reg.campos.bairro ? reg.campos.bairro : '');
+            return bairroReg === bairroNormalizado;
+        });
     }
 
     // Ordenar final no JS
@@ -2338,13 +2353,19 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             bodyHTML += '</tr>';
         });
 
+        const wrapperId = 'hist-wrapper-' + Date.now();
         container.innerHTML = `
             ${graficoHTML}
-            <div class="table-scroll-top">
-                <table class="historico-tabela">
-                    <thead>${headerHTML}</thead>
-                    <tbody>${bodyHTML}</tbody>
-                </table>
+            <div id="${wrapperId}" style="position:relative;">
+                <div class="historico-scroll-top" style="position:sticky; top:0; z-index:20; overflow-x:auto; overflow-y:hidden; height:14px; background:#fff; border-bottom:1px solid #e2e8f0; scrollbar-width:thin;">
+                    <div class="historico-scroll-dummy" style="height:1px;"></div>
+                </div>
+                <div class="historico-scroll-bottom" style="overflow-x:auto; overflow-y:visible;">
+                    <table class="historico-tabela">
+                        <thead>${headerHTML}</thead>
+                        <tbody>${bodyHTML}</tbody>
+                    </table>
+                </div>
             </div>
             <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
                 <p style="font-size: 0.85rem; color: #64748b;">
@@ -2353,6 +2374,9 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 ${statusExtra ? `<p style="font-size: 0.85rem; color: #10b981; font-weight: 600;">${statusExtra}</p>` : ''}
             </div>
         `;
+        setTimeout(function () {
+            sincronizarScrollHistorico(wrapperId);
+        }, 0);
         renderizarChart();
         return;
     }
@@ -2451,13 +2475,19 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
         bodyHTML += '</tr>';
     });
 
+    const wrapperId = 'hist-wrapper-' + Date.now();
     container.innerHTML = `
         ${graficoHTML}
-        <div class="table-scroll-top">
-            <table class="historico-tabela">
-                <thead>${headerHTML}</thead>
-                <tbody>${bodyHTML}</tbody>
-            </table>
+        <div id="${wrapperId}" style="position:relative;">
+            <div class="historico-scroll-top" style="position:sticky; top:0; z-index:20; overflow-x:auto; overflow-y:hidden; height:14px; background:#fff; border-bottom:1px solid #e2e8f0; scrollbar-width:thin;">
+                <div class="historico-scroll-dummy" style="height:1px;"></div>
+            </div>
+            <div class="historico-scroll-bottom" style="overflow-x:auto; overflow-y:visible;">
+                <table class="historico-tabela">
+                    <thead>${headerHTML}</thead>
+                    <tbody>${bodyHTML}</tbody>
+                </table>
+            </div>
         </div>
         <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
             <p style="font-size: 0.85rem; color: #64748b;">
@@ -2466,7 +2496,30 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             ${statusExtra ? `<p style="font-size: 0.85rem; color: #10b981; font-weight: 600;">${statusExtra}</p>` : ''}
         </div>
     `;
+    setTimeout(function () {
+        sincronizarScrollHistorico(wrapperId);
+    }, 0);
     renderizarChart();
+}
+
+function sincronizarScrollHistorico(wrapperId) {
+    var wrapper = document.getElementById(wrapperId);
+    if (!wrapper) return;
+    var scrollTop = wrapper.querySelector('.historico-scroll-top');
+    var scrollBottom = wrapper.querySelector('.historico-scroll-bottom');
+    var dummy = wrapper.querySelector('.historico-scroll-dummy');
+    var table = wrapper.querySelector('table');
+    if (!scrollTop || !scrollBottom || !dummy || !table) return;
+
+    dummy.style.width = table.scrollWidth + 'px';
+
+    scrollTop.addEventListener('scroll', function () {
+        scrollBottom.scrollLeft = scrollTop.scrollLeft;
+    });
+
+    scrollBottom.addEventListener('scroll', function () {
+        scrollTop.scrollLeft = scrollBottom.scrollLeft;
+    });
 }
 
 // Modal para visualizar anexo do fiscal (apenas gerente)
@@ -3895,7 +3948,7 @@ async function abrirEditorAutoInfracao() {
         </p>
 
         <p style="text-indent: 30px; margin-top: 10px;">
-            Motivo da infração baseada na Lei/ Decreto pelo descumprimento do dispositivo: <strong>${campos.fundamentacao_legal || '_______'}</strong>.<br><br>
+            Motivo da infração baseada na Lei/ Decreto pelo descumprimento do dispositivo: <strong>${campos.fundamentacao_legal || '_______'}, sob pena do Artigo ${campos.sob_pena || '___________'}</strong> .<br><br>
             <strong>MULTA NO VALOR DE R$ ${campos.valor_multa || '__________'}</strong>
         </p>
         
@@ -4417,6 +4470,7 @@ async function abrirEditorCertidao() {
 
         const dataCienciaFmt = formatData(campos.data_ciencia);
         const dataDefesaFmt = formatData(campos.data_defesa);
+        const dataVistoriaFmt = formatData(campos.data_vistoria);
 
         const htmlTemplate = `
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
@@ -4435,6 +4489,9 @@ async function abrirEditorCertidao() {
             Certifico que o autuado ${campos.nome} CPF ${campos.cpf}, com endereço de correspondência na ${campos.rua}, N° ${campos.numero}, ${campos.bairro}, não manifestou sobre a interposição de defesa <b>referente ao ${campos.digitado}</b> que teve ciência dia ${dataCienciaFmt} através dos correios aviso de recebimento (AR), com prazo para defesa até ${dataDefesaFmt}.
         </p>
 
+        <p style="text-indent: 0px; line-height: 1.5; margin-bottom: 20px; text-align: justify;">
+            Contudo, em vistoria realizada dia ${dataVistoriaFmt}, certificamos não cumprimento da obrigação de ${campos.obrigacao}. Conforme levantamento fotográfico.
+        </p>
         <p style="margin-top: 60px; margin-bottom: 60px;">
             ${dataPorExtenso}
         </p>
@@ -4894,7 +4951,9 @@ function atualizarVisibilidadeBotoesVencidosAtendidos() {
     if (!container) return;
 
     const role = window.userRoleGlobal || '';
-    const podeVer = isGerenteOuSuperior(role);
+    const roleLower = role.toLowerCase();
+    const isFiscalPosturas = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
+    const podeVer = isGerenteOuSuperior(role) || isFiscalPosturas;
     const abaNPouAI = (subAbaAtual === '1.1' || subAbaAtual === '1.2');
 
     if (podeVer && abaNPouAI) {
@@ -5022,7 +5081,7 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
                 anexoHTML = `<button onclick="abrirAnexoGerente('${anexos[0]}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📎 Abrir</button>`;
             } else {
                 anexoHTML = anexos.map((url, i) =>
-                    `<button onclick="abrirAnexoGerente('${url}')" style="background:#10b981;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin:2px;">${i+1}</button>`
+                    `<button onclick="abrirAnexoGerente('${url}')" style="background:#10b981;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin:2px;">${i + 1}</button>`
                 ).join('');
             }
 
@@ -5103,13 +5162,13 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
                 </div>
             </div>
 
-            ${montarTabela(comAI, 'secao-com-ai', '#f59e0b', '⚠️ Vencidas com Auto de Infração vinculado', '#fffbeb')}
-            ${montarTabela(semAI, 'secao-sem-ai', '#dc2626', '🔴 Vencidas sem Auto de Infração', '#fef2f2')}
+            ${montarTabela(comAI, 'secao-com-ai', '#f59e0b', '⚠️ Notificações Preliminares vencidas com Auto de Infração vinculado', '#fffbeb')}
+            ${montarTabela(semAI, 'secao-sem-ai', '#dc2626', '🔴 Notificações Preliminares vencidas sem Auto de Infração', '#fef2f2')}
         </div>
     `;
 
     document.body.appendChild(modal);
-    modal.addEventListener('click', function(e) {
+    modal.addEventListener('click', function (e) {
         if (e.target === modal) modal.remove();
     });
     document.addEventListener('click', function fecharMenu(e) {
@@ -5125,6 +5184,18 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
     });
 }
 
+function usuarioDeveVerApenasSeusRegistros() {
+    const role = (window.userRoleGlobal || '').toLowerCase();
+    const isFiscalPosturas = role === 'fiscal' || (role.includes('fiscal') && role.includes('postura'));
+    return isFiscalPosturas && !isGerenteOuSuperior(window.userRoleGlobal);
+}
+
+function pertenceAoFiscalLogado(reg) {
+    const nomeFiscal = (reg.fiscal_nome || '').trim();
+    const nomeUsuario = (window.userNameGlobal || '').trim();
+    return nomeFiscal === nomeUsuario;
+}
+
 async function abrirModalVencidos() {
     if (!registrosGeralAtual || registrosGeralAtual.length === 0) {
         Swal.fire('Aviso', 'Nenhum registro carregado para análise.', 'info');
@@ -5133,8 +5204,9 @@ async function abrirModalVencidos() {
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
+    const filtrarPorFiscal = usuarioDeveVerApenasSeusRegistros();
 
-    const vencidos = registrosGeralAtual.filter(reg => {
+    let vencidos = registrosGeralAtual.filter(reg => {
         const venc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.trim() : '';
         if (!venc) return false;
         const partes = venc.split('-');
@@ -5142,7 +5214,9 @@ async function abrirModalVencidos() {
         const dtVenc = new Date(partes[0], partes[1] - 1, partes[2]);
         if (dtVenc >= hoje) return false;
         const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
-        return resp === '';
+        if (resp !== '') return false;
+        if (filtrarPorFiscal && !pertenceAoFiscalLogado(reg)) return false;
+        return true;
     });
 
     // Se for aba NP, verificar se há AIs vinculados às NPs vencidas
@@ -5188,9 +5262,13 @@ function abrirModalAtendidos() {
         return;
     }
 
+    const filtrarPorFiscal = usuarioDeveVerApenasSeusRegistros();
+
     const atendidos = registrosGeralAtual.filter(reg => {
         const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
-        return resp.toLowerCase().includes('atendido');
+        if (!resp.toLowerCase().includes('atendido')) return false;
+        if (filtrarPorFiscal && !pertenceAoFiscalLogado(reg)) return false;
+        return true;
     });
 
     const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
