@@ -960,6 +960,703 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         }
         return;
     }
+     
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 1°, 2° e 3°) - N° PROTOCOLO
+    // IDs internos: '2' (1°), '3' (2°) e '4' (3°)
+
+    const categoriasComProtocoloUnico = ['2', '3', '4'];
+
+    if (categoriasComProtocoloUnico.includes(categoriaAtual.id) && !modoEdicao) {
+        const nProtocoloNovo = campos.n_protocolo ? String(campos.n_protocolo).trim() : '';
+        
+        if (nProtocoloNovo !== '') {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verificação manual no JavaScript pelo N° de Protocolo
+                const jaExiste = historico.some(item => {
+                    const protocoloExistente = item.campos?.n_protocolo ? String(item.campos.n_protocolo).trim() : '';
+                    return protocoloExistente === nProtocoloNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Protocolo Duplicado!',
+                        text: `O N° de Protocolo ${nProtocoloNovo} já existe no histórico desta categoria e não pode ser repetido.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    // Reseta o estado para permitir nova tentativa após correção
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento no banco de dados
+                }
+            }
+        }
+    }
+ 
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 4°) - DATA DO SERVIÇO
+    // ID interno: '5' (4° - Serviços internos ou externos)
+
+    if (categoriaAtual.id === '5' && !modoEdicao) {
+        const dataServicoNova = campos.data_servico; // Valor da data capturado do formulário
+        
+        if (dataServicoNova) {
+            // Buscamos no banco todos os registros da categoria 4°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '5');
+
+            if (!erroBD && historico) {
+                // Verificação manual no JavaScript pela Data do Serviço
+                const jaExiste = historico.some(item => {
+                    return item.campos?.data_servico === dataServicoNova;
+                });
+
+                if (jaExiste) {
+                    // Converte a data para o formato brasileiro para exibir no alerta
+                    const dataFormatada = dataServicoNova.split('-').reverse().join('/');
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Data já registrada!',
+                        text: `Já existe um registro de serviço para o dia ${dataFormatada}. Não é possível duplicar registros na mesma data.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 5°) - RESPONSÁVEL + DATA + TURNO
+    // ID interno: '6' (5° - Prestação de serviço extraordinário)
+
+    if (categoriaAtual.id === '6' && !modoEdicao) {
+        const responsavelNovo = campos.responsavel ? String(campos.responsavel).trim().toLowerCase() : '';
+        const dataNova = campos.data; 
+        const tipoNovo = campos.tipo; // Captura se é 'Diurno' ou 'Noturno'
+        
+        if (responsavelNovo !== '' && dataNova && tipoNovo) {
+            // Buscamos no banco todos os registros da categoria 5°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '6');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO responsável, na MESMA data, com o MESMO turno
+                const jaExiste = historico.some(item => {
+                    const respExistente = item.campos?.responsavel ? String(item.campos.responsavel).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    const tipoExistente = item.campos?.tipo;
+                    
+                    return respExistente === responsavelNovo && 
+                           dataExistente === dataNova && 
+                           tipoExistente === tipoNovo;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Turno já registrado!',
+                        text: `O responsável "${campos.responsavel}" já possui um registro ${tipoNovo} para o dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 6°) - TIPO + N°
+    // ID interno: '7' (6° - Elaboração de Certidão e Relatório)
+
+    if (categoriaAtual.id === '7' && !modoEdicao) {
+        const tipoNovo = campos.tipo; // 'Certidão de Arquivamento' ou 'Relatório Fiscal'
+        const nNovo = campos.descricao ? String(campos.descricao).trim() : '';
+        
+        if (tipoNovo && nNovo !== '') {
+            // Buscamos no banco todos os registros da categoria 6°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '7');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO N° para o MESMO Tipo
+                const jaExiste = historico.some(item => {
+                    const tipoExistente = item.campos?.tipo;
+                    const nExistente = item.campos?.descricao ? String(item.campos.descricao).trim() : '';
+                    return tipoExistente === tipoNovo && nExistente === nNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Documento já existe!',
+                        text: `O ${tipoNovo} de N° ${nNovo} já foi cadastrado no histórico.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 7°) - N° DO OFÍCIO
+    // ID interno: '8' (7° - Elaboração de Ofícios)
+
+    if (categoriaAtual.id === '8' && !modoEdicao) {
+        const nOficioNovo = campos.n_oficio ? String(campos.n_oficio).trim() : '';
+        
+        if (nOficioNovo !== '') {
+            // Buscamos no banco todos os registros da categoria 7°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '8');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO N° de Ofício
+                const jaExiste = historico.some(item => {
+                    const nOficioExistente = item.campos?.n_oficio ? String(item.campos.n_oficio).trim() : '';
+                    return nOficioExistente === nOficioNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Ofício já cadastrado!',
+                        text: `O Ofício N° ${nOficioNovo} já existe no histórico desta categoria.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 8°, 9°, 11° e 12°) - N° PROCESSO
+    // IDs internos corretos: 
+    // '9'  (8° - Por Processos via protocolo municipal...)
+    // '10' (9° - Processos de Alvarás de Localização...)
+    // '12' (11° - Processos via UAI...)
+    // '13' (12° - Processos respondidos...)
+
+    const categoriasComProcessoUnico = ['9', '10', '12', '13'];
+
+    if (categoriasComProcessoUnico.includes(categoriaAtual.id) && !modoEdicao) {
+        const nProcessoNovo = campos.n_processo ? String(campos.n_processo).trim() : '';
+        
+        if (nProcessoNovo !== '') {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verificação manual no JavaScript pelo N° do Processo
+                const jaExiste = historico.some(item => {
+                    const processoExistente = item.campos?.n_processo ? String(item.campos.n_processo).trim() : '';
+                    return processoExistente === nProcessoNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Processo já cadastrado!',
+                        text: `O Processo N° ${nProcessoNovo} já existe no histórico desta categoria e não pode ser repetido.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 13° e 14°) - N° NOTIFICAÇÃO
+    // IDs internos: '14' (13°) e '15' (14°)
+
+    const categoriasComNotificacaoUnica = ['14', '15'];
+
+    if (categoriasComNotificacaoUnica.includes(categoriaAtual.id) && !modoEdicao) {
+        const nNotificacaoNova = campos.n_notificacao ? String(campos.n_notificacao).trim() : '';
+        
+        if (nNotificacaoNova !== '') {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verificação manual no JavaScript pelo N° da Notificação
+                const jaExiste = historico.some(item => {
+                    const notificacaoExistente = item.campos?.n_notificacao ? String(item.campos.n_notificacao).trim() : '';
+                    return notificacaoExistente === nNotificacaoNova;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Notificação já cadastrada!',
+                        text: `A Notificação N° ${nNotificacaoNova} já existe no histórico desta categoria e não pode ser repetida.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 15°) - N° DO AUTO
+    // ID interno: '16' (15° - Autos de Infração expedidos)
+
+    if (categoriaAtual.id === '16' && !modoEdicao) {
+        const nAutoNovo = campos.n_auto ? String(campos.n_auto).trim() : '';
+        
+        if (nAutoNovo !== '') {
+            // Buscamos no banco todos os registros da categoria 15°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '16');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO N° de Auto
+                const jaExiste = historico.some(item => {
+                    const nAutoExistente = item.campos?.n_auto ? String(item.campos.n_auto).trim() : '';
+                    return nAutoExistente === nAutoNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Auto de Infração já cadastrado!',
+                        text: `O Auto de Infração N° ${nAutoNovo} já existe no histórico desta categoria.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 17°) - ENDEREÇO + DATA
+    // ID interno: '17' (Informação à Fiscalização de Obras...)
+
+    if (categoriaAtual.id === '17' && !modoEdicao) {
+        const enderecoNovo = campos.endereco ? String(campos.endereco).trim().toLowerCase() : '';
+        const dataNova = campos.data;
+        
+        if (enderecoNovo !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria 17°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '17');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO endereço na MESMA data
+                const jaExiste = historico.some(item => {
+                    const enderecoExistente = item.campos?.endereco ? String(item.campos.endereco).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    return enderecoExistente === enderecoNovo && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Endereço já registrado!',
+                        text: `Já existe uma informação de obra para o endereço "${campos.endereco}" no dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 18°) - LOCAL + DATA
+    // ID interno correto: '18' (18° - Vistoria de Rotina no Camelódromo...)
+
+    if (categoriaAtual.id === '18' && !modoEdicao) {
+        const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
+        const dataNova = campos.data;
+        
+        if (localNovo !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria 18°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '18');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO local na MESMA data
+                const jaExiste = historico.some(item => {
+                    const localExistente = item.campos?.local ? String(item.campos.local).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    return localExistente === localNovo && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Local já registrado!',
+                        text: `Já existe uma vistoria registrada para o local "${campos.local}" no dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 18, 20, 21 e 22) - LOCAL + DATA
+    // IDs internos: '18', '20', '21', '22'
+
+    const categoriasComLocalUnico = ['18', '20', '21', '22'];
+
+    if (categoriasComLocalUnico.includes(categoriaAtual.id) && !modoEdicao) {
+        const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
+        const dataNova = campos.data;
+        
+        if (localNovo !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO local na MESMA data
+                const jaExiste = historico.some(item => {
+                    const localExistente = item.campos?.local ? String(item.campos.local).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    return localExistente === localNovo && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Local já registrado!',
+                        text: `Já existe um registro para o local "${campos.local}" no dia ${dataFormatada} nesta categoria.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 23°) - LOCAL + ESPÉCIE + DATA
+    // ID interno: '23' (Apreensão de mercadorias...)
+
+    if (categoriaAtual.id === '23' && !modoEdicao) {
+        const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
+        const especieNova = campos.especie ? String(campos.especie).trim().toLowerCase() : '';
+        const dataNova = campos.data;
+        
+        if (localNovo !== '' && especieNova !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria 23°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '23');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO local, MESMA espécie na MESMA data
+                const jaExiste = historico.some(item => {
+                    const localExistente = item.campos?.local ? String(item.campos.local).trim().toLowerCase() : '';
+                    const especieExistente = item.campos?.especie ? String(item.campos.especie).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    
+                    return localExistente === localNovo && 
+                           especieExistente === especieNova && 
+                           dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Apreensão já registrada!',
+                        text: `Já existe um registro para a mercadoria "${campos.especie}" no local "${campos.local}" no dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+   
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 24° e 25°) - ESTABELECIMENTO + DATA
+    // IDs internos: '24' e '25'
+
+    const categoriasInterdicao = ['24', '25'];
+
+    if (categoriasInterdicao.includes(categoriaAtual.id) && !modoEdicao) {
+        const estabelecimentoNovo = campos.estabelecimento ? String(campos.estabelecimento).trim().toLowerCase() : '';
+        const dataNova = campos.data;
+        
+        if (estabelecimentoNovo !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO estabelecimento na MESMA data
+                const jaExiste = historico.some(item => {
+                    const estExistente = item.campos?.estabelecimento ? String(item.campos.estabelecimento).trim().toLowerCase() : '';
+                    const dataExistente = item.campos?.data;
+                    return estExistente === estabelecimentoNovo && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Registro já existe!',
+                        text: `Já existe um registro para o estabelecimento "${campos.estabelecimento}" no dia ${dataFormatada} nesta categoria.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 26°) - N° ALVARÁ + DATA
+    // ID interno: '26' (Cassação de Alvarás...)
+
+    if (categoriaAtual.id === '26' && !modoEdicao) {
+        const nAlvaraNovo = campos.n_alvara ? String(campos.n_alvara).trim() : '';
+        const dataNova = campos.data;
+        
+        if (nAlvaraNovo !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria 26°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '26');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO N° de Alvará na MESMA data
+                const jaExiste = historico.some(item => {
+                    const alvaraExistente = item.campos?.n_alvara ? String(item.campos.n_alvara).trim() : '';
+                    const dataExistente = item.campos?.data;
+                    return alvaraExistente === nAlvaraNovo && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Alvará já registrado!',
+                        text: `Já existe um registro para o Alvará N° ${nAlvaraNovo} no dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+    
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 27°) - N° LICENÇA + DATA
+    // ID interno: '27' (Cassação de Licenças...)
+
+    if (categoriaAtual.id === '27' && !modoEdicao) {
+        const nLicencaNova = campos.n_licenca ? String(campos.n_licenca).trim() : '';
+        const dataNova = campos.data;
+        
+        if (nLicencaNova !== '' && dataNova) {
+            // Buscamos no banco todos os registros da categoria 27°
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', '27');
+
+            if (!erroBD && historico) {
+                // Verifica se já existe o MESMO N° de Licença na MESMA data
+                const jaExiste = historico.some(item => {
+                    const licencaExistente = item.campos?.n_licenca ? String(item.campos.n_licenca).trim() : '';
+                    const dataExistente = item.campos?.data;
+                    return licencaExistente === nLicencaNova && dataExistente === dataNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Licença já registrada!',
+                        text: `Já existe um registro para a Licença N° ${nLicencaNova} no dia ${dataFormatada}.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 28°, 29° e 30°) - DATA + DURAÇÃO
+    // IDs internos: '28', '29', '30'
+    
+    const categoriasPorDataDuracao = ['28', '29', '30'];
+
+    if (categoriasPorDataDuracao.includes(categoriaAtual.id) && !modoEdicao) {
+        const dataNova = campos.data;
+        const duracaoNova = campos.duracao;
+        
+        if (dataNova && duracaoNova) {
+            // Buscamos no banco todos os registros da categoria atual
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('registros_produtividade')
+                .select('campos')
+                .eq('categoria_id', categoriaAtual.id);
+
+            if (!erroBD && historico) {
+                // Verifica se já existe um registro para a MESMA data E MESMA duração
+                const jaExiste = historico.some(item => {
+                    return item.campos?.data === dataNova && item.campos?.duracao == duracaoNova;
+                });
+
+                if (jaExiste) {
+                    const dataFormatada = dataNova.split('-').reverse().join('/');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Registro duplicado!',
+                        text: `Já existe um registro com duração de ${duracaoNova}h para o dia ${dataFormatada} nesta categoria.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+    // ============================================================
 
     // Campo especial: data registrada manual (categoria 1.1, primeiros 7 dias)
     let dataRegistradaManual = null;
