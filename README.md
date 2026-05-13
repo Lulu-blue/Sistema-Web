@@ -1272,3 +1272,30 @@ SEMAC/
 - Antes, o uso de `else if` fazia registros com múltiplos status (ex: Atendido + Com Histórico) serem contados apenas na primeira categoria.
 - Agora um registro pode incrementar **uma, duas ou três barras simultaneamente**, refletindo a real situação das pendências.
 - Delay de renderização do Chart.js aumentado de 50ms para 150ms para maior estabilidade visual.
+
+## 🛡️ Atualizações Recentes (13/05/2026) — Sistema de Prevenção de Duplicidade
+
+### 🚫 Bloqueio Inteligente de Registros Duplicados
+- **Validação Global e em Tempo Real**: Implementação de uma camada de segurança na função `salvarRegistro` que consulta o histórico do banco de dados antes de permitir a inserção de novos dados.
+- **Integridade por Categoria**: O sistema agora identifica automaticamente a regra de unicidade específica para cada tipo de serviço, impedindo lançamentos repetidos que gerariam pontuação indevida.
+- **Feedback Imediato com SweetAlert2**: Caso uma duplicidade seja detectada, o sistema interrompe o salvamento e exibe um alerta vermelho detalhando o motivo do bloqueio (ex: Protocolo já existente, Turno já ocupado, ou Data já registrada).
+
+### 📋 Regras de Unicidade Aplicadas
+| Categorias | Critério de Bloqueio (O que não pode repetir) |
+| :--- | :--- |
+| **1°, 2° e 3°** | **N° de Protocolo** (Unicidade global por categoria) |
+| **4°, 28°, 29° e 30°** | **Data e Duração** (Evita duplicar horas no mesmo dia) |
+| **5° (Serv. Extraordinário)** | **Responsável + Data + Turno** (Diurno/Noturno) |
+| **6° (Certidão/Relatório)** | **Tipo de Documento + N° de Descrição** |
+| **7° (Ofícios)** | **N° do Ofício** |
+| **8°, 9°, 11° e 12°** | **N° do Processo** |
+| **13° e 14° (Notificações)** | **N° da Notificação** |
+| **15° (Autos)** | **N° do Auto de Infração** |
+| **17°, 18°, 20°, 21° e 22°** | **Local/Endereço + Data** |
+| **23° (Apreensões)** | **Local + Espécie de Mercadoria + Data** |
+| **24° e 25° (Interdições)** | **Nome do Estabelecimento + Data** |
+| **26° e 27° (Alvarás/Licenças)** | **N° do Documento + Data** |
+
+### 🔧 Inteligência de Edição
+- **Modo Edição Preservado**: O sistema detecta automaticamente quando o usuário está apenas corrigindo um registro existente (`modoEdicao`), permitindo o salvamento sem disparar o bloqueio de duplicidade contra o próprio registro.
+- **Tratamento de Texto**: Implementação de normalização (`trim` e `toLowerCase`) para garantir que espaços extras ou variações entre maiúsculas e minúsculas não burlem a segurança.
