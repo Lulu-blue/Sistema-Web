@@ -1414,4 +1414,26 @@ SEMAC/
   - Documentação de campos opcionais por tipo de demanda
 
 ---
+## 🆕 Atualizações Recentes (15/05/2026) — Validações no Controle Processual (16.x)
 
+### 🛡️ Novas Camadas de Segurança Contra Duplicidade
+- Implementadas validações inteligentes específicas para categorias do módulo **Controle Processual (16.x)**.
+- O sistema agora verifica automaticamente o histórico pessoal do usuário antes de permitir novos cadastros duplicados.
+- As consultas foram otimizadas para manter o carregamento rápido e sem travamentos na interface.
+- Em caso de bloqueio, o botão de salvamento é restaurado automaticamente para evitar congelamentos no modal.
+
+### 📋 Regras de Unicidade Adicionadas
+| Categoria | Critério de Bloqueio |
+| :--- | :--- |
+| **16.1 — Notificação Preliminar** | **N° da Notificação** |
+| **16.3 — Aviso de Recebimento (AR)** | **N° do AR** |
+| **16.6 — Protocolo** | **N° do Protocolo** |
+
+### ⚙️ Comportamento da Validação
+- A verificação ocorre apenas durante novos cadastros (`!modoEdicao`).
+- A busca considera apenas registros pertencentes ao usuário autenticado (`user_id`).
+- O sistema utiliza comparação normalizada (`trim`) para evitar duplicidades com espaços extras.
+- Em caso de duplicidade:
+  - o salvamento é interrompido;
+  - um alerta visual via SweetAlert2 é exibido;
+  - o botão "Salvar" é reativado automaticamente.
