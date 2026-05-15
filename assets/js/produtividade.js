@@ -1661,6 +1661,162 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     }
     // ============================================================
 
+    // ============================================================
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.1) - N° NOTIFICAÇÃO
+    // ============================================================
+    // ID interno: '1.1' (16.1 - Controle Processual: Notificação Preliminar)
+    if (categoriaAtual.id === '1.1' && !modoEdicao) {
+        // Garante que o objeto 'user' esteja disponível antes de qualquer validação que o utilize
+        const { data: { user } } = await getAuthUser();
+        if (!user) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Sessão Expirada!',
+                text: 'Sua sessão expirou. Por favor, faça login novamente.',
+                confirmButtonColor: '#ef4444'
+            });
+            salvando = false;
+            const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+            if (btnSalvarLocal) {
+                btnSalvarLocal.textContent = 'Salvar';
+                btnSalvarLocal.disabled = false;
+            }
+            return; // BLOQUEIO: Impede o salvamento se o usuário não estiver logado
+        }
+
+        const nNotificacaoNovo = campos.n_notificacao ? String(campos.n_notificacao).trim() : '';
+        
+        if (nNotificacaoNovo !== '') {
+            // Buscamos na tabela CORRETA (controle_processual) filtrando por categoria e user_id
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('controle_processual')
+                .select('campos')
+                .eq('categoria_id', '1.1')
+                .eq('user_id', user.id); // Filtra apenas os registros do usuário logado
+
+            if (!erroBD && historico) {
+                const jaExiste = historico.some(item => {
+                    const notificacaoExistente = item.campos?.n_notificacao ? String(item.campos.n_notificacao).trim() : '';
+                    return notificacaoExistente === nNotificacaoNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Notificação já cadastrada!',
+                        text: `A Notificação N° ${nNotificacaoNovo} já existe no seu histórico pessoal.`, 
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO: Impede o salvamento
+                }
+            }
+        }
+    }
+ 
+        // ============================================================
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.3) - N° DO AR
+    // ============================================================
+    // ID interno: '1.3' (16.3 - Controle Processual: Aviso de Recebimento (AR))
+    if (categoriaAtual.id === '1.3' && !modoEdicao) {
+        // Garantimos o usuário logado
+        const { data: { user } } = await getAuthUser();
+        if (!user) {
+            salvando = false;
+            return; 
+        }
+
+        const nARNovo = campos.n_ar ? String(campos.n_ar).trim() : '';
+        
+        if (nARNovo !== '') {
+            // Buscamos na tabela controle_processual apenas os registros do usuário para esta categoria
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('controle_processual')
+                .select('campos')
+                .eq('categoria_id', '1.3')
+                .eq('user_id', user.id);
+
+            if (!erroBD && historico) {
+                const jaExiste = historico.some(item => {
+                    const arExistente = item.campos?.n_ar ? String(item.campos.n_ar).trim() : '';
+                    return arExistente === nARNovo;
+                });
+
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'AR já cadastrado!',
+                        text: `O Aviso de Recebimento N° ${nARNovo} já consta no seu histórico pessoal.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+                    
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO
+                }
+            }
+        }
+    }
+
+    // ============================================================
+// VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.6) - N° DO PROTOCOLO
+// ============================================================
+// ID interno: '1.6' (16.6 - Controle Processual: Protocolo)
+if (categoriaAtual.id === '1.6' && !modoEdicao) {
+    const { data: { user } } = await getAuthUser();
+    if (!user) {
+        salvando = false;
+        return;
+    }
+
+    const nProtocoloNovo = campos.n_protocolo ? String(campos.n_protocolo).trim() : '';
+
+    if (nProtocoloNovo !== '') {
+        const { data: historico, error: erroBD } = await supabaseClient
+            .from('controle_processual')
+            .select('campos')
+            .eq('categoria_id', '1.6')
+            .eq('user_id', user.id);
+
+        if (!erroBD && historico) {
+            const jaExiste = historico.some(item => {
+                const protocoloExistente = item.campos?.n_protocolo 
+                    ? String(item.campos.n_protocolo).trim() 
+                    : '';
+                return protocoloExistente === nProtocoloNovo;
+            });
+
+            if (jaExiste) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Protocolo já cadastrado!',
+                    text: `O Protocolo N° ${nProtocoloNovo} já consta no seu histórico pessoal.`,
+                    confirmButtonColor: '#ef4444'
+                });
+
+                salvando = false;
+                const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                if (btnSalvarLocal) {
+                    btnSalvarLocal.textContent = 'Salvar';
+                    btnSalvarLocal.disabled = false;
+                }
+                return; // BLOQUEIO
+            }
+        }
+    }
+}
+
+    
     // Campo especial: data registrada manual (categoria 1.1, primeiros 7 dias)
     let dataRegistradaManual = null;
     if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
@@ -1673,6 +1829,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     // 2. Obter usuário logado
     const { data: { user } } = await getAuthUser();
     if (!user) {
+        
         alert('Sessão expirada! Faça login novamente.');
         salvando = false;
         window.location.href = 'index.html';
