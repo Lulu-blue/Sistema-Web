@@ -300,10 +300,17 @@ const CATEGORIAS = [
         nome: 'Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa',
         pontos: 100,
         destaque: true,
-        campos: [
-            { nome: 'n_auto', label: 'N° do Auto de Infração', tipo: 'text', obrigatorio: true },
-            { nome: 'data', label: 'Data', tipo: 'date', obrigatorio: true }
-        ]
+        campos: [           
+    { nome: 'n_auto', label: 'N° do Auto de Infração', tipo: 'text', obrigatorio: true },
+
+    { nome: 'nome', label: 'Nome do Autuado', tipo: 'text', obrigatorio: true },
+
+    { nome: 'cpf', label: 'CPF do Autuado', tipo: 'text', obrigatorio: false },
+
+    { nome: 'advogado', label: 'Advogado', tipo: 'text', obrigatorio: false },
+
+]
+        
     },
     {
         id: '12',
@@ -4787,7 +4794,7 @@ async function abrirEditorAutoInfracao() {
         
         <p style="margin-top: 20px; line-height: 1.5;">
             <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}<br>
-            <strong>CPF/CNPJ:</strong> ${campos.cpf_contribuinte || '_________________'}
+            <strong>CPF/CNPJ:</strong> ${campo || '_________________'}
         </p>
         <p>
             <strong>Endereço:</strong> ${campos.endereco_infrator || '---'}
@@ -5441,38 +5448,38 @@ async function abrirEditorDividaAtiva() {
 
         const imgBase64 = await obterBase64Cabecalho();
 
-        const htmlTemplate = `
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
-            <tr>
-                <td align="center">
-                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
-                </td>
-            </tr>
-        </table>
-        
-        <div style="text-align: center; margin-bottom: 25px;">
-            <p style="font-weight: bold; font-size: 14pt; margin: 10px 0;">FISCALIZAÇÃO DE POSTURAS AMBIENTAL</p>
-            <p style="font-weight: bold; font-size: 16pt; margin: 15px 0;">PROCESSO DE DÍVIDA ATIVA Nº ${numSequencial}</p>
-        </div>
-        
-        <p style="margin-top: 20px; line-height: 1.5;">
-            <strong>Auto de Infração de Referência:</strong> ${campos.n_auto}<br>
-            <strong>Data do Processo:</strong> ${dataFormatada}
-        </p>
+    const htmlTemplate = `
+    <table width="100%" border="1" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12pt; margin-top: 25px;">
+        <tr>
+            <td align="center" style="height: 70px; padding: 8px;">
+                <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+            </td>
+        </tr>
 
-        <p style="text-indent: 30px; margin-top: 20px; line-height: 1.5;">
-            Processo de encaminhamento para inscrição em dívida ativa referente ao Auto de Infração nº ${campos.n_auto}, 
-            conforme determinação legal vigente.
-        </p>
+        <tr>
+            <td style="text-align: center; font-weight: bold; font-size: 13pt; line-height: 1.5; padding: 18px;">
+                PROCESSO ADMINISTRATIVO - SEMAC<br>
+                Nº: ${numSequencial}
+            </td>
+        </tr>
 
-        <div style="margin-top: 60px; text-align: center;">
-            <p style="margin: 0;">_________________________________________</p>
-            <p style="margin: 5px 0 0 0;"><strong>${nomeFiscal}</strong></p>
-            <p style="margin: 2px 0 0 0;">Fiscalização de Posturas</p>
-            <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
-        </div>
-    `;
+        <tr>
+            <td style="line-height: 1.5; padding: 10px;">
+                <strong>Autuado(a):</strong> ${campos.nome || ''}
+                <strong>cpf/cnpj:</strong> ${campos.cpf || '_________________'}<br>
+                <strong>Advogado:</strong> ${campos.advogado || 'Não Apresentou'}</strong><br>
+                <strong>Assunto:</strong> ${campos.n_auto || ''}
+            </td>
+        </tr>
 
+        <tr>
+            <td style="padding: 10px; font-weight: bold;">
+                Data de Geração: ${new Date().toLocaleDateString('pt-BR')}<br>
+                Agente Fiscal Responsável: ${nomeFiscal} - Matrícula: ${matriculaFiscal}
+            </td>
+        </tr>
+    </table>
+`;
         const editor = document.getElementById('editor-texto');
         editor.innerHTML = htmlTemplate;
 
