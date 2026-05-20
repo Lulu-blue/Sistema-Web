@@ -146,6 +146,7 @@ const CATEGORIAS = [
         destaque: true,
         campos: [
             { nome: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
+            { nome: 'cpf_contribuinte', label: 'CPF / CNPJ', tipo: 'text', obrigatorio: false },
             { nome: 'assunto', label: 'Assunto', tipo: 'text', obrigatorio: true }
         ]
     },
@@ -189,9 +190,7 @@ const CATEGORIAS = [
         campos: [
             { nome: 'nome', label: 'Nome do Autuado', tipo: 'text', obrigatorio: true },
             { nome: 'cpf', label: 'CPF', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'rua', label: 'Rua de correspondência', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'numero', label: 'Nº', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
-            { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
+            { nome: 'endereco_autuado', label: 'Endereço do Autuado', tipo: 'text', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'digitado', label: 'Referente ao', tipo: 'textarea', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_ciencia', label: 'Data da Ciência', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
@@ -963,7 +962,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         }
         return;
     }
-     
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 1°, 2° e 3°) - N° PROTOCOLO
     // IDs internos: '2' (1°), '3' (2°) e '4' (3°)
 
@@ -971,7 +970,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     if (categoriasComProtocoloUnico.includes(categoriaAtual.id) && !modoEdicao) {
         const nProtocoloNovo = campos.n_protocolo ? String(campos.n_protocolo).trim() : '';
-        
+
         if (nProtocoloNovo !== '') {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -993,7 +992,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O N° de Protocolo ${nProtocoloNovo} já existe no histórico desta categoria e não pode ser repetido.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     // Reseta o estado para permitir nova tentativa após correção
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
@@ -1006,13 +1005,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
- 
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 4°) - DATA DO SERVIÇO
     // ID interno: '5' (4° - Serviços internos ou externos)
 
     if (categoriaAtual.id === '5' && !modoEdicao) {
         const dataServicoNova = campos.data_servico; // Valor da data capturado do formulário
-        
+
         if (dataServicoNova) {
             // Buscamos no banco todos os registros da categoria 4°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1029,14 +1028,14 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 if (jaExiste) {
                     // Converte a data para o formato brasileiro para exibir no alerta
                     const dataFormatada = dataServicoNova.split('-').reverse().join('/');
-                    
+
                     Swal.fire({
                         icon: 'error',
                         title: 'Data já registrada!',
                         text: `Já existe um registro de serviço para o dia ${dataFormatada}. Não é possível duplicar registros na mesma data.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1048,15 +1047,15 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 5°) - RESPONSÁVEL + DATA + TURNO
     // ID interno: '6' (5° - Prestação de serviço extraordinário)
 
     if (categoriaAtual.id === '6' && !modoEdicao) {
         const responsavelNovo = campos.responsavel ? String(campos.responsavel).trim().toLowerCase() : '';
-        const dataNova = campos.data; 
+        const dataNova = campos.data;
         const tipoNovo = campos.tipo; // Captura se é 'Diurno' ou 'Noturno'
-        
+
         if (responsavelNovo !== '' && dataNova && tipoNovo) {
             // Buscamos no banco todos os registros da categoria 5°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1070,10 +1069,10 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     const respExistente = item.campos?.responsavel ? String(item.campos.responsavel).trim().toLowerCase() : '';
                     const dataExistente = item.campos?.data;
                     const tipoExistente = item.campos?.tipo;
-                    
-                    return respExistente === responsavelNovo && 
-                           dataExistente === dataNova && 
-                           tipoExistente === tipoNovo;
+
+                    return respExistente === responsavelNovo &&
+                        dataExistente === dataNova &&
+                        tipoExistente === tipoNovo;
                 });
 
                 if (jaExiste) {
@@ -1084,7 +1083,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O responsável "${campos.responsavel}" já possui um registro ${tipoNovo} para o dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1096,14 +1095,14 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 6°) - TIPO + N°
     // ID interno: '7' (6° - Elaboração de Certidão e Relatório)
 
     if (categoriaAtual.id === '7' && !modoEdicao) {
         const tipoNovo = campos.tipo; // 'Certidão de Arquivamento' ou 'Relatório Fiscal'
         const nNovo = campos.descricao ? String(campos.descricao).trim() : '';
-        
+
         if (tipoNovo && nNovo !== '') {
             // Buscamos no banco todos os registros da categoria 6°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1126,7 +1125,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O ${tipoNovo} de N° ${nNovo} já foi cadastrado no histórico.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1144,7 +1143,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     if (categoriaAtual.id === '8' && !modoEdicao) {
         const nOficioNovo = campos.n_oficio ? String(campos.n_oficio).trim() : '';
-        
+
         if (nOficioNovo !== '') {
             // Buscamos no banco todos os registros da categoria 7°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1166,7 +1165,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O Ofício N° ${nOficioNovo} já existe no histórico desta categoria.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1178,7 +1177,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 8°, 9°, 11° e 12°) - N° PROCESSO
     // IDs internos corretos: 
     // '9'  (8° - Por Processos via protocolo municipal...)
@@ -1190,7 +1189,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     if (categoriasComProcessoUnico.includes(categoriaAtual.id) && !modoEdicao) {
         const nProcessoNovo = campos.n_processo ? String(campos.n_processo).trim() : '';
-        
+
         if (nProcessoNovo !== '') {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1212,7 +1211,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O Processo N° ${nProcessoNovo} já existe no histórico desta categoria e não pode ser repetido.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1232,7 +1231,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     if (categoriasComNotificacaoUnica.includes(categoriaAtual.id) && !modoEdicao) {
         const nNotificacaoNova = campos.n_notificacao ? String(campos.n_notificacao).trim() : '';
-        
+
         if (nNotificacaoNova !== '') {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1254,7 +1253,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `A Notificação N° ${nNotificacaoNova} já existe no histórico desta categoria e não pode ser repetida.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1266,13 +1265,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 15°) - N° DO AUTO
     // ID interno: '16' (15° - Autos de Infração expedidos)
 
     if (categoriaAtual.id === '16' && !modoEdicao) {
         const nAutoNovo = campos.n_auto ? String(campos.n_auto).trim() : '';
-        
+
         if (nAutoNovo !== '') {
             // Buscamos no banco todos os registros da categoria 15°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1294,7 +1293,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O Auto de Infração N° ${nAutoNovo} já existe no histórico desta categoria.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1306,14 +1305,14 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 17°) - ENDEREÇO + DATA
     // ID interno: '17' (Informação à Fiscalização de Obras...)
 
     if (categoriaAtual.id === '17' && !modoEdicao) {
         const enderecoNovo = campos.endereco ? String(campos.endereco).trim().toLowerCase() : '';
         const dataNova = campos.data;
-        
+
         if (enderecoNovo !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria 17°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1337,7 +1336,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe uma informação de obra para o endereço "${campos.endereco}" no dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1356,7 +1355,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (categoriaAtual.id === '18' && !modoEdicao) {
         const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
         const dataNova = campos.data;
-        
+
         if (localNovo !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria 18°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1380,7 +1379,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe uma vistoria registrada para o local "${campos.local}" no dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1401,7 +1400,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (categoriasComLocalUnico.includes(categoriaAtual.id) && !modoEdicao) {
         const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
         const dataNova = campos.data;
-        
+
         if (localNovo !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1425,7 +1424,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro para o local "${campos.local}" no dia ${dataFormatada} nesta categoria.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1445,7 +1444,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
         const especieNova = campos.especie ? String(campos.especie).trim().toLowerCase() : '';
         const dataNova = campos.data;
-        
+
         if (localNovo !== '' && especieNova !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria 23°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1459,10 +1458,10 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     const localExistente = item.campos?.local ? String(item.campos.local).trim().toLowerCase() : '';
                     const especieExistente = item.campos?.especie ? String(item.campos.especie).trim().toLowerCase() : '';
                     const dataExistente = item.campos?.data;
-                    
-                    return localExistente === localNovo && 
-                           especieExistente === especieNova && 
-                           dataExistente === dataNova;
+
+                    return localExistente === localNovo &&
+                        especieExistente === especieNova &&
+                        dataExistente === dataNova;
                 });
 
                 if (jaExiste) {
@@ -1473,7 +1472,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro para a mercadoria "${campos.especie}" no local "${campos.local}" no dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1485,7 +1484,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-   
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 24° e 25°) - ESTABELECIMENTO + DATA
     // IDs internos: '24' e '25'
 
@@ -1494,7 +1493,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (categoriasInterdicao.includes(categoriaAtual.id) && !modoEdicao) {
         const estabelecimentoNovo = campos.estabelecimento ? String(campos.estabelecimento).trim().toLowerCase() : '';
         const dataNova = campos.data;
-        
+
         if (estabelecimentoNovo !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1518,7 +1517,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro para o estabelecimento "${campos.estabelecimento}" no dia ${dataFormatada} nesta categoria.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1537,7 +1536,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (categoriaAtual.id === '26' && !modoEdicao) {
         const nAlvaraNovo = campos.n_alvara ? String(campos.n_alvara).trim() : '';
         const dataNova = campos.data;
-        
+
         if (nAlvaraNovo !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria 26°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1561,7 +1560,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro para o Alvará N° ${nAlvaraNovo} no dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1573,14 +1572,14 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
-    
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 27°) - N° LICENÇA + DATA
     // ID interno: '27' (Cassação de Licenças...)
 
     if (categoriaAtual.id === '27' && !modoEdicao) {
         const nLicencaNova = campos.n_licenca ? String(campos.n_licenca).trim() : '';
         const dataNova = campos.data;
-        
+
         if (nLicencaNova !== '' && dataNova) {
             // Buscamos no banco todos os registros da categoria 27°
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1604,7 +1603,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro para a Licença N° ${nLicencaNova} no dia ${dataFormatada}.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1619,13 +1618,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 28°, 29° e 30°) - DATA + DURAÇÃO
     // IDs internos: '28', '29', '30'
-    
+
     const categoriasPorDataDuracao = ['28', '29', '30'];
 
     if (categoriasPorDataDuracao.includes(categoriaAtual.id) && !modoEdicao) {
         const dataNova = campos.data;
         const duracaoNova = campos.duracao;
-        
+
         if (dataNova && duracaoNova) {
             // Buscamos no banco todos os registros da categoria atual
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1647,7 +1646,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `Já existe um registro com duração de ${duracaoNova}h para o dia ${dataFormatada} nesta categoria.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -2426,6 +2425,17 @@ async function excluirRegistro() {
 
     try {
         const tabela = registroSelecionado._tabela || 'registros_produtividade';
+
+        // Devolver número sequencial se existir (AI, Dívida Ativa, Ofício, etc)
+        if (registroSelecionado.numero_sequencial && registroSelecionado.categoria_id) {
+            const anoReg = new Date(registroSelecionado.created_at || Date.now()).getFullYear();
+            await supabaseClient.rpc('devolver_numero_sequencial', {
+                p_numero: registroSelecionado.numero_sequencial.toString(),
+                p_categoria_id: registroSelecionado.categoria_id.toString(),
+                p_ano: anoReg
+            });
+        }
+
         const { error } = await supabaseClient
             .from(tabela)
             .delete()
@@ -2685,22 +2695,30 @@ async function carregarHistoricoGeral(categoriaId) {
         todosOsRegistros = primeiroBloco || [];
 
         // Renderização parcial (Feedback rápido)
-        renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} / ${totalEncontrado})`);
+        renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} registros)`);
 
-        // Busca o restante se houver
-        while (todosOsRegistros.length < totalEncontrado) {
+        // Busca o restante se houver (enquanto a página vier cheia)
+        let temMaisPaginas = primeiroBloco && primeiroBloco.length === tamanhoPagina;
+        while (temMaisPaginas) {
             contadorOffset += tamanhoPagina;
             const { data: proximoBloco, error: proximoErro } = await query.range(contadorOffset, contadorOffset + tamanhoPagina - 1);
 
             if (proximoErro) throw proximoErro;
             if (buscaIdLocal !== buscaIdGlobal) return; // Nova busca iniciada pelo usuário
 
-            if (!proximoBloco || proximoBloco.length === 0) break;
+            if (!proximoBloco || proximoBloco.length === 0) {
+                temMaisPaginas = false;
+                break;
+            }
 
             todosOsRegistros = todosOsRegistros.concat(proximoBloco);
 
+            if (proximoBloco.length < tamanhoPagina) {
+                temMaisPaginas = false;
+            }
+
             // Atualiza progresso na tela a cada bloco
-            renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} / ${totalEncontrado})`);
+            renderizarTabelaGeral(todosOsRegistros, categoriaId, `Carregando... (${todosOsRegistros.length} registros)`);
         }
     } catch (err) {
         console.error('Erro na busca limitless:', err);
@@ -2876,9 +2894,12 @@ function renderizarTd(conteudo, classe) {
 function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     const container = document.getElementById('historico-geral-lista');
     // Usar nova hierarquia de permissões: Gerente, Diretor e Secretário podem ver anexos
-    const podeVerAnexos = isGerenteOuSuperior(window.userRoleGlobal) ||
-        (window.userRoleGlobal || '').toLowerCase().includes('administrativo') ||
-        (window.userRoleGlobal || '').toLowerCase().includes('administrador');
+    const roleLower = (window.userRoleGlobal || '').toLowerCase();
+    const isFiscalPosturas = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
+    const isGerenteAdministrativo = isGerenteOuSuperior(window.userRoleGlobal) || roleLower.includes('administrativo') || roleLower.includes('administrador');
+
+    // Todos (Fiscais, Gerentes e Admins) podem ver a coluna
+    const podeVerAnexos = isGerenteAdministrativo || isFiscalPosturas;
 
     const inputFiscal = document.getElementById('busca-fiscal-geral');
     const termoFiscal = inputFiscal ? inputFiscal.value.trim() : '';
@@ -2905,9 +2926,9 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 }
             }
 
-            if (vResposta !== '') qtdVerde++;
+            if (vResposta.toLowerCase().includes('atendido')) qtdVerde++;
             if (vHistoricoInfo !== '') qtdVermelha++;
-            if (dtVencimentoVencida) qtdCinza++;
+            if (dtVencimentoVencida && vResposta === '') qtdCinza++;
         });
     }
 
@@ -2948,6 +2969,10 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
                             scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
                             plugins: { legend: { display: false } }
                         }
@@ -3034,11 +3059,20 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 const temAnexoAR = reg.campos && reg.campos.anexo_ar;
                 let anexoHTML = '';
 
-                if (temAnexo) {
-                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
-                }
-                if (temAnexoAR) {
-                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                const pertenceLogado = pertenceAoFiscalLogado(reg);
+                const temPermissaoAnexo = isGerenteAdministrativo || (isFiscalPosturas && pertenceLogado);
+
+                if (temPermissaoAnexo) {
+                    if (temAnexo) {
+                        anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
+                    }
+                    if (temAnexoAR) {
+                        anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                    }
+                } else {
+                    if (temAnexo || temAnexoAR) {
+                        anexoHTML = `<span title="Acesso restrito ao responsável" style="color:#cbd5e1;font-size:16px;cursor:help;">🔒</span>`;
+                    }
                 }
 
                 if (anexoHTML !== '') {
@@ -3156,11 +3190,20 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             const temAnexoAR = reg.campos && reg.campos.anexo_ar;
             let anexoHTML = '';
 
-            if (temAnexo) {
-                anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
-            }
-            if (temAnexoAR) {
-                anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+            const pertenceLogado = pertenceAoFiscalLogado(reg);
+            const temPermissaoAnexo = isGerenteAdministrativo || (isFiscalPosturas && pertenceLogado);
+
+            if (temPermissaoAnexo) {
+                if (temAnexo) {
+                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
+                }
+                if (temAnexoAR) {
+                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                }
+            } else {
+                if (temAnexo || temAnexoAR) {
+                    anexoHTML = `<span title="Acesso restrito ao responsável" style="color:#cbd5e1;font-size:16px;cursor:help;">🔒</span>`;
+                }
             }
 
             if (anexoHTML !== '') {
@@ -3735,6 +3778,16 @@ async function excluirRegistroHistGeral(id, categoriaId) {
 
         const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoriaId);
         const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
+
+        // Devolver número sequencial se existir (AI, Dívida Ativa, Ofício, etc)
+        if (reg.numero_sequencial && reg.categoria_id) {
+            const anoReg = new Date(reg.created_at || Date.now()).getFullYear();
+            await supabaseClient.rpc('devolver_numero_sequencial', {
+                p_numero: reg.numero_sequencial.toString(),
+                p_categoria_id: reg.categoria_id.toString(),
+                p_ano: anoReg
+            });
+        }
 
         const { error } = await supabaseClient
             .from(targetTable)
@@ -4363,7 +4416,10 @@ async function criarRascunhoControleProcessual(campos, categoriaId, numeroSeq) {
         .select();
 
     if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    if (!data || data.length === 0) {
+        throw new Error('Falha ao criar o rascunho no banco de dados. O registro não foi retornado (possível bloqueio de permissão RLS).');
+    }
+    return data[0];
 }
 
 async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
@@ -4518,11 +4574,11 @@ async function cancelarRascunhoDocumento() {
     rascunhoDocumento = null;
 
     try {
-        // Ofício (1.4): devolve o número para a fila global no banco
-        if (categoriaId === '1.4' && numeroSeq) {
+        // Devolve o número para a fila global no banco (qualquer categoria que gere número, ex: 1.2, 1.4, 1.5, 1.8, 11)
+        if (numeroSeq && categoriaId) {
             await supabaseClient.rpc('devolver_numero_sequencial', {
-                p_numero: numeroSeq,
-                p_categoria_id: categoriaId,
+                p_numero: numeroSeq.toString(),
+                p_categoria_id: categoriaId.toString(),
                 p_ano: anoAtual
             });
         }
@@ -4740,7 +4796,8 @@ async function abrirEditorOficio() {
         };
 
         // Pegar informações do Fiscal (Nome logado e Matrícula) e Data de Hoje para Assinatura
-        const { data: { user } } = await getAuthUser();
+        const authResponse = await getAuthUser();
+        const user = authResponse?.data?.user;
         let nomeFiscal = 'Nome do Fiscal';
         let matriculaFiscal = 'XXXXXXXX';
         if (user) {
@@ -4779,7 +4836,8 @@ async function abrirEditorOficio() {
 
         <p style="margin-bottom: 20px;">
             Ao Senhor(a)<br>
-            <strong>${campos.nome}</strong>
+            <strong>${campos.nome}</strong><br>
+            <strong>CPF/CNPJ:</strong> ${campos.cpf_contribuinte || '_________________'}
         </p>
 
         <p style="margin-bottom: 40px;">
@@ -5183,7 +5241,7 @@ async function abrirEditorCertidao() {
         </div>
 
         <p style="text-indent: 0px; line-height: 1.5; margin-bottom: 20px; text-align: justify;">
-            Certifico que o autuado ${campos.nome} CPF ${campos.cpf}, com endereço de correspondência na ${campos.rua}, N° ${campos.numero}, ${campos.bairro}, não manifestou sobre a interposição de defesa <b>referente ao ${campos.digitado}</b> que teve ciência dia ${dataCienciaFmt} através dos correios aviso de recebimento (AR), com prazo para defesa até ${dataDefesaFmt}.
+            Certifico que o autuado ${campos.nome} CPF ${campos.cpf}, com endereço de correspondência: ${campos.endereco_autuado}, não manifestou sobre a interposição de defesa <b>referente ao ${campos.digitado}</b> que teve ciência dia ${dataCienciaFmt} através dos correios aviso de recebimento (AR), com prazo para defesa até ${dataDefesaFmt}.
         </p>
 
         <p style="text-indent: 0px; line-height: 1.5; margin-bottom: 20px; text-align: justify;">
@@ -5668,7 +5726,8 @@ async function buscarAIsPorNumerosNP(numerosNP) {
 
     for (let i = 0; i < numerosNP.length; i += chunkSize) {
         const chunk = numerosNP.slice(i, i + chunkSize);
-        const orConditions = chunk.map(n => `campos->>n_notificacao.eq.${n}`);
+        // Colocar aspas em volta do valor previne erros de sintaxe no PostgREST caso o numero contenha barras ou espaços
+        const orConditions = chunk.map(n => `campos->>n_notificacao.eq."${n.replace(/"/g, '')}"`);
 
         const { data, error } = await supabaseClient
             .from('controle_processual')
@@ -5919,7 +5978,11 @@ async function abrirModalVencidos() {
     // Se for aba NP, verificar se há AIs vinculados às NPs vencidas
     if (subAbaAtual === '1.1' && vencidos.length > 0) {
         const numerosNP = vencidos
-            .map(r => r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
+            .map(r => {
+                let val = r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '';
+                if (!val && r.numero_sequencial) val = r.numero_sequencial.trim();
+                return val;
+            })
             .filter(n => n !== '');
 
         if (numerosNP.length > 0) {
@@ -5937,12 +6000,16 @@ async function abrirModalVencidos() {
                 ai.campos && ai.campos.n_notificacao ? ai.campos.n_notificacao.trim() : ''
             ).filter(n => n !== ''));
 
-            const vencidosComAI = vencidos.filter(r =>
-                numerosComAI.has(r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
-            );
-            const vencidosSemAI = vencidos.filter(r =>
-                !numerosComAI.has(r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '')
-            );
+            const vencidosComAI = vencidos.filter(r => {
+                let val = r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '';
+                if (!val && r.numero_sequencial) val = r.numero_sequencial.trim();
+                return numerosComAI.has(val);
+            });
+            const vencidosSemAI = vencidos.filter(r => {
+                let val = r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '';
+                if (!val && r.numero_sequencial) val = r.numero_sequencial.trim();
+                return !numerosComAI.has(val);
+            });
 
             renderizarModalVencidosComAI('Notificações Preliminares Vencidas', vencidosComAI, vencidosSemAI, aisVinculados);
             return;
@@ -5961,15 +6028,169 @@ function abrirModalAtendidos() {
 
     const filtrarPorFiscal = usuarioDeveVerApenasSeusRegistros();
 
-    const atendidos = registrosGeralAtual.filter(reg => {
+    const respondidos = registrosGeralAtual.filter(reg => {
         const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
-        if (!resp.toLowerCase().includes('atendido')) return false;
+        if (resp === '') return false;
         if (filtrarPorFiscal && !pertenceAoFiscalLogado(reg)) return false;
         return true;
     });
 
-    const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
-    renderizarModalRelatorio(`${tipoDoc} Atendidas`, atendidos, 'atendidos');
+    if (subAbaAtual === '1.1') {
+        renderizarModalRespondidosNP(respondidos);
+    } else {
+        const tipoDoc = 'Autos de Infração';
+        renderizarModalRelatorio(`${tipoDoc} Respondidos`, respondidos, 'atendidos');
+    }
+}
+
+function renderizarModalRespondidosNP(registros) {
+    registrosModalAtual = registros;
+    tipoModalAtual = 'respondidos_np';
+
+    const atendidos = [];
+    const viraramAI = [];
+    const outros = [];
+
+    registros.forEach(reg => {
+        const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.toLowerCase().trim() : '';
+        if (resp.includes('atendido')) {
+            atendidos.push(reg);
+        } else if (resp.includes('ai') || resp.includes('auto de infra')) {
+            viraramAI.push(reg);
+        } else {
+            outros.push(reg);
+        }
+    });
+
+    const modalExistente = document.getElementById('modal-vencidos-atendidos');
+    if (modalExistente) modalExistente.remove();
+
+    const hojeFmt = new Date().toLocaleDateString('pt-BR');
+    const total = registros.length;
+
+    function montarTabelaRespondidos(lista, secaoId, corBadge, textoBadge, bgSecao) {
+        if (lista.length === 0) return '';
+        let headerHTML = '<tr>';
+        headerHTML += '<th class="col-curta">N°</th>';
+        headerHTML += '<th>Nome / Identificador</th>';
+        headerHTML += '<th class="col-curta">Bairro</th>';
+        headerHTML += '<th class="col-curta">Fiscal</th>';
+        headerHTML += '<th class="col-curta">Data Entrada</th>';
+        headerHTML += '<th>Resposta</th>';
+        headerHTML += '<th class="col-curta">Anexos</th>';
+        headerHTML += '</tr>';
+
+        let bodyHTML = '';
+        lista.forEach(reg => {
+            const nome = (reg.campos && reg.campos.nome) || '-';
+            const bairro = (reg.campos && reg.campos.bairro) || '-';
+            const fiscal = reg.fiscal_nome || '-';
+            const numSeq = reg.campos && reg.campos.n_notificacao ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
+            const dataEntrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
+            const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+
+            const anexos = coletarTodosAnexos(reg);
+            let anexoHTML = '';
+            if (anexos.length === 0) {
+                anexoHTML = '<span style="color:#94a3b8;font-size:12px;">—</span>';
+            } else if (anexos.length === 1) {
+                anexoHTML = `<button onclick="abrirAnexoGerente('${anexos[0]}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📎 Abrir</button>`;
+            } else {
+                anexoHTML = anexos.map((url, i) =>
+                    `<button onclick="abrirAnexoGerente('${url}')" style="background:#10b981;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin:2px;">${i + 1}</button>`
+                ).join('');
+            }
+
+            bodyHTML += `<tr style="transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${numSeq}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${nome}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${bairro}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${fiscal}</td>`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${dataEntrada}</td>`;
+            bodyHTML += `<td style="vertical-align:middle;">${resposta}</td>`;
+            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${anexoHTML}</td>`;
+            bodyHTML += `</tr>`;
+        });
+
+        return `
+            <div style="margin-bottom: 24px; padding: 16px; background: ${bgSecao}; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <h3 style="margin:0; color:#1e293b; font-size:16px;">${textoBadge}</h3>
+                    <span style="background:${corBadge}; color:white; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">
+                        ${lista.length} registro(s)
+                    </span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="historico-tabela" style="min-width:700px;">
+                        <thead>${headerHTML}</thead>
+                        <tbody>${bodyHTML}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-vencidos-atendidos';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    modal.innerHTML = `
+        <div style="background:white;border-radius:12px;width:95%;max-width:1100px;max-height:90vh;overflow:auto;padding:24px;position:relative;">
+            <button onclick="document.getElementById('modal-vencidos-atendidos').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">✕</button>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                <div>
+                    <h2 style="margin:0; color:#1e293b; font-size:20px;">Notificações Preliminares Respondidas</h2>
+                    <p style="margin:4px 0 0 0; color:#64748b; font-size:13px;">Gerado em ${hojeFmt}</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <span style="background:#16a34a; color:white; padding:6px 14px; border-radius:20px; font-size:14px; font-weight:700;">
+                        ${total} Respondidos
+                    </span>
+                    <div style="position:relative;">
+                        <button id="btn-baixar-modal-rel" style="padding: 0.55rem 1.2rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="toggleMenuDownloadModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Baixar Relatório
+                        </button>
+                        <div id="menu-download-modal" style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:10px; z-index:101; min-width:220px; border:1px solid #e2e8f0;">
+                            <button onclick="baixarRelatorioModal('relatorio')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                Somente Relatório
+                            </button>
+                            <button onclick="baixarRelatorioModal('completo')" style="width:100%; text-align:left; padding:10px 12px; background:none; border:none; border-radius:6px; font-size:13px; cursor:pointer; color:#334155; font-weight:500; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                Relatório + Anexos (ZIP)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            ${montarTabelaRespondidos(atendidos, 'secao-atendidos', '#16a34a', '✅ Notificações Preliminares Atendidas', '#f0fdf4')}
+            ${montarTabelaRespondidos(viraramAI, 'secao-viraram-ai', '#f59e0b', '⚠️ Notificações Preliminares que Viraram AI', '#fffbeb')}
+            ${montarTabelaRespondidos(outros, 'secao-outros', '#3b82f6', 'ℹ️ Outras Respostas', '#eff6ff')}
+            
+            ${total === 0 ? '<div style="text-align:center; padding:30px; color:#64748b;">Nenhum registro encontrado.</div>' : ''}
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.remove();
+    });
+
+    document.addEventListener('click', function fecharMenu(e) {
+        const menu = document.getElementById('menu-download-modal');
+        const btn = document.getElementById('btn-baixar-modal-rel');
+        if (!menu || !btn) {
+            document.removeEventListener('click', fecharMenu);
+            return;
+        }
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    });
 }
 
 function coletarTodosAnexos(reg) {
@@ -6149,48 +6370,56 @@ async function baixarRelatorioModal(tipoDownload) {
     const tipoDoc = subAbaAtual === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração';
     const hoje = new Date().toLocaleDateString('pt-BR');
 
-    // Montar HTML do relatório
-    let rowsHTML = '';
-    registrosModalAtual.forEach((reg, idx) => {
-        const nome = (reg.campos && reg.campos.nome) || '-';
-        const bairro = (reg.campos && reg.campos.bairro) || '-';
-        const fiscal = reg.fiscal_nome || '-';
-        const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
-            ? reg.campos.n_notificacao
-            : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
-        const dataVenc = reg.campos && reg.campos.data_vencimento
-            ? reg.campos.data_vencimento.split('-').reverse().join('/')
-            : '-';
-        const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
-        const dataEntrada = reg.created_at
-            ? new Date(reg.created_at).toLocaleDateString('pt-BR')
-            : '-';
+    let htmlRelatorio = '';
 
-        rowsHTML += `
-            <tr>
-                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px;">${numSeq}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px;">${nome}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataVenc}</td>
-                <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
-            </tr>
-        `;
-    });
+    if (tipoModalAtual === 'respondidos_np') {
+        const atendidos = [];
+        const viraramAI = [];
+        const outros = [];
+        registrosModalAtual.forEach(reg => {
+            const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.toLowerCase().trim() : '';
+            if (resp.includes('atendido')) atendidos.push(reg);
+            else if (resp.includes('ai') || resp.includes('auto de infra')) viraramAI.push(reg);
+            else outros.push(reg);
+        });
 
-    const htmlRelatorio = `
+        const gerarLinhas = (lista) => {
+            if (lista.length === 0) return '';
+            let html = '';
+            lista.forEach((reg, idx) => {
+                const nome = (reg.campos && reg.campos.nome) || '-';
+                const bairro = (reg.campos && reg.campos.bairro) || '-';
+                const fiscal = reg.fiscal_nome || '-';
+                const numSeq = reg.campos && reg.campos.n_notificacao ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
+                const dataEntrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
+                const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+                html += `
+                    <tr>
+                        <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${numSeq}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${nome}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
+                    </tr>
+                `;
+            });
+            return html;
+        };
+
+        htmlRelatorio = `
         <!DOCTYPE html>
         <html lang="pt-BR">
         <head>
             <meta charset="UTF-8">
-            <title>${titulo}</title>
+            <title>Relatório de Notificações Respondidas</title>
             <style>
                 body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
                 h1 { font-size: 18px; margin-bottom: 6px; }
                 h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
-                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                h3 { font-size: 15px; margin-top: 25px; margin-bottom: 10px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
                 th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
                 td { border: 1px solid #cbd5e1; padding: 8px; }
                 tr:nth-child(even) { background: #f8fafc; }
@@ -6199,27 +6428,116 @@ async function baixarRelatorioModal(tipoDownload) {
             </style>
         </head>
         <body>
-            <h1>${titulo} — ${tipoDoc}</h1>
+            <h1>Notificações Preliminares Respondidas</h1>
             <h2>Total: ${registrosModalAtual.length} registro(s) &nbsp;|&nbsp; Emitido em ${hoje}</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>N°</th>
-                        <th>Nome / Identificador</th>
-                        <th>Bairro</th>
-                        <th>Fiscal</th>
-                        <th>Data Entrada</th>
-                        <th>Data Venc.</th>
-                        <th>Resposta</th>
-                    </tr>
-                </thead>
-                <tbody>${rowsHTML}</tbody>
-            </table>
+            
+            ${atendidos.length > 0 ? `
+                <h3>✅ Notificações Preliminares Atendidas (${atendidos.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhas(atendidos)}</tbody>
+                </table>
+            ` : ''}
+
+            ${viraramAI.length > 0 ? `
+                <h3>⚠️ Notificações Preliminares que Viraram AI (${viraramAI.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhas(viraramAI)}</tbody>
+                </table>
+            ` : ''}
+
+            ${outros.length > 0 ? `
+                <h3>ℹ️ Outras Respostas (${outros.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhas(outros)}</tbody>
+                </table>
+            ` : ''}
+            
             <div class="footer">SEMAC — Sistema de Gestão da Fiscalização de Posturas</div>
         </body>
         </html>
-    `;
+        `;
+    } else {
+        // Logica antiga para Vencidos e AI Respondidos
+        let rowsHTML = '';
+        registrosModalAtual.forEach((reg, idx) => {
+            const nome = (reg.campos && reg.campos.nome) || '-';
+            const bairro = (reg.campos && reg.campos.bairro) || '-';
+            const fiscal = reg.fiscal_nome || '-';
+            const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+                ? reg.campos.n_notificacao
+                : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
+            const dataVenc = reg.campos && reg.campos.data_vencimento
+                ? reg.campos.data_vencimento.split('-').reverse().join('/')
+                : '-';
+            const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+            const dataEntrada = reg.created_at
+                ? new Date(reg.created_at).toLocaleDateString('pt-BR')
+                : '-';
+
+            rowsHTML += `
+                <tr>
+                    <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px;">${numSeq}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px;">${nome}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataVenc}</td>
+                    <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
+                </tr>
+            `;
+        });
+
+        htmlRelatorio = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <title>${titulo}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
+                    h1 { font-size: 18px; margin-bottom: 6px; }
+                    h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                    td { border: 1px solid #cbd5e1; padding: 8px; }
+                    tr:nth-child(even) { background: #f8fafc; }
+                    .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
+                    @media print { body { margin: 15px; } }
+                </style>
+            </head>
+            <body>
+                <h1>${titulo} — ${tipoDoc}</h1>
+                <h2>Total: ${registrosModalAtual.length} registro(s) &nbsp;|&nbsp; Emitido em ${hoje}</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>N°</th>
+                            <th>Nome / Identificador</th>
+                            <th>Bairro</th>
+                            <th>Fiscal</th>
+                            <th>Data Entrada</th>
+                            <th>Data Venc.</th>
+                            <th>Resposta</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHTML}</tbody>
+                </table>
+                <div class="footer">SEMAC — Sistema de Gestão da Fiscalização de Posturas</div>
+            </body>
+            </html>
+        `;
+    }
 
     if (tipoDownload === 'relatorio') {
         // Abrir em iframe e imprimir

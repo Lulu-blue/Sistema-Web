@@ -33,6 +33,8 @@
     </style>
     <link rel="stylesheet" href="assets/css/style_painel.css">
     <link rel="stylesheet" href="assets/css/style_produtividade.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="lib/supabase.js"></script>
     <script src="lib/mammoth.browser.min.js"></script>
 </head>
@@ -1336,7 +1338,7 @@
                     </button>
                     <button id="btn-atendidos-hg" onclick="abrirModalAtendidos()" style="padding: 0.55rem 1.2rem; background: #16a34a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Atendidos
+                        Respondidos
                     </button>
                 </div>
 
@@ -1452,7 +1454,7 @@
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
                                     Ver Todos
                                 </button>
-                                <button onclick="baixarDadosBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <button onclick="baixarRelatorioAreas()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                     Baixar Dados
                                 </button>
@@ -1473,6 +1475,629 @@
                         </div>
                     </div>
                 </div>
+                <!-- MAPA GEOGRÁFICO INLINE (FULL BLEED) -->
+                <style>
+                    #container-mapa-inline {
+                        width: calc(100% + 7rem);
+                        margin-left: -3.5rem;
+                        padding: 20px 3.5rem;
+                        border-top: 1px solid #e2e8f0;
+                        border-bottom: 1px solid #e2e8f0;
+                        background: white;
+                        transition: all 0.3s ease;
+                        margin-bottom: 30px;
+                    }
+                    #conteudo-mapa-inline {
+                        --map-height: 500px;
+                    }
+                    /* Sidebar scroll no desktop */
+                    #sidebar-bairros-mapa {
+                        max-height: 500px;
+                        overflow: hidden;
+                    }
+                    #lista-bairros-mapa {
+                        overflow-y: auto !important;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    /* Legenda sempre visível */
+                    .leaflet-bottom.leaflet-right {
+                        z-index: 800 !important;
+                    }
+                    .info.legend {
+                        z-index: 800 !important;
+                    }
+                    @media (max-width: 768px) {
+                        #container-mapa-inline {
+                            width: calc(100% + 2.4rem);
+                            margin-left: -1.2rem;
+                            padding: 20px 1.2rem;
+                        }
+                        #conteudo-mapa-inline {
+                            height: auto !important;
+                            flex-direction: column !important;
+                            flex-wrap: nowrap !important;
+                        }
+                        #sidebar-bairros-mapa {
+                            height: 300px !important;
+                            max-height: 300px !important;
+                            flex: none !important;
+                            width: 100% !important;
+                        }
+                        /* Container do mapa no mobile */
+                        #conteudo-mapa-inline > div:last-child {
+                            height: 400px !important;
+                            flex: none !important;
+                            width: 100% !important;
+                            min-width: unset !important;
+                        }
+                        /* Esconder botão minimizar sidebar no mobile */
+                        #sidebar-bairros-mapa button[onclick="toggleSidebarMapa()"] {
+                            display: none !important;
+                        }
+                        /* Legenda visível no mobile */
+                        .leaflet-control-container .leaflet-bottom.leaflet-right {
+                            bottom: 5px !important;
+                        }
+                        /* No mobile: esconder mapa inline, mostrar botão */
+                        #container-mapa-inline #conteudo-mapa-inline,
+                        #container-mapa-inline > div:first-child > button {
+                            display: none !important;
+                        }
+                        #btn-abrir-mapa-mobile {
+                            display: flex !important;
+                        }
+                    }
+                    /* Overlay fullscreen do mapa mobile */
+                    #overlay-mapa-mobile {
+                        display: none;
+                        position: fixed;
+                        inset: 0;
+                        z-index: 10002;
+                        background: white;
+                        flex-direction: column;
+                    }
+                    #overlay-mapa-mobile.ativo {
+                        display: flex;
+                    }
+                    #overlay-mapa-mobile .overlay-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 12px 16px;
+                        border-bottom: 1px solid #e2e8f0;
+                        background: #f8fafc;
+                        flex-shrink: 0;
+                    }
+                    #overlay-mapa-mobile .overlay-body {
+                        flex: 1;
+                        display: flex;
+                        flex-direction: column;
+                        overflow: hidden;
+                    }
+                    #overlay-mapa-mobile #sidebar-bairros-mobile {
+                        height: 250px;
+                        flex-shrink: 0;
+                        overflow: hidden;
+                        display: flex;
+                        flex-direction: column;
+                        padding: 10px;
+                        border-bottom: 1px solid #e2e8f0;
+                    }
+                    #overlay-mapa-mobile #mapa-mobile-container {
+                        flex: 1;
+                        position: relative;
+                    }
+                </style>
+                <div id="container-mapa-inline">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            Mapa de Atuação por Áreas
+                        </h3>
+                        <button onclick="toggleMapaInline()" style="background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; cursor: pointer; color: #64748b; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                            <svg id="icon-toggle-mapa-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                            <span id="text-toggle-mapa-inline">Ocultar Mapa</span>
+                        </button>
+                    </div>
+                    <!-- Botão mobile (escondido no desktop via CSS) -->
+                    <button id="btn-abrir-mapa-mobile" onclick="abrirMapaMobile()" style="display: none; width: 100%; padding: 14px; border: 1px solid #10b981; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 14px; font-weight: 600; cursor: pointer; align-items: center; justify-content: center; gap: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        Ver Mapa Geográfico
+                    </button>
+                    
+                    <div id="conteudo-mapa-inline" style="display: flex; gap: 20px; flex-wrap: wrap; height: var(--map-height); transition: height 0.3s ease, opacity 0.3s ease; overflow: hidden;">
+                        <!-- Lista Lateral -->
+                        <div id="sidebar-bairros-mapa" style="width: 300px; flex-shrink: 0; max-width: 100%; display: flex; flex-direction: column; transition: width 0.3s ease;">
+                            <div style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                                <h4 id="sidebar-title-mapa" style="font-size: 14px; margin: 0; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Bairros no Sistema</h4>
+                                <button onclick="toggleSidebarMapa()" style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; flex-shrink:0; display:flex;" title="Recolher/Expandir">
+                                    <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                </button>
+                            </div>
+                            <div id="sidebar-content-mapa" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; transition: opacity 0.2s ease;">
+                                <input type="text" id="busca-bairro-mapa" placeholder="Filtrar bairro..." oninput="filtrarBairrosMapa()" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 15px;">
+                                <div id="lista-bairros-mapa" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
+                                    <!-- Injetado via JS -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Container do Mapa -->
+                        <div style="flex: 1; min-width: 300px; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); height: 100%;">
+                            <div id="mapa-container" style="width: 100%; height: 100%; background: #f1f5f9;"></div>
+                            <div id="map-loader" style="position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; pointer-events: none;">
+                                <div style="text-align: center;">
+                                    <div class="spinner" style="margin-bottom: 10px;"></div>
+                                    <p style="font-weight: 600; color: #64748b;">Carregando Mapa...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OVERLAY FULLSCREEN MAPA MOBILE -->
+                <div id="overlay-mapa-mobile">
+                    <div class="overlay-header" style="padding-top: 60px;">
+                        <h3 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            Mapa de Áreas
+                        </h3>
+                        <button onclick="fecharMapaMobile()" style="background: none; border: none; cursor: pointer; padding: 4px; color: #64748b; display: flex;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+                    <div class="overlay-body">
+                        <div id="sidebar-bairros-mobile">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 13px; font-weight: 600; color: #1e293b;">Bairros</span>
+                                <button onclick="toggleBairrosMobile()" style="background:none; border:1px solid #e2e8f0; border-radius:4px; cursor:pointer; color:#64748b; padding:2px 6px; display:flex; align-items:center; gap:4px; font-size:11px;">
+                                    <svg id="icon-toggle-bairros-mobile" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                    <span id="text-toggle-bairros-mobile">Ocultar</span>
+                                </button>
+                            </div>
+                            <div id="conteudo-bairros-mobile" style="display:flex; flex-direction:column; flex:1; overflow:hidden; transition: all 0.3s ease;">
+                                <input type="text" id="busca-bairro-mobile" placeholder="Filtrar bairro..." oninput="filtrarBairrosMapaMobile()" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 10px;">
+                                <div id="lista-bairros-mobile" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="mapa-mobile-container" style="width: 100%; background: #f1f5f9;"></div>
+                    </div>
+                </div>
+
+                <script>
+                    function toggleMapaInline() {
+                        const content = document.getElementById('conteudo-mapa-inline');
+                        const icon = document.getElementById('icon-toggle-mapa-inline');
+                        const text = document.getElementById('text-toggle-mapa-inline');
+                        
+                        if (content.style.height === '0px' || content.style.height === '0') {
+                            content.style.height = 'var(--map-height)';
+                            content.style.opacity = '1';
+                            content.style.marginTop = '15px';
+                            icon.innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
+                            text.innerText = 'Ocultar Mapa';
+                            setTimeout(() => { if (typeof mapaGeograficoInstance !== 'undefined' && mapaGeograficoInstance) mapaGeograficoInstance.invalidateSize(); }, 300);
+                        } else {
+                            content.style.height = '0px';
+                            content.style.opacity = '0';
+                            content.style.marginTop = '0';
+                            icon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
+                            text.innerText = 'Mostrar Mapa';
+                        }
+                    }
+
+                    var mapaMobileInstance = null;
+                    var camadaMarcadoresMobile = null;
+                    var camadaPoligonosMobile = null;
+                    var poligonosMobilePorBairroId = {};
+                    var marcadoresMobilePorBairroId = {};
+                    var bairroPaiPorFilhoId = {};  // Mapeia ID do filho (prolongamento) → ID do pai (polígono)
+                    var areasDestacadasMobile = [];
+
+                    function abrirMapaMobile() {
+                        document.getElementById('overlay-mapa-mobile').classList.add('ativo');
+                        document.body.style.overflow = 'hidden';
+                        
+                        setTimeout(function() {
+                            var precisaRecriar = false;
+                            if (!mapaMobileInstance) {
+                                precisaRecriar = true;
+                            } else {
+                                // Verifica se o container ainda existe e tem dimensão
+                                var containerMobile = document.getElementById('mapa-mobile-container');
+                                if (!containerMobile || containerMobile.clientWidth === 0) {
+                                    precisaRecriar = true;
+                                }
+                            }
+
+                            if (precisaRecriar) {
+                                if (mapaMobileInstance) {
+                                    mapaMobileInstance.remove();
+                                    mapaMobileInstance = null;
+                                    camadaMarcadoresMobile = null;
+                                }
+                                
+                                var centroInicial = [-20.1450, -44.8910];
+                                mapaMobileInstance = L.map('mapa-mobile-container', {
+                                    doubleClickZoom: false
+                                }).setView(centroInicial, 13);
+                                
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '&copy; OSM'
+                                }).addTo(mapaMobileInstance);
+                                
+                                camadaMarcadoresMobile = L.layerGroup().addTo(mapaMobileInstance);
+                                camadaPoligonosMobile = L.layerGroup().addTo(mapaMobileInstance);
+                                
+                                // Legenda mobile (com filtro de área clicável)
+                                var legend = L.control({ position: 'bottomright' });
+                                legend.onAdd = function() {
+                                    var div = L.DomUtil.create('div', 'info legend');
+                                    div.style.cssText = 'background:white; padding:10px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.15); max-height:200px; overflow-y:auto; font-size:11px;';
+                                    var html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">' +
+                                        '<strong style="color:#1e293b;">Áreas</strong>' +
+                                        '<button onclick="toggleLegendaMobile(this)" style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></button>' +
+                                        '</div><div id="legend-content-mobile">';
+                                    globalAreas.forEach(function(a) {
+                                        var cor = mapaCoresAreas[a.id];
+                                        var nome = a.fiscal_nome ? a.fiscal_nome.split(' ')[0] : 'Sem Fiscal';
+                                        html += '<div onclick="toggleDestaqueAreaMapaMobile(\'' + a.id + '\')" id="legend-mobile-area-' + a.id + '" style="display:flex; align-items:center; gap:5px; margin-bottom:4px; cursor:pointer; transition:0.2s;">' +
+                                            '<span style="width:12px; height:12px; border-radius:50%; background:' + cor + '; display:inline-block; flex-shrink:0;"></span>' +
+                                            '<span style="color:#334155;">' + a.nome + ' <span style="color:#94a3b8; font-size:10px;">(' + nome + ')</span></span></div>';
+                                    });
+                                    html += '<div onclick="toggleDestaqueAreaMapaMobile(\'null\')" id="legend-mobile-area-null" style="display:flex; align-items:center; gap:5px; margin-top:6px; padding-top:4px; border-top:1px solid #e2e8f0; cursor:pointer; transition:0.2s;">' +
+                                        '<span style="width:12px; height:12px; border-radius:50%; background:#94a3b8; display:inline-block; flex-shrink:0;"></span>' +
+                                        '<span style="color:#64748b; font-style:italic; font-size:11px;">Sem Área Definida</span></div>';
+                                    html += '</div>';
+                                    div.innerHTML = html;
+                                    L.DomEvent.disableClickPropagation(div);
+                                    L.DomEvent.disableScrollPropagation(div);
+                                    return div;
+                                };
+                                legend.addTo(mapaMobileInstance);
+                                
+                                // Handler de clique no mapa mobile (igual ao desktop)
+                                mapaMobileInstance.on('click', function(e) {
+                                    var layerPoint = e.layerPoint;
+                                    // Verificar marcadores
+                                    var marcadorClicado = null;
+                                    if (camadaMarcadoresMobile) {
+                                        camadaMarcadoresMobile.eachLayer(function(m) {
+                                            if (m._containsPoint && m._containsPoint(layerPoint)) {
+                                                marcadorClicado = m;
+                                            }
+                                        });
+                                    }
+                                    if (marcadorClicado) {
+                                        marcadorClicado.openPopup();
+                                        return;
+                                    }
+                                    // Verificar polígonos
+                                    var poligonoClicado = null;
+                                    if (camadaPoligonosMobile) {
+                                        camadaPoligonosMobile.eachLayer(function(p) {
+                                            if (p._containsPoint && p._containsPoint(layerPoint)) {
+                                                poligonoClicado = p;
+                                            }
+                                        });
+                                    }
+                                    if (poligonoClicado) {
+                                        poligonoClicado.openPopup();
+                                        return;
+                                    }
+                                });
+                            } else {
+                                mapaMobileInstance.invalidateSize();
+                            }
+                            
+                            // Garantir cores disponíveis (fallback se mapa desktop ainda não carregou)
+                            if (typeof mapaCoresAreas === 'undefined' || Object.keys(mapaCoresAreas).length === 0) {
+                                mapaCoresAreas = {};
+                                globalAreas.forEach(function(a, index) {
+                                    mapaCoresAreas[a.id] = paletaCoresAreas[index % paletaCoresAreas.length];
+                                });
+                            }
+                            
+                            // Sempre replotar marcadores e polígonos para garantir dados atualizados
+                            plotarMarcadoresMobile();
+                            renderizarPoligonosMobile();
+
+                            // Lista bairros mobile
+                            renderizarListaBairrosMobile('');
+                        }, 300);
+                    }
+
+                    function plotarMarcadoresMobile() {
+                        if (!camadaMarcadoresMobile || !mapaMobileInstance) return;
+                        camadaMarcadoresMobile.clearLayers();
+                        marcadoresMobilePorBairroId = {};
+                        
+                        // Lookup otimizado de áreas para mobile
+                        var areasLookup = {};
+                        globalAreas.forEach(function(a) {
+                            areasLookup[a.id] = a;
+                        });
+                        
+                        globalBairros.forEach(function(b) {
+                            if (!b.latitude || !b.longitude) return;
+                            
+                            // Não plotar marcador se o bairro tem polígono (o polígono já representa visualmente)
+                            if (poligonosMobilePorBairroId[b.id]) return;
+                            
+                            // Respeitar filtro de área
+                            var bAreaId = b.area_id || 'null';
+                            var ativo = areasDestacadasMobile.length === 0 || areasDestacadasMobile.includes(bAreaId);
+                            if (!ativo) return;
+                            
+                            var cor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
+                            var areaInfo = areasLookup[b.area_id];
+                            var areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
+                            
+                            var marker = L.circleMarker([b.latitude, b.longitude], {
+                                radius: 7, fillColor: cor, color: '#fff', weight: 2, fillOpacity: 0.8
+                            }).bindPopup('<b>' + b.nome + '</b><br>' + areaNome);
+                            
+                            camadaMarcadoresMobile.addLayer(marker);
+                            marcadoresMobilePorBairroId[b.id] = marker;
+                        });
+                    }
+
+                    function renderizarPoligonosMobile() {
+                        if (!camadaPoligonosMobile || !mapaMobileInstance) return;
+                        camadaPoligonosMobile.clearLayers();
+                        poligonosMobilePorBairroId = {};
+                        
+                        if (typeof geojsonBairrosDivinopolis === 'undefined' || !geojsonBairrosDivinopolis) return;
+                        
+                        // Mapear nomes normalizados
+                        var bairrosPorNomeNorm = {};
+                        globalBairros.forEach(function(b) {
+                            var nomeNorm = normalizarNomeBairroGeo(b.nome);
+                            bairrosPorNomeNorm[nomeNorm] = b;
+                        });
+
+                        // Aliases para nomes do GeoJSON que não batem exatamente com o CSV
+                        var aliasesBairrosGeo = {
+                            'centroindustrial': 'centroindustrialsantoantoniodoscampos',
+                            'chanadour': 'chanadours',
+                            'condominiovilleroyale': 'condominiovileroyalle',
+                            'nossasenhoradagraca': 'nossasenhoradasgracas',
+                            'doutordulphepintodeaguiar': 'dulphepintodeaguiar',
+                            'quintadaspalmeiras': 'residencialquintadaspalmeiras',
+                            'residencialwalchirresendecosta': 'residencialwalchirresende',
+                            'vilaroseiras': 'vilaroseira',
+                            'chacarassantarita': 'chacarasantarita',
+                            'chacarassiarom': 'chacarasiarom',
+                            'joseantoniogoncalves': 'jagoncalves',
+                            'parquejardimcapitaosilva': 'jardimcapitaosilva',
+                            'levindopaulapereira': 'lppereira',
+                            'nucleocomerciallevindopaulapereira': 'nucleolppereira'
+                        };
+                        Object.keys(aliasesBairrosGeo).forEach(function(geoNome) {
+                            var csvNome = aliasesBairrosGeo[geoNome];
+                            if (bairrosPorNomeNorm[csvNome] && !bairrosPorNomeNorm[geoNome]) {
+                                bairrosPorNomeNorm[geoNome] = bairrosPorNomeNorm[csvNome];
+                            }
+                        });
+                        
+                        var geojson = geojsonBairrosDivinopolis;
+                        var areasLookup = {};
+                        globalAreas.forEach(function(a) {
+                            areasLookup[a.id] = a;
+                        });
+                        
+                        // Bairros filhos (ex: prolongamentos) que devem ter seus marcadores ocultados
+                        // quando o polígono do bairro pai é renderizado
+                        var bairrosFilhosDoPoligono = {
+                            'jardimcandelaria': ['prolongamentojardimcandelaria'],
+                            'jardimbelvedere': ['jardimbelvedereii'],
+                            'eldorado': ['prologamentoeldorado'],
+                            'interlagos': ['prologamentointerlagos'],
+                            'saosebastiao': ['prolongamentosaosebastiao'],
+                            'antoniofonseca': ['prolongamentoantoniofonseca'],
+                            'paraiso': ['prolongamentoparaiso'],
+                            'joseantoniogoncalves': ['prolongamentojagoncalves'],
+                            'espiritosanto': ['prolongamentoespiritosanto'],
+                            'jardimcopacabana': ['prolongamentojardimcopacabana'],
+                            'santaclara': ['prolongamentosantaclara'],
+                            'vilacruzeiro': ['prolongamentovilacruzeiro'],
+                            'novafortaleza': ['prolongamentonovafortaleza'],
+                            'orion': ['prolongamentoorion'],
+                            'pontefunda': ['prolongamentopontefunda'],
+                            'saolucas': ['prolongamentosaolucas'],
+                            'moradanova': ['prolongamentomoradanova'],
+                            'sion': ['prolongamentosion'],
+                            'afonsopena': ['prolongamentoafonsopena'],
+                            'vilaromana': ['prolongamentovilaromana'],
+                            'belavista': ['prolongamentobelavista'],
+                            'catalao': ['prolongamentocatalao'],
+                            'manoelvalinhas': ['prolongamentomanoelvalinhas'],
+                            'tiete': ['prolongamentotiete'],
+                            'residencialwalchirresendecosta': ['prolongamentoresidencialwalchirresende'],
+                            'nacoes': ['prolongamentonacoes'],
+                            'saojose': ['prolongamentosaojose'],
+                            'parquejardimcapitaosilva': ['prolongamentojardimcapitaosilva'],
+                            'halimsouki': ['prolongamentohalimsouki'],
+                            'vilaoperaria': ['prolongamentovilaoperaria'],
+                            'quintino': ['prolongamentoquintino'],
+                            'planalto': ['prolongamentoplanalto'],
+                            'jardimdoscandides': ['prolongamentojardimdoscandides'],
+                            'franciscomachadofilho': ['prologamentofranciscomachadofilho'],
+                            'icarai': ['prolongamentoicarai'],
+                            'jardimdasacacias': ['prolongamentojardimdasacacias'],
+                            'lppereira': ['prolongamentolppereira']
+                        };
+                        
+                        L.geoJSON(geojson, {
+                            style: function(feature) {
+                                var nomeFeature = (feature.properties && feature.properties.name) || '';
+                                var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
+                                var bairro = bairrosPorNomeNorm[nomeNorm];
+                                var cor = '#94a3b8';
+                                if (bairro && bairro.area_id && mapaCoresAreas[bairro.area_id]) {
+                                    cor = mapaCoresAreas[bairro.area_id];
+                                }
+                                var ativo = true;
+                                if (bairro && areasDestacadasMobile.length > 0) {
+                                    var bAreaId = bairro.area_id || 'null';
+                                    ativo = areasDestacadasMobile.includes(bAreaId);
+                                }
+                                return {
+                                    fillColor: cor,
+                                    color: '#ffffff',
+                                    weight: 1.5,
+                                    opacity: ativo ? 0.8 : 0,
+                                    fillOpacity: ativo ? 0.45 : 0,
+                                    interactive: ativo
+                                };
+                            },
+                            onEachFeature: function(feature, layer) {
+                                var nomeFeature = (feature.properties && feature.properties.name) || 'Bairro';
+                                var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
+                                var bairro = bairrosPorNomeNorm[nomeNorm];
+                                var areaNome = 'Sem Área';
+                                if (bairro && bairro.area_id && areasLookup[bairro.area_id]) {
+                                    areaNome = areasLookup[bairro.area_id].nome;
+                                }
+                                layer.bindPopup('<div style="font-family:Inter,sans-serif;"><strong style="display:block;margin-bottom:4px;">' + nomeFeature + '</strong><span style="font-size:12px;color:#64748b;">Área: ' + areaNome + '</span></div>', { offset: L.point(0, 80) });
+                                layer.on('click', function(e) {
+                                    layer.openPopup();
+                                });
+                                if (bairro) {
+                                    poligonosMobilePorBairroId[bairro.id] = layer;
+                                    
+                                    // Ocultar marcadores de bairros filhos (prolongamentos/sub-bairros sem polígono próprio)
+                                    var nomeBairroNorm = normalizarNomeBairroGeo(bairro.nome);
+                                    var filhos = bairrosFilhosDoPoligono[nomeBairroNorm] || [];
+                                    filhos.forEach(function(filhoNomeNorm) {
+                                        var filho = bairrosPorNomeNorm[filhoNomeNorm];
+                                        if (filho) {
+                                            poligonosMobilePorBairroId[filho.id] = true;
+                                            bairroPaiPorFilhoId[filho.id] = bairro.id;  // Mapear filho → pai para abrir popup ao clicar na lista
+                                        }
+                                    });
+                                }
+                            }
+                        }).addTo(camadaPoligonosMobile);
+
+                    }
+
+                    function toggleDestaqueAreaMapaMobile(areaId) {
+                        var idx = areasDestacadasMobile.indexOf(areaId);
+                        if (idx > -1) {
+                            areasDestacadasMobile.splice(idx, 1);
+                        } else {
+                            areasDestacadasMobile.push(areaId);
+                        }
+                        
+                        // Atualizar estilo visual dos itens da legenda
+                        var ids = globalAreas.map(function(a) { return a.id; }).concat(['null']);
+                        ids.forEach(function(id) {
+                            var el = document.getElementById('legend-mobile-area-' + id);
+                            if (!el) return;
+                            if (areasDestacadasMobile.length === 0 || areasDestacadasMobile.includes(id)) {
+                                el.style.opacity = '1';
+                            } else {
+                                el.style.opacity = '0.4';
+                            }
+                        });
+                        
+                        // Re-renderizar marcadores e polígonos com o novo filtro
+                        plotarMarcadoresMobile();
+                        renderizarPoligonosMobile();
+                    }
+
+                    function fecharMapaMobile() {
+                        document.getElementById('overlay-mapa-mobile').classList.remove('ativo');
+                        document.body.style.overflow = '';
+                    }
+
+                    function renderizarListaBairrosMobile(filtro) {
+                        var lista = document.getElementById('lista-bairros-mobile');
+                        if (!lista) return;
+                        var bairros = globalBairros.filter(function(b) { return b.nome.toLowerCase().includes(filtro.toLowerCase()); });
+                        lista.innerHTML = bairros.map(function(b) {
+                            var areaInfo = globalAreas.find(function(a) { return a.id === b.area_id; });
+                            var areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
+                            var areaCor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
+                            return '<div onclick="focarBairroMobile(\'' + b.id + '\')" style="padding:8px; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:8px;">' +
+                                '<span style="width:6px; height:6px; background:' + areaCor + '; border-radius:50%; flex-shrink:0;"></span>' +
+                                '<div style="flex:1; min-width:0;"><div style="font-size:12px; font-weight:600; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + b.nome + '</div>' +
+                                '<div style="font-size:10px; color:#64748b;">' + areaNome + '</div></div></div>';
+                        }).join('');
+                    }
+
+                    function filtrarBairrosMapaMobile() {
+                        var busca = document.getElementById('busca-bairro-mobile').value;
+                        renderizarListaBairrosMobile(busca);
+                    }
+
+                    function focarBairroMobile(id) {
+                        var b = globalBairros.find(function(x) { return x.id === id; });
+                        if (b && b.latitude && mapaMobileInstance) {
+                            mapaMobileInstance.setView([b.latitude, b.longitude], 16);
+                            
+                            // Se o bairro é um prolongamento cujo marcador foi ocultado, tentar abrir popup do polígono do pai
+                            var poligono = poligonosMobilePorBairroId[id];
+                            if (!poligono && bairroPaiPorFilhoId[id]) {
+                                poligono = poligonosMobilePorBairroId[bairroPaiPorFilhoId[id]];
+                            }
+                            if (poligono && poligono.openPopup) {
+                                poligono.openPopup();
+                                return;
+                            }
+                            
+                            // Caso contrário, abrir popup do marcador (se ainda estiver visível)
+                            var marcador = marcadoresMobilePorBairroId[id];
+                            if (marcador && marcador.openPopup) {
+                                marcador.openPopup();
+                            }
+                        }
+                    }
+
+                    function toggleBairrosMobile() {
+                        var conteudo = document.getElementById('conteudo-bairros-mobile');
+                        var sidebar = document.getElementById('sidebar-bairros-mobile');
+                        var icon = document.getElementById('icon-toggle-bairros-mobile');
+                        var text = document.getElementById('text-toggle-bairros-mobile');
+                        
+                        if (conteudo.style.display !== 'none') {
+                            conteudo.style.display = 'none';
+                            sidebar.style.height = 'auto';
+                            sidebar.style.flex = 'none';
+                            icon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
+                            text.innerText = 'Mostrar';
+                        } else {
+                            conteudo.style.display = 'flex';
+                            sidebar.style.height = '250px';
+                            sidebar.style.flex = '';
+                            icon.innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
+                            text.innerText = 'Ocultar';
+                        }
+                        setTimeout(function() { if (mapaMobileInstance) mapaMobileInstance.invalidateSize(); }, 300);
+                    }
+
+                    function toggleLegendaMobile(btn) {
+                        var content = document.getElementById('legend-content-mobile');
+                        if (!content) return;
+                        if (content.style.display !== 'none') {
+                            content.style.display = 'none';
+                            btn.querySelector('svg').innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
+                        } else {
+                            content.style.display = 'block';
+                            btn.querySelector('svg').innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
+                        }
+                    }
+
+                    window.abrirMapaMobile = abrirMapaMobile;
+                    window.fecharMapaMobile = fecharMapaMobile;
+                    window.filtrarBairrosMapaMobile = filtrarBairrosMapaMobile;
+                    window.focarBairroMobile = focarBairroMobile;
+                    window.toggleBairrosMobile = toggleBairrosMobile;
+                    window.toggleLegendaMobile = toggleLegendaMobile;
+                    window.toggleDestaqueAreaMapaMobile = toggleDestaqueAreaMapaMobile;
+                </script>
 
                 <!-- GERENCIAMENTO DE ÁREAS E BAIRROS -->
                 <div style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 30px;">
@@ -1587,19 +2212,66 @@
 
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1;">
-                        <input type="text" id="busca-denuncias-geral" placeholder="Pesquisar em todas as colunas..." oninput="aplicarFiltrosDenuncias()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; min-width: 220px; flex: 1; max-width: 320px;">
-                        <select id="filtro-denuncias-origem" onchange="aplicarFiltrosDenuncias()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; background: white; min-width: 160px;">
-                            <option value="">Todas as Origens</option>
-                        </select>
-                        <select id="filtro-denuncias-encaminhado" onchange="aplicarFiltrosDenuncias()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; background: white; min-width: 180px;">
-                            <option value="">Todos os Responsáveis</option>
-                        </select>
-                        <select id="filtro-denuncias-concluido" onchange="aplicarFiltrosDenuncias()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; background: white; min-width: 140px;">
-                            <option value="">Todos os Status</option>
-                            <option value="true">Concluído</option>
-                            <option value="false">Pendente</option>
-                        </select>
-                        <button onclick="limparFiltrosDenuncias()" style="padding: 8px 14px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600;">Limpar</button>
+                        <div style="flex: 1; min-width: 200px; max-width: 320px;">
+                            <input type="text" id="busca-denuncias-geral" placeholder="Pesquisar em todas as colunas..." oninput="aplicarFiltrosDenuncias()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;">
+                        </div>
+                        <div style="position: relative;">
+                            <button id="btn-filtro-denuncias-toggle" onclick="togglePainelFiltroDenuncias()"
+                                style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;"
+                                onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                Filtro
+                            </button>
+                            <div id="painel-filtro-denuncias-popup"
+                                style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:20px; z-index:100; min-width:290px; border:1px solid #e2e8f0;">
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Origem</label>
+                                    <input type="text" id="filtro-denuncias-origem" list="datalist-denuncias-origem" placeholder="Digite ou selecione..." oninput="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                    <datalist id="datalist-denuncias-origem"></datalist>
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Responsável</label>
+                                    <input type="text" id="filtro-denuncias-encaminhado" list="datalist-denuncias-encaminhado" placeholder="Digite ou selecione..." oninput="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                    <datalist id="datalist-denuncias-encaminhado"></datalist>
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Status</label>
+                                    <select id="filtro-denuncias-concluido" onchange="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                                        <option value="">Todos</option>
+                                        <option value="true">Concluído</option>
+                                        <option value="false">Pendente</option>
+                                    </select>
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Prazo</label>
+                                    <select id="filtro-denuncias-vencido" onchange="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                                        <option value="">Todos</option>
+                                        <option value="vencido">Vencido</option>
+                                        <option value="no_prazo">No Prazo</option>
+                                    </select>
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Início</label>
+                                    <input type="date" id="filtro-denuncias-data-inicio" onchange="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Fim</label>
+                                    <input type="date" id="filtro-denuncias-data-fim" onchange="aplicarFiltrosDenuncias()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                </div>
+                                <button onclick="limparFiltrosDenuncias()"
+                                    style="width:100%; padding:8px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; transition:0.2s;"
+                                    onmouseover="this.style.background='#e2e8f0'"
+                                    onmouseout="this.style.background='#f1f5f9'">
+                                    Limpar Filtros
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <button onclick="abrirModalNovaDenuncia()" style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -2046,9 +2718,14 @@
     <script src="lib/FileSaver.min.js"></script>
     <script src="lib/xlsx.bundle.js"></script>
     <script src="lib/sweetalert2.all.min.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="assets/js/protecao.js"></script>
     <script src="assets/js/cabecalho_img.js"></script>
     <script src="assets/js/produtividade.js"></script>
+    <!-- GeoJSON dos bairros e município (carregado como JS para evitar CORS em file://) -->
+    <script src="assets/geojson/bairros_divinopolis_geojson.js"></script>
+    <script src="assets/geojson/municipio_divinopolis_geojson.js"></script>
     <script src="assets/js/gerente.js"></script>
     <script src="assets/js/tarefas.js"></script>
     <script src="assets/js/projetos.js"></script>

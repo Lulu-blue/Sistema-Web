@@ -199,6 +199,24 @@ Gestão completa de áreas de atuação, mapeamento de bairros para fiscais, e c
 - **Normalização inteligente de nomes**: Ao contar ocorrências por bairro, o sistema ignora diferenças de maiúsculas/minúsculas, remove acentos e despreza o prefixo "Bairro" (ex: "Bairro Centro" e "CENTRO" são agrupados no mesmo bairro).
 - **Registros sem bairro ignorados**: Registros onde o campo bairro está NULL ou vazio não aparecem no gráfico nem nas contagens.
 
+### 🗺️ Mapa Geográfico Interativo
+- **Integração Leaflet**: Mapa dinâmico integrado para visualização da distribuição de bairros por área.
+- **Fallback Inteligente — Pontos para Polígonos**: 
+  - Por padrão, exibe **círculos** (`L.circleMarker`) nas coordenadas de latitude/longitude cadastradas no banco.
+  - Se um arquivo GeoJSON com polígonos reais dos bairros for disponibilizado em `assets/geojson/bairros_divinopolis.geojson`, o sistema renderiza as **fronteiras dos bairros** coloridas por área.
+  - Bairros que possuem polígono no GeoJSON têm seu ponto ocultado automaticamente; bairros sem polígono continuam como círculo.
+  - Isso permite uma migração gradual — adicione polígonos aos poucos sem quebrar o mapa.
+- **Camadas Organizadas (LayerGroups)**: Marcadores e polígonos são gerenciados em `L.layerGroup` separadas, permitindo limpeza eficiente, destaque por área e atualização dinâmica sem duplicação.
+- **Lista Lateral Integrada**: Menu lateral sobreposto ao mapa que lista todos os bairros classificados por área.
+- **Legenda de Áreas Dinâmica**: Painel flutuante indicando a cor e o fiscal responsável por cada área (ex: Área 1 - Fiscal João).
+- **Clique Seguro no Mapa**: Ao selecionar um bairro na lista para posicionar no mapa, cliques acidentais em marcadores ou popups são ignorados. O bairro é desselecionado automaticamente após o salvamento da coordenada.
+- **Responsive Mobile Mode**: 
+  - Em telas menores, o mapa inline é substituído pelo botão **"🗺️ Ver Mapa"**.
+  - O clique abre o mapa em **Overlay Fullscreen**, impedindo a rolagem acidental e desconfiguração do layout principal durante o "arrastar" do dedo.
+  - Sidebar e Legenda ganham botões de "Minimizar/Expandir" para liberar mais espaço visível no celular.
+  - Zoom de duplo clique desabilitado via `L.DomEvent` para não acionar zoom out nativo do iOS/Android durante navegação tátil.
+  - Mapa mobile replota marcamentos a cada abertura, garantindo sincronização com dados atualizados.
+
 ### Sistema de Rotação
 - **Rotação de Áreas (Fiscais)**: Troca automática de fiscais entre áreas de atuação. **Não utiliza peso de denúncias** — apenas distribui os fiscais existentes.
 - **Rotação Inteligente de Bairros**: Redistribuição automática de bairros entre áreas baseada no **peso total (NP + AI + Denúncias)** dos últimos 30 dias. Bairros mais pesados são distribuídos para balancear a carga entre as áreas.
@@ -216,9 +234,15 @@ Módulo com 6 sub-abas independentes para acompanhamento de demandas externas:
 - **Comunicação Interna**, **Vereadores**, **MP**, **APP**, **Ouvidoria**, **Protocolo**
 - **CRUD completo**: Formulário modal para criar/editar/excluir registros por tipo.
 - **Campos por tipo**: Protocolo usa `protocolo` + `solicitante`; os demais usam `tarefa` + `origem`.
-- **Filtros e busca**: Busca textual global + dropdowns para filtrar por Origem, Responsável e Status (concluído/pendente).
+- **Filtros e Busca Avançados**: 
+  - Botão de popup unificado ("Filtro") para evitar que elementos cortem em telas menores (mobile-friendly).
+  - Busca textual global.
+  - Filtros de **Origem** e **Responsável** via inputs textuais com **autocomplete** (datalists dinâmicos).
+  - Filtros por **Período** (Data Início / Data Fim) e status de **Prazo** (Vencido / No Prazo).
+  - Ao trocar de sub-aba, os filtros são limpos automaticamente garantindo visualização integral da aba.
 - **Campo Bairro**: Datalist populada com os bairros cadastrados, permitindo também texto livre.
-- **Linha verde automática**: Registros concluídos (`concluido = true`) são destacados em verde na tabela.
+- **Identificação do Criador**: Na tabela, abaixo dos botões de ação, o sistema exibe discretamente "Por: Nome" identificando o criador.
+- **Destaques visuais automáticos**: Registros concluídos (`concluido = true`) ficam em verde claro. Registros com prazo vencido e não concluídos ficam com fundo vermelho claro.
 
 ---
 
@@ -1379,13 +1403,12 @@ SEMAC/
 ---
 
 ### 🔒 Controle Interno de Denúncias — Permissões por Perfil
-- **Gerente de Posturas (GP) ou superior** (Diretor, Secretário): pode **criar, editar e excluir** qualquer registro sem restrição de tempo.
+- **Gerente de Posturas (GP) ou superior** (Diretor, Secretário): pode **criar, editar e excluir** qualquer registro sem restrição.
 - **Administrativo de Posturas**:
   - ✅ **Pode criar** novas linhas normalmente.
-  - ⚠️ **Edição/Exclusão completa limitada a 24h**: só pode editar todos os campos ou excluir registros **que ele criou** há **menos de 24 horas**.
-  - ⏰ **Após 24h**: o botão **"Concluir"** (verde) aparece para **qualquer registro** (independente de quem criou). Ao clicar, abre um modal onde **apenas o campo "Concluído" (Sim/Não) está habilitado**; todos os demais campos aparecem desabilitados (somente leitura).
-  - 🔒 **Tentativa de burla**: as funções `editarDenuncia()`, `editarDenunciaConcluido()` e `excluirDenuncia()` possuem **verificação server-side** que bloqueia a ação e exibe alerta caso o prazo/permisão tenha expirado.
-- **Demais usuários** (Fiscais, etc.): só podem editar/excluir registros **criados por eles mesmos** (`created_by === userId`).
+  - ✅ **Edição/Exclusão completa SEM limite de tempo**: pode editar ou excluir os registros **que ele mesmo criou** a qualquer momento.
+  - ✅ **Conclusão universal**: o botão **"Concluir"** (verde) aparece para **qualquer registro** gerado por terceiros. Ao clicar, abre-se um modal restrito onde **apenas o campo "Concluído" (Sim/Não)** pode ser modificado.
+- **Demais usuários** (Fiscais, etc.): só podem editar/excluir registros **criados por eles mesmos** (`created_by === userId`) sem restrição de tempo.
 
 ---
 

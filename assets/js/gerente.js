@@ -34,30 +34,17 @@ function podeEditarDenuncia(reg) {
     var role = window.userRoleGlobal || '';
     // Gerente, Diretor e Secretário podem editar/excluir tudo
     if (isGerenteOuSuperior(role)) return true;
-    // Administrativo de Posturas pode editar/excluir apenas dentro de 24h da criação e apenas o que criou
-    if (isAdminPosturas()) {
-        if (!reg || !reg.created_at) return false;
-        if (reg.created_by !== (window.userIdGlobal || '')) return false;
-        var criado = new Date(reg.created_at);
-        var agora = new Date();
-        var diffHoras = (agora - criado) / (1000 * 60 * 60);
-        return diffHoras <= 24;
-    }
-    // Demais usuários só podem editar/excluir o que criaram
+    // Administrativo de Posturas e Demais usuários podem editar/excluir o que criaram sem limite de tempo
     return reg && reg.created_by === (window.userIdGlobal || '');
 }
 
 function podeEditarDenunciaConcluido(reg) {
     var role = window.userRoleGlobal || '';
     // Gerente+ já tem permissão total via podeEditarDenuncia; esta função é para casos especiais
-    if (isGerenteOuSuperior(role)) return false; // evita duplicar botão, já têm "Editar"
-    // Administrativo de Posturas: após 24h, pode alterar apenas o campo Concluído de QUALQUER registro
+    if (isGerenteOuSuperior(role)) return false;
+    // Administrativo de Posturas pode alterar apenas o campo Concluído de QUALQUER registro que ele não tenha criado
     if (isAdminPosturas()) {
-        if (!reg || !reg.created_at) return false;
-        var criado = new Date(reg.created_at);
-        var agora = new Date();
-        var diffHoras = (agora - criado) / (1000 * 60 * 60);
-        return diffHoras > 24; // somente quando passou das 24h (independente de quem criou)
+        return true;
     }
     return false;
 }
@@ -1010,6 +997,23 @@ function mudarSubAbaDenuncias(tipo, btnEl) {
         botoes.forEach(function (b) { b.classList.remove('active'); });
     }
     if (btnEl) btnEl.classList.add('active');
+
+    // Limpar filtros ao trocar de aba para não ocultar os dados da nova aba
+    var elBusca = document.getElementById('busca-denuncias-geral');
+    var elOrigem = document.getElementById('filtro-denuncias-origem');
+    var elEnc = document.getElementById('filtro-denuncias-encaminhado');
+    var elConcl = document.getElementById('filtro-denuncias-concluido');
+    var elVencido = document.getElementById('filtro-denuncias-vencido');
+    var elDataInicio = document.getElementById('filtro-denuncias-data-inicio');
+    var elDataFim = document.getElementById('filtro-denuncias-data-fim');
+    if (elBusca) elBusca.value = '';
+    if (elOrigem) elOrigem.value = '';
+    if (elEnc) elEnc.value = '';
+    if (elConcl) elConcl.value = '';
+    if (elVencido) elVencido.value = '';
+    if (elDataInicio) elDataInicio.value = '';
+    if (elDataFim) elDataFim.value = '';
+
     carregarControleDenuncias(tipo);
 }
 
@@ -1028,7 +1032,30 @@ async function carregarControleDenuncias(tipo) {
             .order('data', { ascending: false });
 
         if (error) throw error;
-        registrosDenunciasAtual = data || [];
+        var denuncias = data || [];
+
+        var criadorIds = [];
+        denuncias.forEach(function(d) {
+            if (d.created_by && criadorIds.indexOf(d.created_by) === -1) {
+                criadorIds.push(d.created_by);
+            }
+        });
+
+        var mapCriadores = {};
+        if (criadorIds.length > 0) {
+            var res = await supabaseClient.from('profiles').select('id, full_name').in('id', criadorIds);
+            if (res.data) {
+                res.data.forEach(function(p) { mapCriadores[p.id] = p.full_name; });
+            }
+        }
+
+        denuncias.forEach(function(d) {
+            if (d.created_by && mapCriadores[d.created_by]) {
+                d.criador_nome = mapCriadores[d.created_by];
+            }
+        });
+
+        registrosDenunciasAtual = denuncias;
         atualizarSelectsFiltroDenuncias();
         aplicarFiltrosDenuncias();
     } catch (err) {
@@ -1038,8 +1065,8 @@ async function carregarControleDenuncias(tipo) {
 }
 
 function atualizarSelectsFiltroDenuncias() {
-    var selectOrigem = document.getElementById('filtro-denuncias-origem');
-    var selectEnc = document.getElementById('filtro-denuncias-encaminhado');
+    var dlOrigem = document.getElementById('datalist-denuncias-origem');
+    var dlEnc = document.getElementById('datalist-denuncias-encaminhado');
 
     var origens = new Set();
     var encaminhados = new Set();
@@ -1048,44 +1075,65 @@ function atualizarSelectsFiltroDenuncias() {
         if (r.encaminhado_para_nome) encaminhados.add(r.encaminhado_para_nome);
     });
 
-    if (selectOrigem) {
-        var valAtual = selectOrigem.value;
-        selectOrigem.innerHTML = '<option value="">Todas as Origens</option>';
+    if (dlOrigem) {
+        dlOrigem.innerHTML = '';
         Array.from(origens).sort().forEach(function (o) {
             var opt = document.createElement('option');
             opt.value = o;
-            opt.textContent = o;
-            selectOrigem.appendChild(opt);
+            dlOrigem.appendChild(opt);
         });
-        selectOrigem.value = valAtual;
     }
 
-    if (selectEnc) {
-        var valAtual2 = selectEnc.value;
-        selectEnc.innerHTML = '<option value="">Todos os Responsáveis</option>';
+    if (dlEnc) {
+        dlEnc.innerHTML = '';
         Array.from(encaminhados).sort().forEach(function (e) {
             var opt = document.createElement('option');
             opt.value = e;
-            opt.textContent = e;
-            selectEnc.appendChild(opt);
+            dlEnc.appendChild(opt);
         });
-        selectEnc.value = valAtual2;
     }
 }
 
 function aplicarFiltrosDenuncias() {
     var termo = (document.getElementById('busca-denuncias-geral')?.value || '').toLowerCase().trim();
-    var origem = document.getElementById('filtro-denuncias-origem')?.value || '';
-    var enc = document.getElementById('filtro-denuncias-encaminhado')?.value || '';
+    var origem = (document.getElementById('filtro-denuncias-origem')?.value || '').toLowerCase().trim();
+    var enc = (document.getElementById('filtro-denuncias-encaminhado')?.value || '').toLowerCase().trim();
     var concl = document.getElementById('filtro-denuncias-concluido')?.value || '';
+    var vencido = document.getElementById('filtro-denuncias-vencido')?.value || '';
+    var dataInicio = document.getElementById('filtro-denuncias-data-inicio')?.value || '';
+    var dataFim = document.getElementById('filtro-denuncias-data-fim')?.value || '';
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
     var filtrados = registrosDenunciasAtual.filter(function (r) {
-        if (origem && r.origem !== origem) return false;
-        if (enc && r.encaminhado_para_nome !== enc) return false;
+        // Filtro origem (texto parcial)
+        if (origem && !(r.origem || '').toLowerCase().includes(origem)) return false;
+        // Filtro encaminhado (texto parcial)
+        if (enc && !(r.encaminhado_para_nome || '').toLowerCase().includes(enc)) return false;
+        // Filtro concluído
         if (concl !== '') {
             var esperado = concl === 'true';
             if (r.concluido !== esperado) return false;
         }
+        // Filtro vencido
+        if (vencido) {
+            var prazo = r.prazo_conclusao ? new Date(r.prazo_conclusao) : null;
+            if (vencido === 'vencido') {
+                if (!prazo || prazo >= hoje || r.concluido) return false;
+            } else if (vencido === 'no_prazo') {
+                if (!prazo || prazo < hoje) return false;
+            }
+        }
+        // Filtro data início
+        if (dataInicio && r.data) {
+            if (r.data < dataInicio) return false;
+        }
+        // Filtro data fim
+        if (dataFim && r.data) {
+            if (r.data > dataFim) return false;
+        }
+        // Busca geral
         if (termo) {
             var texto = JSON.stringify(r).toLowerCase();
             if (!texto.includes(termo)) return false;
@@ -1096,15 +1144,27 @@ function aplicarFiltrosDenuncias() {
     renderizarTabelaDenuncias(filtrados, subAbaDenunciasAtual);
 }
 
+function togglePainelFiltroDenuncias() {
+    var painel = document.getElementById('painel-filtro-denuncias-popup');
+    if (!painel) return;
+    painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
+}
+
 function limparFiltrosDenuncias() {
     var elBusca = document.getElementById('busca-denuncias-geral');
     var elOrigem = document.getElementById('filtro-denuncias-origem');
     var elEnc = document.getElementById('filtro-denuncias-encaminhado');
     var elConcl = document.getElementById('filtro-denuncias-concluido');
+    var elVencido = document.getElementById('filtro-denuncias-vencido');
+    var elDataInicio = document.getElementById('filtro-denuncias-data-inicio');
+    var elDataFim = document.getElementById('filtro-denuncias-data-fim');
     if (elBusca) elBusca.value = '';
     if (elOrigem) elOrigem.value = '';
     if (elEnc) elEnc.value = '';
     if (elConcl) elConcl.value = '';
+    if (elVencido) elVencido.value = '';
+    if (elDataInicio) elDataInicio.value = '';
+    if (elDataFim) elDataFim.value = '';
     aplicarFiltrosDenuncias();
 }
 
@@ -1205,16 +1265,21 @@ function renderizarTabelaDenuncias(registros, tipo) {
             if (c.tipo === 'acoes') {
                 var podeEditar = podeEditarDenuncia(reg);
                 var podeConcluir = podeEditarDenunciaConcluido(reg);
+                var criadorNome = reg.criador_nome ? reg.criador_nome.split(' ')[0] : 'Desconhecido';
+                
+                var acoesHtml = '<div style="display:flex; flex-direction:column; gap:4px;"><div>';
                 if (podeEditar) {
-                    val = '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
-                    val += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
+                    acoesHtml += '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
+                    acoesHtml += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
                 } else if (podeConcluir) {
-                    val = '<button onclick="editarDenunciaConcluido(\'' + reg.id + '\')" style="background:#10b981; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Concluir</button>';
+                    acoesHtml += '<button onclick="editarDenunciaConcluido(\'' + reg.id + '\')" style="background:#10b981; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Concluir</button>';
                 } else if (isAdminPostura) {
-                    val = '<span style="color:#94a3b8; font-size:11px;">Bloqueado</span>';
+                    acoesHtml += '<span style="color:#94a3b8; font-size:11px;">Bloqueado</span>';
                 } else {
-                    val = '<span style="color:#94a3b8; font-size:11px;">—</span>';
+                    acoesHtml += '<span style="color:#94a3b8; font-size:11px;">—</span>';
                 }
+                acoesHtml += '</div><div style="font-size:10px; color:#94a3b8; font-weight:600;">Por: ' + criadorNome + '</div></div>';
+                val = acoesHtml;
             } else if (c.tipo === 'boolean') {
                 val = reg[c.chave] ? '<span style="color:#16a34a; font-weight:600;">Sim</span>' : '<span style="color:#64748b;">Não</span>';
             } else if (c.tipo === 'date') {
@@ -1736,6 +1801,22 @@ async function excluirDenuncia(id) {
 
 var globalAreas = [];
 var globalBairros = [];
+var mapaGeograficoInstance = null;
+var bairroSelecionadoParaMapa = null;
+var marcadoresBairrosMapa = {};
+var mapaCoresAreas = {};
+var areasDestacadasMapa = [];
+const paletaCoresAreas = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
+
+// Camadas do mapa Leaflet
+var camadaMarcadoresMapa = null;
+var camadaPoligonosMapa = null;
+
+// Lookup otimizado de áreas por ID
+var areasPorId = {};
+
+// Cache do GeoJSON de bairros (polígonos)
+var geojsonBairrosCache = null;
 
 var globalRegistrosCP = []; // Para armazenar todos os documentos e contar
 var globalDenunciasPorBairro = {}; // contagem de denuncias por bairro
@@ -1820,6 +1901,10 @@ async function carregarGestaoBairrosAreas() {
         renderizarListaAreas();
         renderizarListaBairros();
         renderizarAreasDemanda();
+        
+        setTimeout(() => {
+            inicializarMapaLeaflet();
+        }, 300);
 
     } catch (err) {
         console.error("Erro ao carregar Gestão de Áreas e Bairros. (As tabelas existem?):", err);
@@ -1929,7 +2014,14 @@ function renderizarListaBairros() {
     }
 
     if (bairrosFiltrados.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum bairro encontrado.</div>';
+        var msg = termoBusca 
+            ? '<div style="text-align: center; padding: 30px; color: #64748b;">' +
+              '<p style="margin-bottom: 12px;">Nenhum bairro encontrado com o termo "<strong>' + termoBusca + '</strong>".</p>' +
+              '<button onclick="abrirModalNovoBairro(\'' + termoBusca + '\')" style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer;">+ Cadastrar "' + termoBusca + '"</button>' +
+              '</div>'
+            : '<div style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum bairro cadastrado.</div>';
+        
+        container.innerHTML = msg;
         return;
     }
 
@@ -2017,8 +2109,8 @@ async function excluirArea(id, nome) {
     }
 }
 
-async function abrirModalNovoBairro() {
-    var nomeBairro = prompt("Digite o nome do novo Bairro:");
+async function abrirModalNovoBairro(nomeSugerido = '') {
+    var nomeBairro = prompt("Digite o nome do novo Bairro:", nomeSugerido);
     if (!nomeBairro || nomeBairro.trim() === '') return;
 
     try {
@@ -8069,6 +8161,652 @@ async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
     }
 }
 
+
+// ==========================================
+// MÓDULO MAPA GEOGRÁFICO DE BAIRROS
+// ==========================================
+
+
+function construirLookupAreas() {
+    areasPorId = {};
+    globalAreas.forEach(function(a) {
+        areasPorId[a.id] = a;
+    });
+}
+
+function inicializarMapaLeaflet() {
+    const container = document.getElementById('mapa-container');
+    if (!container) return;
+
+    if (mapaGeograficoInstance) {
+        mapaGeograficoInstance.remove();
+        mapaGeograficoInstance = null;
+        camadaMarcadoresMapa = null;
+        camadaPoligonosMapa = null;
+    }
+
+    // Lookup otimizado
+    construirLookupAreas();
+
+    const centroInicial = [-20.1450, -44.8910]; // Centro de Divinópolis, MG
+    mapaGeograficoInstance = L.map('mapa-container', {
+        doubleClickZoom: false
+    }).setView(centroInicial, 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapaGeograficoInstance);
+
+    // Criar layer groups para organizar camadas
+    camadaMarcadoresMapa = L.layerGroup().addTo(mapaGeograficoInstance);
+    camadaPoligonosMapa = L.layerGroup().addTo(mapaGeograficoInstance);
+
+    // Preparar mapa de cores para as áreas
+    mapaCoresAreas = {};
+    globalAreas.forEach((a, index) => {
+        mapaCoresAreas[a.id] = paletaCoresAreas[index % paletaCoresAreas.length];
+    });
+
+    // Adicionar Legenda
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function (map) {
+        const div = L.DomUtil.create('div', 'info legend');
+        div.style.background = 'white';
+        div.style.padding = '12px';
+        div.style.borderRadius = '8px';
+        div.style.boxShadow = '0 2px 5px rgba(0,0,0,0.15)';
+        div.style.maxHeight = '250px';
+        div.style.overflowY = 'auto';
+        div.style.fontSize = '12px';
+
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="color:#1e293b;">Áreas de Atuação</strong>
+                <button onclick="toggleLegendaMapa()" style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; display:flex;" title="Minimizar Legenda">
+                    <svg id="icon-toggle-legend" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+            </div>
+            <div id="legend-content-mapa" style="transition: opacity 0.2s ease;">
+        `;
+        globalAreas.forEach(a => {
+            const cor = mapaCoresAreas[a.id];
+            const primeiroNome = a.fiscal_nome ? a.fiscal_nome.split(' ')[0] : 'Sem Fiscal';
+            html += `
+                <div id="legend-item-area-${a.id}" onclick="toggleDestaqueAreaMapa('${a.id}')" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; cursor:pointer; transition:0.2s;">
+                    <span style="width:14px; height:14px; border-radius:50%; background:${cor}; display:inline-block; flex-shrink:0;"></span>
+                    <span style="color:#334155; white-space:nowrap; transition:0.2s;">${a.nome} <span style="color:#94a3b8; font-size:11px;">(${primeiroNome})</span></span>
+                </div>
+            `;
+        });
+        html += `
+                <div id="legend-item-area-null" onclick="toggleDestaqueAreaMapa('null')" style="display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:6px; border-top:1px solid #e2e8f0; cursor:pointer; transition:0.2s;">
+                    <span style="width:14px; height:14px; border-radius:50%; background:#94a3b8; display:inline-block; flex-shrink:0;"></span>
+                    <span style="color:#64748b; font-style:italic; transition:0.2s;">Sem Área Definida</span>
+                </div>
+            </div>
+        `;
+        div.innerHTML = html;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        return div;
+    };
+    legend.addTo(mapaGeograficoInstance);
+
+    // Remover loader completamente para não bloquear cliques
+    const loader = document.getElementById('map-loader');
+    if (loader) loader.remove();
+
+    // Evento global de clique no mapa: identifica o layer pela posição do clique
+    // (não depende do DOM, usa coordenadas internas do Leaflet)
+    mapaGeograficoInstance.on('click', function(e) {
+        var layerPoint = e.layerPoint;
+
+        // 1. Verificar marcadores (círculos) — _containsPoint verifica distância ao centro
+        var marcadorClicado = null;
+        Object.keys(marcadoresBairrosMapa).forEach(function(id) {
+            var m = marcadoresBairrosMapa[id];
+            if (m._containsPoint && m._containsPoint(layerPoint)) {
+                marcadorClicado = m;
+            }
+        });
+        if (marcadorClicado) {
+            marcadorClicado.openPopup();
+            return;
+        }
+
+        // 2. Verificar polígonos — _containsPoint verifica point-in-polygon
+        var poligonoClicado = null;
+        if (window.poligonosPorBairroId) {
+            Object.keys(window.poligonosPorBairroId).forEach(function(id) {
+                var p = window.poligonosPorBairroId[id];
+                if (p._containsPoint && p._containsPoint(layerPoint)) {
+                    poligonoClicado = p;
+                }
+            });
+        }
+        if (poligonoClicado) {
+            poligonoClicado.openPopup();
+            return;
+        }
+
+        // 3. Se não clicou em nenhum layer e um bairro está selecionado, posicionar
+        if (bairroSelecionadoParaMapa) {
+            confirmarPosicaoBairro(e.latlng.lat, e.latlng.lng);
+        }
+    });
+
+    renderizarListaBairrosMapa();
+    plotarBairrosNoMapa();
+    carregarPoligonosGeoJSON();
+    carregarPoligonoMunicipio();
+}
+
+window.toggleSidebarMapa = function() {
+    // Bloquear no mobile
+    if (window.innerWidth <= 768) return;
+    
+    const sidebar = document.getElementById('sidebar-bairros-mapa');
+    const content = document.getElementById('sidebar-content-mapa');
+    const title = document.getElementById('sidebar-title-mapa');
+    const icon = document.getElementById('icon-toggle-sidebar');
+    
+    if (sidebar.style.width === '300px' || !sidebar.style.width) {
+        sidebar.style.width = '45px';
+        content.style.opacity = '0';
+        setTimeout(() => content.style.display = 'none', 200);
+        title.style.display = 'none';
+        icon.innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+    } else {
+        sidebar.style.width = '300px';
+        content.style.display = 'flex';
+        setTimeout(() => content.style.opacity = '1', 50);
+        title.style.display = 'block';
+        icon.innerHTML = '<polyline points="15 18 9 12 15 6"></polyline>';
+    }
+    
+    setTimeout(() => { if (mapaGeograficoInstance) mapaGeograficoInstance.invalidateSize(); }, 300);
+};
+
+window.toggleLegendaMapa = function() {
+    const content = document.getElementById('legend-content-mapa');
+    const icon = document.getElementById('icon-toggle-legend');
+    
+    if (content.style.display !== 'none') {
+        content.style.display = 'none';
+        icon.innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
+    } else {
+        content.style.display = 'block';
+        icon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
+    }
+};
+
+window.toggleDestaqueAreaMapa = function(areaId) {
+    const idx = areasDestacadasMapa.indexOf(areaId);
+    if (idx > -1) {
+        areasDestacadasMapa.splice(idx, 1);
+    } else {
+        areasDestacadasMapa.push(areaId);
+    }
+
+    const elementsToUpdate = [...globalAreas.map(a => a.id), 'null'];
+    elementsToUpdate.forEach(id => {
+        const el = document.getElementById('legend-item-area-' + id);
+        if (!el) return;
+        const textSpan = el.querySelector('span:nth-child(2)');
+        
+        if (areasDestacadasMapa.length === 0 || areasDestacadasMapa.includes(id)) {
+            el.style.opacity = '1';
+            if (textSpan) textSpan.style.fontWeight = areasDestacadasMapa.length > 0 ? '600' : 'normal';
+        } else {
+            el.style.opacity = '0.4';
+            if (textSpan) textSpan.style.fontWeight = 'normal';
+        }
+    });
+
+    // Ajustar marcadores (pontos) — ocultar completamente se área não selecionada
+    globalBairros.forEach(b => {
+        const marker = marcadoresBairrosMapa[b.id];
+        if (marker) {
+            const bAreaId = b.area_id || 'null';
+            const ativo = areasDestacadasMapa.length === 0 || areasDestacadasMapa.includes(bAreaId);
+            const cor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
+            if (ativo) {
+                marker.setStyle({ fillColor: cor, fillOpacity: 0.8, color: '#fff', opacity: 1, interactive: true });
+            } else {
+                marker.setStyle({ fillColor: cor, fillOpacity: 0, color: '#fff', opacity: 0, interactive: false });
+            }
+        }
+    });
+
+    // Ajustar polígonos GeoJSON — ocultar completamente se área não selecionada
+    if (window.poligonosPorBairroId) {
+        Object.keys(window.poligonosPorBairroId).forEach(function(bairroId) {
+            var layer = window.poligonosPorBairroId[bairroId];
+            if (!layer) return;
+            var bairro = globalBairros.find(function(b) { return b.id === bairroId; });
+            var bAreaId = (bairro && bairro.area_id) || 'null';
+            var ativo = areasDestacadasMapa.length === 0 || areasDestacadasMapa.includes(bAreaId);
+            if (ativo) {
+                layer.setStyle({ fillOpacity: 0.45, opacity: 0.8, interactive: true });
+            } else {
+                layer.setStyle({ fillOpacity: 0, opacity: 0, interactive: false });
+            }
+        });
+    }
+
+    if (document.getElementById('busca-bairro-mapa')) {
+        renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
+    }
+};
+
+function renderizarListaBairrosMapa(filtro = '') {
+    const lista = document.getElementById('lista-bairros-mapa');
+    if (!lista) return;
+
+    let bairros = globalBairros.filter(b => b.nome.toLowerCase().includes(filtro.toLowerCase()));
+    
+    if (areasDestacadasMapa.length > 0) {
+        bairros = bairros.filter(b => areasDestacadasMapa.includes(b.area_id || 'null'));
+    }
+    
+    lista.innerHTML = bairros.map(b => {
+        const temCoord = b.latitude && b.longitude;
+        const cor = temCoord ? '#10b981' : '#ef4444';
+        const ativo = bairroSelecionadoParaMapa && bairroSelecionadoParaMapa.id === b.id;
+        
+        const areaInfo = globalAreas.find(a => a.id === b.area_id);
+        const areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
+        const areaCor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
+        
+        return `
+            <div onclick="selecionarBairroMapa('${b.id}')" style="padding: 10px; border: 1px solid ${ativo ? '#3b82f6' : '#e2e8f0'}; background: ${ativo ? '#eff6ff' : 'white'}; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;">
+                <div style="width: 8px; height: 8px; background: ${cor}; border-radius: 50%; flex-shrink: 0;"></div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${b.nome}</div>
+                    <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                        <span style="width: 6px; height: 6px; background: ${areaCor}; border-radius: 50%; flex-shrink:0;"></span>
+                        <span style="font-size: 10px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${areaNome}</span>
+                    </div>
+                </div>
+                ${temCoord ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" style="flex-shrink:0;"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function selecionarBairroMapa(id) {
+    bairroSelecionadoParaMapa = globalBairros.find(b => b.id === id);
+    renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
+    
+    if (bairroSelecionadoParaMapa && bairroSelecionadoParaMapa.latitude && mapaGeograficoInstance) {
+        mapaGeograficoInstance.setView([bairroSelecionadoParaMapa.latitude, bairroSelecionadoParaMapa.longitude], 15);
+        
+        // Se o bairro é um prolongamento cujo marcador foi ocultado, tentar abrir popup do polígono do pai
+        var poligono = window.poligonosPorBairroId[id];
+        if (!poligono && window.bairroPaiPorFilhoId[id]) {
+            poligono = window.poligonosPorBairroId[window.bairroPaiPorFilhoId[id]];
+        }
+        if (poligono && poligono.openPopup) {
+            poligono.openPopup();
+            return;
+        }
+        
+        // Caso contrário, abrir popup do marcador (se ainda estiver visível)
+        var marcador = marcadoresBairrosMapa[id];
+        if (marcador && camadaMarcadoresMapa && camadaMarcadoresMapa.hasLayer(marcador)) {
+            marcador.openPopup();
+        }
+    }
+}
+
+function filtrarBairrosMapa() {
+    const busca = document.getElementById('busca-bairro-mapa').value;
+    renderizarListaBairrosMapa(busca);
+}
+
+function plotarBairrosNoMapa() {
+    // Limpar marcadores antigos da camada
+    if (camadaMarcadoresMapa) {
+        camadaMarcadoresMapa.clearLayers();
+    }
+    marcadoresBairrosMapa = {};
+
+    globalBairros.forEach(b => {
+        if (b.latitude && b.longitude) {
+            const area = areasPorId[b.area_id];
+            const corPonto = area ? mapaCoresAreas[area.id] : "#94a3b8";
+            
+            const marker = L.circleMarker([b.latitude, b.longitude], {
+                radius: 8,
+                fillColor: corPonto,
+                color: "#fff",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8,
+                interactive: true
+            });
+
+            var popupContent = `
+                <div style="font-family: 'Inter', sans-serif;">
+                    <strong style="display: block; margin-bottom: 4px;">${b.nome}</strong>
+                    <span style="font-size: 12px; color: #64748b;">Área: ${area ? area.nome : 'Sem Área'}</span>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+            
+            // Handler de clique direto no marcador (Leaflet)
+            marker.on('click', function(e) {
+                marker.openPopup();
+            });
+            
+            if (camadaMarcadoresMapa) {
+                camadaMarcadoresMapa.addLayer(marker);
+            } else {
+                marker.addTo(mapaGeograficoInstance);
+            }
+            marcadoresBairrosMapa[b.id] = marker;
+        }
+    });
+}
+
+async function confirmarPosicaoBairro(lat, lng) {
+    if (!bairroSelecionadoParaMapa) return;
+
+    const confirmou = await Swal.fire({
+        title: 'Definir Localização?',
+        text: `Deseja marcar o bairro "${bairroSelecionadoParaMapa.nome}" nesta posição do mapa?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, Salvar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#10b981'
+    });
+
+    if (confirmou.isConfirmed) {
+        try {
+            const { error } = await supabaseClient
+                .from('bairros')
+                .update({ latitude: lat, longitude: lng })
+                .eq('id', bairroSelecionadoParaMapa.id);
+
+            if (error) throw error;
+
+            Swal.fire({ icon: 'success', title: 'Localização Salva!', timer: 1500, showConfirmButton: false });
+            
+            bairroSelecionadoParaMapa.latitude = lat;
+            bairroSelecionadoParaMapa.longitude = lng;
+            
+            // Desselecionar bairro para evitar cliques acidentais
+            bairroSelecionadoParaMapa = null;
+            
+            plotarBairrosNoMapa();
+            renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Erro', 'Não foi possível salvar a localização. Verifique se as colunas latitude/longitude foram criadas no banco.', 'error');
+        }
+    }
+}
+
+// ==========================================
+// GEOJSON — POLÍGONOS DE BAIRROS (LONGO PRAZO)
+// ==========================================
+
+/**
+ * Tenta carregar um arquivo GeoJSON com os polígonos dos bairros.
+ * Se existir, renderiza polígonos coloridos por área.
+ * Bairros sem polígono continuam sendo exibidos como círculos (fallback).
+ * 
+ * Estrutura esperada do GeoJSON:
+ * {
+ *   "type": "FeatureCollection",
+ *   "features": [
+ *     {
+ *       "type": "Feature",
+ *       "properties": { "nome": "Centro", "bairro_id": "uuid-opcional" },
+ *       "geometry": { "type": "Polygon", "coordinates": [...] }
+ *     }
+ *   ]
+ * }
+ */
+async function carregarPoligonosGeoJSON() {
+    if (!camadaPoligonosMapa) return;
+    camadaPoligonosMapa.clearLayers();
+
+    // Se já temos cache em memória, usar diretamente
+    if (geojsonBairrosCache) {
+        renderizarPoligonosGeoJSON(geojsonBairrosCache);
+        return;
+    }
+
+    // ESTRATÉGIA 1: variável global vinda do <script> (funciona em file:// e http://)
+    if (typeof geojsonBairrosDivinopolis !== 'undefined' && geojsonBairrosDivinopolis) {
+        geojsonBairrosCache = geojsonBairrosDivinopolis;
+        renderizarPoligonosGeoJSON(geojsonBairrosCache);
+        return;
+    }
+
+    // ESTRATÉGIA 2: fetch (apenas funciona em http://, https://, localhost)
+    try {
+        var resposta = await fetch('assets/geojson/bairros_divinopolis.geojson');
+        if (!resposta.ok) {
+            console.log('[Mapa] GeoJSON de bairros não encontrado. Usando pontos como fallback.');
+            return;
+        }
+        var geojson = await resposta.json();
+        geojsonBairrosCache = geojson;
+        renderizarPoligonosGeoJSON(geojson);
+    } catch (err) {
+        console.log('[Mapa] GeoJSON de bairros indisponível (CORS?). Usando pontos como fallback.');
+    }
+}
+
+function carregarPoligonoMunicipio() {
+    if (!mapaGeograficoInstance) return;
+    
+    // Usar variável global do script JS (evita CORS em file://)
+    var geojson = (typeof geojsonMunicipioDivinopolis !== 'undefined') ? geojsonMunicipioDivinopolis : null;
+    if (!geojson || !geojson.features || !geojson.features.length) return;
+    
+    var feature = geojson.features[0];
+    var geomType = feature.geometry.type;
+    
+    var style = {
+        fillColor: '#e2e8f0',
+        color: '#94a3b8',
+        weight: 2,
+        opacity: 0.6,
+        fillOpacity: 0.15,
+        dashArray: '5, 5'
+    };
+    
+    if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+        L.geoJSON(feature, { style: style }).addTo(mapaGeograficoInstance);
+        
+        // Ajustar o view para os bounds do município
+        var layer = L.geoJSON(feature);
+        var bounds = layer.getBounds();
+        if (bounds.isValid()) {
+            mapaGeograficoInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+        }
+    }
+}
+
+function renderizarPoligonosGeoJSON(geojson) {
+    if (!geojson || !geojson.features) return;
+
+    // Mapear nomes de bairros normalizados para objetos do banco
+    var bairrosPorNomeNorm = {};
+    globalBairros.forEach(function(b) {
+        var nomeNorm = normalizarNomeBairroGeo(b.nome);
+        bairrosPorNomeNorm[nomeNorm] = b;
+    });
+
+    // Aliases para nomes do GeoJSON que não batem exatamente com o CSV
+    var aliasesBairrosGeo = {
+        'centroindustrial': 'centroindustrialsantoantoniodoscampos',
+        'chanadour': 'chanadours',
+        'condominiovilleroyale': 'condominiovileroyalle',
+        'nossasenhoradagraca': 'nossasenhoradasgracas',
+        'doutordulphepintodeaguiar': 'dulphepintodeaguiar',
+        'quintadaspalmeiras': 'residencialquintadaspalmeiras',
+        'residencialwalchirresendecosta': 'residencialwalchirresende',
+        'vilaroseiras': 'vilaroseira',
+        'chacarassantarita': 'chacarasantarita',
+        'chacarassiarom': 'chacarasiarom',
+        'joseantoniogoncalves': 'jagoncalves',
+        'parquejardimcapitaosilva': 'jardimcapitaosilva',
+        'levindopaulapereira': 'lppereira',
+        'nucleocomerciallevindopaulapereira': 'nucleolppereira'
+    };
+    window.aliasesBairrosGeo = aliasesBairrosGeo;
+    Object.keys(aliasesBairrosGeo).forEach(function(geoNome) {
+        var csvNome = aliasesBairrosGeo[geoNome];
+        if (bairrosPorNomeNorm[csvNome] && !bairrosPorNomeNorm[geoNome]) {
+            bairrosPorNomeNorm[geoNome] = bairrosPorNomeNorm[csvNome];
+        }
+    });
+
+    var bairrosComPoligono = {};
+    var poligonosPorBairroId = {};
+    var bairroPaiPorFilhoId = {};  // Mapeia ID do filho (prolongamento) → ID do pai (polígono)
+
+    // Bairros filhos (ex: prolongamentos) que devem ter seus marcadores ocultados
+    // quando o polígono do bairro pai é renderizado
+    var bairrosFilhosDoPoligono = {
+        'jardimcandelaria': ['prolongamentojardimcandelaria'],
+        'jardimbelvedere': ['jardimbelvedereii'],
+        'eldorado': ['prologamentoeldorado'],
+        'interlagos': ['prologamentointerlagos'],
+        'saosebastiao': ['prolongamentosaosebastiao'],
+        'antoniofonseca': ['prolongamentoantoniofonseca'],
+        'paraiso': ['prolongamentoparaiso'],
+        'joseantoniogoncalves': ['prolongamentojagoncalves'],
+        'espiritosanto': ['prolongamentoespiritosanto'],
+        'jardimcopacabana': ['prolongamentojardimcopacabana'],
+        'santaclara': ['prolongamentosantaclara'],
+        'vilacruzeiro': ['prolongamentovilacruzeiro'],
+        'novafortaleza': ['prolongamentonovafortaleza'],
+        'orion': ['prolongamentoorion'],
+        'pontefunda': ['prolongamentopontefunda'],
+        'saolucas': ['prolongamentosaolucas'],
+        'moradanova': ['prolongamentomoradanova'],
+        'sion': ['prolongamentosion'],
+        'afonsopena': ['prolongamentoafonsopena'],
+        'vilaromana': ['prolongamentovilaromana'],
+        'belavista': ['prolongamentobelavista'],
+        'catalao': ['prolongamentocatalao'],
+        'manoelvalinhas': ['prolongamentomanoelvalinhas'],
+        'tiete': ['prolongamentotiete'],
+        'residencialwalchirresendecosta': ['prolongamentoresidencialwalchirresende'],
+        'nacoes': ['prolongamentonacoes'],
+        'saojose': ['prolongamentosaojose'],
+        'parquejardimcapitaosilva': ['prolongamentojardimcapitaosilva'],
+        'halimsouki': ['prolongamentohalimsouki'],
+        'vilaoperaria': ['prolongamentovilaoperaria'],
+        'quintino': ['prolongamentoquintino'],
+        'planalto': ['prolongamentoplanalto'],
+        'jardimdoscandides': ['prolongamentojardimdoscandides'],
+        'franciscomachadofilho': ['prologamentofranciscomachadofilho'],
+        'icarai': ['prolongamentoicarai'],
+        'jardimdasacacias': ['prolongamentojardimdasacacias'],
+        'lppereira': ['prolongamentolppereira']
+    };
+
+    var geojsonLayerBairros = L.geoJSON(geojson, {
+        style: function(feature) {
+            var nomeFeature = (feature.properties && feature.properties.name) || '';
+            var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
+            var bairro = bairrosPorNomeNorm[nomeNorm];
+            var cor = '#94a3b8';
+            if (bairro && bairro.area_id && mapaCoresAreas[bairro.area_id]) {
+                cor = mapaCoresAreas[bairro.area_id];
+            }
+            return {
+                fillColor: cor,
+                color: '#ffffff',
+                weight: 1.5,
+                opacity: 0.8,
+                fillOpacity: 0.45
+            };
+        },
+        onEachFeature: function(feature, layer) {
+            var nomeFeature = (feature.properties && feature.properties.name) || 'Bairro';
+            var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
+            var bairro = bairrosPorNomeNorm[nomeNorm];
+            var areaNome = 'Sem Área';
+            if (bairro && bairro.area_id && areasPorId[bairro.area_id]) {
+                areaNome = areasPorId[bairro.area_id].nome;
+            }
+            var popupContentPoly = `
+                <div style="font-family: 'Inter', sans-serif;">
+                    <strong style="display: block; margin-bottom: 4px;">${nomeFeature}</strong>
+                    <span style="font-size: 12px; color: #64748b;">Área: ${areaNome}</span>
+                </div>
+            `;
+            layer.bindPopup(popupContentPoly, { offset: L.point(0, 80) });
+            
+            // Handler de clique direto no polígono (Leaflet)
+            layer.on('click', function(e) {
+                layer.openPopup();
+            });
+            
+            if (bairro) {
+                bairrosComPoligono[bairro.id] = true;
+                poligonosPorBairroId[bairro.id] = layer;
+                
+                // Ocultar marcadores de bairros filhos (prolongamentos/sub-bairros sem polígono próprio)
+                var nomeBairroNorm = normalizarNomeBairroGeo(bairro.nome);
+                var filhos = bairrosFilhosDoPoligono[nomeBairroNorm] || [];
+                filhos.forEach(function(filhoNomeNorm) {
+                    var filho = bairrosPorNomeNorm[filhoNomeNorm];
+                    if (filho) {
+                        bairrosComPoligono[filho.id] = true;
+                        bairroPaiPorFilhoId[filho.id] = bairro.id;  // Mapear filho → pai para abrir popup ao clicar na lista
+                    }
+                });
+            }
+        }
+    });
+    
+    // Adicionar layers individuais à camada (não a FeatureGroup inteira)
+    geojsonLayerBairros.eachLayer(function(layer) {
+        camadaPoligonosMapa.addLayer(layer);
+    });
+
+    // Guardar referência global para filtragem rápida por área
+    window.poligonosPorBairroId = poligonosPorBairroId;
+    window.bairroPaiPorFilhoId = bairroPaiPorFilhoId;
+
+    // Remover marcadores de bairros que já possuem polígono (o polígono já representa visualmente)
+    Object.keys(marcadoresBairrosMapa).forEach(function(bairroId) {
+        if (bairrosComPoligono[bairroId]) {
+            var marker = marcadoresBairrosMapa[bairroId];
+            if (marker && camadaMarcadoresMapa) {
+                camadaMarcadoresMapa.removeLayer(marker);
+            }
+        }
+    });
+
+    console.log('[Mapa] Polígonos renderizados:', geojson.features.length);
+}
+
+/**
+ * Normaliza nome de bairro para matching com GeoJSON.
+ * Remove acentos, prefixo "Bairro", espaços extras e converte para minúsculas.
+ */
+function normalizarNomeBairroGeo(nome) {
+    if (!nome) return '';
+    return nome
+        .toString()
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/^\s*bairro\s+/i, '')
+        .replace(/[^a-z0-9]/g, '');
+}
+
+window.filtrarBairrosMapa = filtrarBairrosMapa;
+window.selecionarBairroMapa = selecionarBairroMapa;
 
 // Expor funções globalmente
 window.abrirEstatisticasFuncionario = abrirEstatisticasFuncionario;
