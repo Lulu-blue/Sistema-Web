@@ -1460,3 +1460,16 @@ SEMAC/
   - o salvamento é interrompido;
   - um alerta visual via SweetAlert2 é exibido;
   - o botão "Salvar" é reativado automaticamente.
+
+---
+
+## 🆕 Atualizações Recentes (20/05/2026) — Produtividade, Numeração e Rascunhos
+
+### 📈 Carregamento Limitless e Refinamento de Componentes
+- **Histórico Geral Sem Limites:** O sistema agora utiliza buscas assíncronas em lotes, removendo a trava de 1000 registros para garantir que nenhum histórico (mesmo utilizando filtros profundos) deixe de ser contabilizado ou visualizado.
+- **Simplificação de Certidão (1.8):** Consolidação dos antigos campos "Rua", "Nº" e "Bairro" em um único campo genérico "Endereço do Autuado", impactando tanto a exibição do popup quanto a template de geração em PDF.
+- **Melhoria no Ofício (1.4):** Inclusão do campo opcional "CPF/CNPJ" na geração nativa dos templates de documento.
+
+### 🔢 Fila Global de Numeração e Integridade
+- **Reutilização Sistêmica:** Ao invés de causar saltos na numeração ("buracos"), quando um documento que exige N° sequencial (como Autos ou Ofícios) for deletado ou um rascunho cancelado, o sistema executa a função RPC `devolver_numero_sequencial`, que insere esse identificador na fila pública. O próximo documento usará este número reaproveitado.
+- **Segurança de Geração (Rascunhos):** Foi consertada uma brecha silenciosa na função de autenticação `getAuthUser` usada nas assinaturas de documentos via editor HTML, e implementadas barreiras sólidas onde, caso o banco retenha o "Rascunho" por configurações de RLS ou latência, a interface apresenta erros amigáveis bloqueando a quebra do módulo.

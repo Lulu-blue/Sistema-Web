@@ -2637,7 +2637,10 @@ function selecionarOpcao(campoNome, valor) {
     document.querySelector(`#dropdown-${campoNome} .dropdown-texto`).textContent = valor;
     document.getElementById(`dropdown-lista-${campoNome}`).classList.remove('aberto');
     // Esconder "Outro" se estava aberto
-    document.getElementById(`outro-container-${campoNome}`).style.display = 'none';
+    const outroContainer = document.getElementById(`outro-container-${campoNome}`);
+    if (outroContainer) {
+        outroContainer.style.display = 'none';
+    }
 }
 
 function mostrarInputOutro(campoNome) {
