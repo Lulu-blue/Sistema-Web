@@ -4761,6 +4761,7 @@ async function cancelarRascunhoDocumento() {
 
 // --- GERADOR DE AUTO DE INFRAÇÃO (WYSIWYG) ---
 async function abrirEditorAutoInfracao() {
+    if (!categoriaAtual) return;
     // 1. Coleta e valida dados
     const campos = {};
     let todosPreenchidos = true;
@@ -4919,6 +4920,7 @@ async function abrirEditorAutoInfracao() {
 
 // --- GERADOR DE OFÍCIO (WYSIWYG) ---
 async function abrirEditorOficio() {
+    if (!categoriaAtual) return;
     // 1. Coleta e valida dados
     const campos = {};
     let todosPreenchidos = true;
@@ -5052,6 +5054,7 @@ async function abrirEditorOficio() {
 // FUNÇÃO: ABRIR EDITOR RELATÓRIO DO FISCAL
 // ==========================================
 async function abrirEditorRelatorio() {
+    if (!categoriaAtual) return;
     // 1. Coleta e valida dados
     const campos = {};
     let todosPreenchidos = true;
@@ -5182,6 +5185,7 @@ async function abrirEditorRelatorio() {
 // FUNÇÃO: ABRIR EDITOR RÉPLICA DO FISCAL
 // ==========================================
 async function abrirEditorReplica() {
+    if (!categoriaAtual) return;
     // 1. Validação de Campos
     const campos = {};
     let todosPreenchidos = true;
@@ -5318,6 +5322,7 @@ async function abrirEditorReplica() {
 // FUNÇÃO: ABRIR EDITOR CERTIDÃO DO FISCAL
 // ==========================================
 async function abrirEditorCertidao() {
+    if (!categoriaAtual) return;
     // 1. Validação de Campos
     const campos = {};
     let todosPreenchidos = true;
@@ -5445,6 +5450,7 @@ async function abrirEditorCertidao() {
 }
 
 async function abrirEditorDividaAtiva() {
+    if (!categoriaAtual) return;
     const campos = {};
     let todosPreenchidos = true;
 
