@@ -4853,7 +4853,7 @@ async function abrirEditorAutoInfracao() {
         
         <p style="margin-top: 20px; line-height: 1.5;">
             <strong>Estabelecimento/Proprietário:</strong> ${campos.nome}<br>
-            <strong>CPF/CNPJ:</strong> ${campo || '_________________'}
+            <strong>CPF/CNPJ:</strong> ${campos.cpf_contribuinte || '_________________'}
         </p>
         <p>
             <strong>Endereço:</strong> ${campos.endereco_infrator || '---'}
