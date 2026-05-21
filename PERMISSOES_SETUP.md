@@ -1,6 +1,6 @@
 # 🔐 Configuração de Permissões Hierárquicas
 
-Este guia documenta as permissões reais do banco de dados Supabase do SEMAC, consolidando políticas RLS, hierarquia de cargos e tabelas do sistema.
+Este guia documenta as permissões reais do banco de dados Supabase, consolidando políticas RLS, hierarquia de cargos e tabelas do sistema.
 
 > **Última atualização:** Abril/2026 (sincronizado com os CSVs de políticas do Supabase)
 

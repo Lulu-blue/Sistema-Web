@@ -1,4 +1,4 @@
-# 🏛️ SEMAC — Sistema de Gestão da Fiscalização de Posturas
+# 🏛️ Sistema de Gestão da Fiscalização de Posturas
 
 Sistema web para a Secretaria Municipal, migrando o controle de produtividade dos fiscais de planilhas LibreOffice para uma aplicação web moderna com Supabase.
 
@@ -1473,3 +1473,135 @@ SEMAC/
 ### 🔢 Fila Global de Numeração e Integridade
 - **Reutilização Sistêmica:** Ao invés de causar saltos na numeração ("buracos"), quando um documento que exige N° sequencial (como Autos ou Ofícios) for deletado ou um rascunho cancelado, o sistema executa a função RPC `devolver_numero_sequencial`, que insere esse identificador na fila pública. O próximo documento usará este número reaproveitado.
 - **Segurança de Geração (Rascunhos):** Foi consertada uma brecha silenciosa na função de autenticação `getAuthUser` usada nas assinaturas de documentos via editor HTML, e implementadas barreiras sólidas onde, caso o banco retenha o "Rascunho" por configurações de RLS ou latência, a interface apresenta erros amigáveis bloqueando a quebra do módulo.
+
+---
+
+## 🗺️ Sistema de Mapa Geográfico (Bairros e Áreas)
+
+O sistema utiliza **Leaflet.js** para renderizar um mapa interativo que correlaciona os **bairros cadastrados no banco de dados** (tabela `bairros` no Supabase) com os **polígonos territoriais** extraídos do OpenStreetMap (GeoJSON).
+
+### 📂 Fonte dos Dados
+
+| Camada | Origem | Arquivo / Tabela |
+|---|---|---|
+| **Pontos (marcadores)** | Banco de dados | `bairros` (Supabase) — `latitude`, `longitude`, `geolocalizacao` |
+| **Polígonos de bairros** | OpenStreetMap | `assets/geojson/bairros_divinopolis.geojson` |
+| **Limite municipal** | OpenStreetMap | `assets/geojson/municipio_divinopolis.geojson` |
+
+### 🔗 Como os Bairros se Conectam aos Polígonos
+
+O matching é feito por **nome normalizado**:
+
+1. O nome do bairro no banco e o nome do polígono no GeoJSON são normalizados:
+   - Convertido para minúsculas
+   - Removidos acentos e caracteres especiais
+   - Removidos prefixos como "Bairro"
+   - Espaços e pontuação removidos
+
+2. Se os nomes normalizados forem **idênticos**, o polígono é vinculado automaticamente ao bairro.
+
+3. Se os nomes forem **diferentes**, é necessário um **alias** no código (`aliasesBairrosGeo`):
+
+```javascript
+// Em assets/js/gerente.js e painel.html
+var aliasesBairrosGeo = {
+    'chanadour': 'chanadours',                           // GeoJSON "Chanadour" → Banco "Chanadours"
+    'condominiovilleroyale': 'condominiovileroyalle',    // GeoJSON "Ville Royale" → Banco "Vile Royalle"
+    'nossasenhoradagraca': 'nossasenhoradasgracas',      // GeoJSON "Nossa Senhora da Graça" → Banco "Nossa Senhora das Graças"
+    'levindopaulapereira': 'lppereira',                  // GeoJSON "Levindo Paula Pereira" → Banco "L. P. Pereira"
+    'nucleocomerciallevindopaulapereira': 'nucleolppereira', // GeoJSON "Núcleo Comercial..." → Banco "Núcleo L. P Pereira"
+    'parquejardimcapitaosilva': 'jardimcapitaosilva',    // GeoJSON "Parque Jardim Capitão Silva" → Banco "Jardim Capitão Silva"
+    'joseantoniogoncalves': 'jagoncalves',               // GeoJSON "José Antônio Gonçalves" → Banco "J.A Gonçalves"
+    'residencialwalchirresendecosta': 'residencialwalchirresende', // GeoJSON "Walchir Resende Costa" → Banco "Walchir Resende"
+    // ... etc
+};
+```
+
+> ⚠️ **Para adicionar um novo alias:** localize o nome exato no GeoJSON e no banco, normalize ambos manualmente, e adicione a entrada no objeto `aliasesBairrosGeo` tanto em `assets/js/gerente.js` quanto em `painel.html`.
+
+### 👨‍👧 Relação Pai-Filho (Prolongamentos)
+
+Bairros do tipo "Prolongamento" não possuem polígono próprio — eles herdam o polígono do bairro pai. O objeto `bairrosFilhosDoPoligono` define essas relações:
+
+```javascript
+var bairrosFilhosDoPoligono = {
+    'jardimbelvedere': ['jardimbelvedereii'],        // Jardim Belvedere I + II compartilham o mesmo polígono
+    'joseantoniogoncalves': ['prolongamentojagoncalves'],
+    'tiete': ['prolongamentotiete'],
+    // ... etc
+};
+```
+
+**Comportamento:**
+- O marcador do filho é **removido** do mapa quando o polígono do pai é renderizado
+- Clicar no nome do filho na lista centraliza no ponto do filho, mas abre o **popup do polígono do pai**
+- Isso evita bolinhas sobrepostas ao polígono
+
+### 📍 Correções de Coordenadas Realizadas
+
+Durante o mapeamento, diversos bairros tiveram suas coordenadas corrigidas para ficarem dentro do polígono correto:
+
+| Bairro | Motivo da Correção |
+|---|---|
+| **Prolongamentos** (34+) | Coordenadas movidas para o **centroide** do polígono do bairro pai |
+| **Chanadours** | Nome no GeoJSON é "Chanadour" (singular) — alias + centroide aplicados |
+| **Condomínio Vile Royalle** | Nome no GeoJSON é "Condomínio Ville Royale" — alias + coordenada adicionada |
+| **Nossa Senhora das Graças** | Nome no GeoJSON é "Nossa Senhora da Graça" — alias + centroide aplicados |
+| **J. K** | Sem coordenadas — adicionado centroide do polígono "JK" |
+| **Jardim Belvedere I e II** | Ambos reposicionados para o mesmo centroide do polígono único |
+
+Todas as correções estão refletidas na tabela `bairros` do Supabase e no arquivo `PERMISSOES_SETUP.md` (seção de seed/upsert).
+
+### 🗺️ Funcionalidades do Mapa
+
+#### Busca de Bairros
+- Campo de filtro na sidebar filtra a lista de bairros em tempo real
+- Clique no nome do bairro:
+  - Se tiver **polígono**: faz `fitBounds` no polígono (zoom no nível das ruas, max 17)
+  - Se não tiver polígono: zoom 17 no ponto do marcador
+
+#### Busca de Endereços (Nominatim)
+- Campo secundário abaixo do filtro de bairros
+- Digite "Rua Alameda", "Avenida Paraná", etc.
+- Consulta a API gratuita **Nominatim** (OpenStreetMap) restrita à área de Divinópolis/MG
+- Adiciona um marcador temporário no local encontrado com zoom 18
+
+#### Popup dos Polígonos
+- Os popups dos polígonos possuem um **offset de 80 pixels para baixo** (`offset: L.point(0, 80)`) para não ficarem cortados na parte superior da tela
+- Desktop e mobile aplicam o mesmo deslocamento
+
+#### Legenda de Áreas
+- Abaixo do mapa (canto inferior direito) há uma legenda colorida com as áreas de atuação
+- Clicar em uma área destaca/apaga os bairros pertencentes a ela
+
+### 🛠️ Manutenção do Mapa
+
+#### Adicionar um novo alias (bairro com nome diferente no GeoJSON)
+1. Abra `assets/js/gerente.js` e localize `aliasesBairrosGeo`
+2. Adicione a entrada: `'nomegeojson': 'nomebanco'`
+3. Faça o mesmo em `painel.html` (seção equivalente no código mobile)
+4. Recarregue a página
+
+#### Adicionar um novo prolongamento
+1. Localize `bairrosFilhosDoPoligono` em ambos os arquivos
+2. Adicione o pai e o filho: `'paisemprolongamento': ['prolongamentopai']`
+3. Certifique-se de que o pai tenha coordenada correta no banco
+
+#### Adicionar polígonos novos (GeoJSON)
+O arquivo `assets/geojson/bairros_divinopolis.geojson` segue o padrão GeoJSON:
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Nome do Bairro" },
+      "geometry": { "type": "Polygon", "coordinates": [...] }
+    }
+  ]
+}
+```
+
+Para adicionar novos polígonos, edite o arquivo GeoJSON (ex: via QGIS ou geojson.io) e adicione novas features com a propriedade `name` correspondendo ao nome do bairro no banco (ou adicione um alias).
+
+> 📌 **Nota:** O sistema também aceita carregar o GeoJSON via variável global `geojsonBairrosDivinopolis` (útil para evitar problemas de CORS em `file://`).
