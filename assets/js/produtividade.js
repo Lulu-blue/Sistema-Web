@@ -2719,40 +2719,20 @@ function removerOpcaoCustom(catId, campoNome, valor) {
 // --- NUMERAÇÃO SEQUENCIAL AUTOMÁTICA ---
 async function gerarNumeroSequencial(categoriaId) {
     const anoAtual = new Date().getFullYear(); // ex: 2026
-    const digitos = categoriaId === '1.4' ? 4 : 3; // Ofício = 4 dígitos, resto = 3
 
-    // Ofício (1.4) usa RPC atômica no PostgreSQL com fila global de reutilização
-    if (categoriaId === '1.4') {
-        const { data: numeroSeq, error } = await supabaseClient
-            .rpc('reservar_numero_sequencial', {
-                p_categoria_id: categoriaId,
-                p_ano: anoAtual
-            });
+    // Todas as categorias usam a RPC atômica no PostgreSQL com fila global de reutilização
+    const { data: numeroSeq, error } = await supabaseClient
+        .rpc('reservar_numero_sequencial', {
+            p_categoria_id: categoriaId,
+            p_ano: anoAtual
+        });
 
-        if (error) {
-            console.error('Erro ao reservar número sequencial:', error);
-            throw new Error('Falha ao gerar número sequencial: ' + error.message);
-        }
-
-        return numeroSeq;
+    if (error) {
+        console.error('Erro ao reservar número sequencial:', error);
+        throw new Error('Falha ao gerar número sequencial: ' + error.message);
     }
 
-    // Demais categorias: busca o maior número do ano (1 registro apenas)
-    const { data: registros } = await supabaseClient
-        .from('controle_processual')
-        .select('numero_sequencial')
-        .eq('categoria_id', categoriaId)
-        .like('numero_sequencial', `%/${anoAtual}`)
-        .order('numero_sequencial', { ascending: false })
-        .limit(1);
-
-    let proximo = 1;
-    if (registros && registros.length > 0 && registros[0].numero_sequencial) {
-        const partes = registros[0].numero_sequencial.split('/');
-        proximo = parseInt(partes[0]) + 1;
-    }
-
-    return proximo.toString().padStart(digitos, '0') + '/' + anoAtual;
+    return numeroSeq;
 }
 
 // --- HISTÓRICO GERAL (SUB-ABAS) ---

@@ -8438,20 +8438,24 @@ function selecionarBairroMapa(id) {
     bairroSelecionadoParaMapa = globalBairros.find(b => b.id === id);
     renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
     
-    if (bairroSelecionadoParaMapa && bairroSelecionadoParaMapa.latitude && mapaGeograficoInstance) {
-        mapaGeograficoInstance.setView([bairroSelecionadoParaMapa.latitude, bairroSelecionadoParaMapa.longitude], 15);
-        
-        // Se o bairro é um prolongamento cujo marcador foi ocultado, tentar abrir popup do polígono do pai
+    if (bairroSelecionadoParaMapa && mapaGeograficoInstance) {
+        // Se o bairro tem polígono, fazer fitBounds para mostrar as ruas
         var poligono = window.poligonosPorBairroId[id];
         if (!poligono && window.bairroPaiPorFilhoId[id]) {
             poligono = window.poligonosPorBairroId[window.bairroPaiPorFilhoId[id]];
         }
-        if (poligono && poligono.openPopup) {
-            poligono.openPopup();
+        if (poligono && poligono.getBounds) {
+            mapaGeograficoInstance.fitBounds(poligono.getBounds(), { maxZoom: 17, padding: [50, 50] });
+            if (poligono.openPopup) poligono.openPopup();
             return;
         }
         
-        // Caso contrário, abrir popup do marcador (se ainda estiver visível)
+        // Sem polígono: zoom no ponto com nível de rua
+        if (bairroSelecionadoParaMapa.latitude) {
+            mapaGeograficoInstance.setView([bairroSelecionadoParaMapa.latitude, bairroSelecionadoParaMapa.longitude], 17);
+        }
+        
+        // Abrir popup do marcador (se ainda estiver visível)
         var marcador = marcadoresBairrosMapa[id];
         if (marcador && camadaMarcadoresMapa && camadaMarcadoresMapa.hasLayer(marcador)) {
             marcador.openPopup();
@@ -8807,6 +8811,42 @@ function normalizarNomeBairroGeo(nome) {
 
 window.filtrarBairrosMapa = filtrarBairrosMapa;
 window.selecionarBairroMapa = selecionarBairroMapa;
+
+// Busca de endereço/rua via Nominatim
+window.buscarEnderecoNoMapa = async function() {
+    var input = document.getElementById('busca-endereco-mapa');
+    if (!input || !input.value.trim()) return;
+    var query = input.value.trim() + ', Divinópolis, Minas Gerais, Brasil';
+    
+    try {
+        var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(query) + '&format=json&limit=1&countrycodes=br&viewbox=-44.99,-20.06,-44.78,-20.24&bounded=1';
+        var res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+        var data = await res.json();
+        if (!data || data.length === 0) {
+            Swal.fire({ icon: 'warning', title: 'Endereço não encontrado', text: 'Tente ser mais específico.', timer: 2000, showConfirmButton: false });
+            return;
+        }
+        var result = data[0];
+        var lat = parseFloat(result.lat);
+        var lon = parseFloat(result.lon);
+        var displayName = result.display_name.split(',')[0];
+        
+        if (mapaGeograficoInstance) {
+            mapaGeograficoInstance.setView([lat, lon], 18);
+            
+            // Remover marcador anterior de busca se existir
+            if (window._marcadorBuscaEndereco) {
+                mapaGeograficoInstance.removeLayer(window._marcadorBuscaEndereco);
+            }
+            
+            var marker = L.marker([lat, lon]).addTo(mapaGeograficoInstance);
+            marker.bindPopup('<b>' + displayName + '</b><br><span style="font-size:12px;color:#64748b;">' + result.display_name + '</span>').openPopup();
+            window._marcadorBuscaEndereco = marker;
+        }
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Erro na busca', text: err.message, timer: 2000, showConfirmButton: false });
+    }
+};
 
 // Expor funções globalmente
 window.abrirEstatisticasFuncionario = abrirEstatisticasFuncionario;
