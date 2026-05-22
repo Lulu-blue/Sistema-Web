@@ -2472,17 +2472,10 @@ function abrirDetalhes(id) {
 
     corpo.innerHTML = html;
 
-    // Ocultar botão "Editar" se for categoria geradora de documentos (1.2, 1.4, 1.5, 1.7)
-    // No modal html, esse botão possui a class .btn-salvar e fica no footer.
+    // Botão "Editar" visível para todas as categorias (edição de campos sem gerar novo documento)
     const btnEditar = overlay.querySelector('.btn-salvar');
-    const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7'];
-
     if (btnEditar) {
-        if (categoriasBloqueadas.includes(reg.categoria_id)) {
-            btnEditar.style.display = 'none';
-        } else {
-            btnEditar.style.display = 'inline-block'; // ou o block original dependendo do css
-        }
+        btnEditar.style.display = 'inline-block';
     }
 
     overlay.classList.add('ativo');
@@ -2502,12 +2495,7 @@ function editarRegistro() {
 
     const reg = registroSelecionado;
 
-    // Trava de segurança extra para categorias geradoras de documentos
-    const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7', '1.8'];
-    if (categoriasBloqueadas.includes(reg.categoria_id)) {
-        alert('Registros que geram documentos oficiais não podem ser editados. Exclua e crie um novo se houver erro.');
-        return;
-    }
+    // Todas as categorias são editáveis (edição de campos sem gerar novo documento)
 
     const catDef = CATEGORIAS.find(c => c.id === reg.categoria_id);
     if (!catDef) {
@@ -2544,23 +2532,116 @@ function editarRegistro() {
                 `<option value="${op}" ${op === valorAtual ? 'selected' : ''}>${op}</option>`
             ).join('');
             inputHTML = `<select id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''}><option value="">Selecione...</option>${opcoes}</select>`;
+        } else if (campo.tipo === 'select_custom') {
+            const storageKey = `custom_opts_${catDef.id}_${campo.nome}`;
+            const customOpts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            let opcoesListHTML = campo.opcoes.map(op =>
+                `<div class="dropdown-item" onclick="selecionarOpcao('${campo.nome}', '${op.replace(/'/g, "\\'")}')">${op}</div>`
+            ).join('');
+            customOpts.forEach(op => {
+                opcoesListHTML += `<div class="dropdown-item dropdown-item-custom" onclick="selecionarOpcao('${campo.nome}', '${op.replace(/'/g, "\\'")}')">
+                    <span>${op}</span>
+                    <button class="dropdown-delete" onclick="event.stopPropagation(); removerOpcaoCustom('${catDef.id}', '${campo.nome}', '${op.replace(/'/g, "\\'")}')">🗑</button>
+                </div>`;
+            });
+            opcoesListHTML += `<div class="dropdown-item dropdown-item-outro" onclick="mostrarInputOutro('${campo.nome}')">Outro...</div>`;
+            inputHTML = `
+                <input type="hidden" id="campo-${campo.nome}" value="${valorAtual}">
+                <div class="dropdown-custom" id="dropdown-${campo.nome}">
+                    <div class="dropdown-trigger" onclick="toggleDropdown('${campo.nome}')">
+                        <span class="dropdown-texto">${valorAtual || 'Selecione...'}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                    <div class="dropdown-lista" id="dropdown-lista-${campo.nome}">
+                        ${opcoesListHTML}
+                    </div>
+                </div>
+                <div id="outro-container-${campo.nome}" style="display:none; margin-top:8px;">
+                    <input type="text" id="outro-input-${campo.nome}" placeholder="Digite o novo motivo...">
+                    <button type="button" class="btn-add-outro" onclick="adicionarOpcaoCustom('${catDef.id}', '${campo.nome}')">Adicionar</button>
+                </div>`;
+        } else if (campo.tipo === 'select_bairro') {
+            let opcoesListHTML = `<div class="dropdown-search" style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
+            opcoesListHTML += `<div id="lista-bairros-${campo.nome}" class="bairros-container" style="max-height: 200px; overflow-y: auto;">`;
+            if (bairrosSistema.length > 0) {
+                bairrosSistema.forEach(bairro => {
+                    opcoesListHTML += `<div class="dropdown-item dropdown-bairro-item" onclick="selecionarOpcao('${campo.nome}', '${bairro.replace(/'/g, "\\'")}')">${bairro}</div>`;
+                });
+            } else {
+                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 10px;">Carregando bairros...</div>`;
+            }
+            opcoesListHTML += `</div>`;
+            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 10px; white-space: normal; line-height: 1.4;">⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.</div>`;
+            inputHTML = `
+                <input type="hidden" id="campo-${campo.nome}" value="${valorAtual}">
+                <div class="dropdown-custom" id="dropdown-${campo.nome}">
+                    <div class="dropdown-trigger" onclick="toggleDropdown('${campo.nome}')">
+                        <span class="dropdown-texto">${valorAtual || 'Selecione o bairro...'}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                    <div class="dropdown-lista" id="dropdown-lista-${campo.nome}">
+                        ${opcoesListHTML}
+                    </div>
+                </div>`;
         } else if (campo.tipo === 'file') {
-            // Na edição do histórico pessoal, não exibe o campo de anexo (mantém o existente no banco)
+            // Na edição, não exibe o campo de anexo (mantém o existente no banco)
             return;
         } else {
-            inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" value="${valorAtual}" ${campo.obrigatorio ? 'required' : ''}>`;
+            let extraAttr = '';
+            if (campo.nome === 'cpf' || campo.nome === 'cpf_contribuinte') {
+                extraAttr = ` maxlength="18" placeholder="CPF ou CNPJ" oninput="let v=this.value.replace(/\\D/g,''); if(v.length<=11){ v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); } else { v=v.replace(/^(\\d{2})(\\d)/,'$1.$2'); v=v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/,'$1.$2.$3'); v=v.replace(/\\.(\\d{3})(\\d)/,'.$1/$2'); v=v.replace(/(\\d{4})(\\d)/,'$1-$2'); } this.value=v;"`;
+            }
+            inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" value="${valorAtual}" ${campo.obrigatorio ? 'required' : ''} ${extraAttr}>`;
         }
 
         grupo.innerHTML = `
             <label for="campo-${campo.nome}">${campo.label} ${campo.obrigatorio ? '*' : ''}</label>
             ${inputHTML}
         `;
-        corpo.appendChild(grupo);
+
+        if (campo.agrupar) {
+            let containerAgrupador = document.getElementById(`grupo-${campo.agrupar}`);
+            if (!containerAgrupador) {
+                const wrapper = document.createElement('div');
+                wrapper.style.marginBottom = '15px';
+                const labelAgrupada = document.createElement('label');
+                labelAgrupada.textContent = campo.agrupar === 'inscricao' ? 'Inscrição Imobiliária Municipal' : '';
+                labelAgrupada.style.fontWeight = '600';
+                labelAgrupada.style.color = '#475569';
+                labelAgrupada.style.display = 'block';
+                labelAgrupada.style.marginBottom = '5px';
+                containerAgrupador = document.createElement('div');
+                containerAgrupador.id = `grupo-${campo.agrupar}`;
+                containerAgrupador.style.display = 'flex';
+                containerAgrupador.style.gap = '10px';
+                containerAgrupador.style.width = '100%';
+                wrapper.appendChild(labelAgrupada);
+                wrapper.appendChild(containerAgrupador);
+                corpo.appendChild(wrapper);
+            }
+            grupo.style.flex = '1';
+            grupo.style.marginBottom = '0';
+            const grpLabel = grupo.querySelector('label');
+            if (grpLabel) grpLabel.style.fontSize = '0.75rem';
+            containerAgrupador.appendChild(grupo);
+        } else {
+            corpo.appendChild(grupo);
+        }
     });
 
     // Campo especial para categoria 1.1 nos primeiros 7 dias do mês (edição)
     if (catDef.id === '1.1' && estaNosPrimeiros7Dias()) {
         adicionarCampoDataRegistrada(corpo, reg.created_at, true);
+    }
+
+    // Garante que não haja rascunho de documento pendente de sessões anteriores
+    rascunhoDocumento = null;
+
+    // Redefine o botão salvar para evitar que fique com 'Gerar Documento' de outra categoria
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    if (btnSalvarForm) {
+        btnSalvarForm.textContent = 'Salvar';
+        btnSalvarForm.onclick = () => salvarRegistro();
     }
 
     overlay.classList.add('ativo');
@@ -3617,11 +3698,15 @@ async function abrirDetalhesAdminHist(id) {
             htmlCampos += `<div style="margin-bottom:12px; padding:10px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0;">
                 <strong style="display:block; font-size:13px; color:#475569; margin-bottom:6px;">Documentos Adicionais:</strong>`;
             if (anexosExtras.length > 0) {
+                // Regra: pode remover um anexo extra desde que o registro continue com pelo menos 1 documento
+                // (anexo principal ou outro extra)
+                const temDocPrincipal = !!campos.anexo_pdf;
                 anexosExtras.forEach((urlExtra, i) => {
+                    const podeRemover = (anexosExtras.length > 1) || (anexosExtras.length === 1 && temDocPrincipal);
                     htmlCampos += `<div id="cont-extra-${i}" style="display:flex; align-items:center; gap:8px; margin-bottom:6px; background:white; padding:6px; border-radius:4px; border:1px solid #cbd5e1;">
                         <a href="${urlExtra}" target="_blank" style="color:#2563eb; font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Anexo Extra ${i + 1}</a>
-                        <button onclick="document.getElementById('remover-extra-${i}').checked=true; document.getElementById('cont-extra-${i}').style.display='none';" style="background:#fef2f2; color:#ef4444; border:1px solid #fca5a5; border-radius:4px; padding:4px 8px; font-size:11px; cursor:pointer;" title="Marcar para remoção ao salvar">Remover</button>
-                        <input type="checkbox" id="remover-extra-${i}" value="${urlExtra}" style="display:none;">
+                        ${podeRemover ? `<button onclick="document.getElementById('remover-extra-${i}').checked=true; document.getElementById('cont-extra-${i}').style.display='none';" style="background:#fef2f2; color:#ef4444; border:1px solid #fca5a5; border-radius:4px; padding:4px 8px; font-size:11px; cursor:pointer;" title="Marcar para remoção ao salvar">Remover</button>
+                        <input type="checkbox" id="remover-extra-${i}" value="${urlExtra}" style="display:none;">` : ''}
                     </div>`;
                 });
             }
@@ -3640,11 +3725,8 @@ async function abrirDetalhesAdminHist(id) {
     if (isDono) {
         btsDono += `<button onclick="excluirRegistroHistGeral('${reg.id}', '${reg.categoria_id}')" style="padding:12px 16px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'" title="Excluir Registro Permanente">🗑</button>`;
 
-        // Só exibe editar se a categoria permitir edição de dados brutos
-        const categoriasBloqueadas = ['1.2', '1.4', '1.5', '1.7'];
-        if (!categoriasBloqueadas.includes(reg.categoria_id)) {
-            btsDono += `<button onclick="editarRegistroHistoricoGeral('${reg.id}')" style="flex:1; padding:12px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">✏️ Editar Dados</button>`;
-        }
+        // Botão editar disponível para todas as categorias (edição de campos sem gerar novo documento)
+        btsDono += `<button onclick="editarRegistroHistoricoGeral('${reg.id}')" style="flex:1; padding:12px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">✏️ Editar Dados</button>`;
     }
 
     const modal = document.createElement('div');
