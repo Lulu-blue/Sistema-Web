@@ -34,7 +34,8 @@
     <link rel="stylesheet" href="assets/css/style_painel.css">
     <link rel="stylesheet" href="assets/css/style_produtividade.css">
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="lib/supabase.js"></script>
     <script src="lib/mammoth.browser.min.js"></script>
 </head>
@@ -43,7 +44,8 @@
 
     <!-- Botão hambúrguer flutuante (mobile) -->
     <button id="mobile-menu-toggle" class="mobile-menu-toggle" onclick="toggleSidebarMobile()" aria-label="Abrir menu">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
             <line x1="3" y1="6" x2="21" y2="6"></line>
             <line x1="3" y1="12" x2="21" y2="12"></line>
             <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -57,15 +59,18 @@
         <aside class="sidebar" id="sidebar">
             <!-- Botão fechar (mobile) -->
             <button class="sidebar-close-btn" onclick="fecharSidebarMobile()" aria-label="Fechar menu">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
             </button>
 
             <!-- Botão minimizar/expandir (desktop) -->
-            <button class="sidebar-toggle-desktop" id="btn-toggle-sidebar" onclick="toggleSidebarDesktop()" aria-label="Minimizar menu">
-                <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <button class="sidebar-toggle-desktop" id="btn-toggle-sidebar" onclick="toggleSidebarDesktop()"
+                aria-label="Minimizar menu">
+                <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
             </button>
@@ -323,7 +328,8 @@
                             id="btn-toggle-gerencia-secretario"
                             style="font-size: 0.85rem; background: rgba(0,0,0,0.03);">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; margin-right: 2px;">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                style="margin-left: 2px; margin-right: 2px;">
                                 <path d="M12 5v14M5 12h14"></path>
                             </svg>
                             Gerência de Posturas
@@ -349,7 +355,8 @@
                             id="btn-toggle-gerencia-ambiental-secretario"
                             style="font-size: 0.85rem; background: rgba(0,0,0,0.03); margin-top: 4px;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; margin-right: 2px;">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                style="margin-left: 2px; margin-right: 2px;">
                                 <path d="M12 5v14M5 12h14"></path>
                             </svg>
                             Gerência de Regularização Ambiental
@@ -574,7 +581,7 @@
                     <div style="display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
                         <div class="grafico-container"
                             style="flex: 1.3; min-width: 280px; display:flex; flex-direction:column;">
-                            <h3>Desempenho por Fiscal — Últimos 30 dias</h3>
+                            <h3>Desempenho por Fiscal - Pontuação Total</h3>
                             <div
                                 style="position: relative; flex:1; min-height: 250px; max-height: 400px; width: 100%; overflow-y: auto; padding-right: 8px;">
                                 <div id="grafico-fiscais-pontuacao" style="padding: 10px 0;"></div>
@@ -1317,27 +1324,49 @@
                     </svg>
                     Fechamento anual
                 </button>
-                <div id="progresso-fechamento" style="display: none; margin-bottom: 20px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <div id="progresso-fechamento"
+                    style="display: none; margin-bottom: 20px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="font-size: 0.9rem; font-weight: bold; color: #1e293b;">Progresso do Fechamento:</span>
-                        <span id="progresso-fechamento-texto" style="font-size: 0.9rem; color: #3b82f6; font-weight: bold;">0% (0 de 0)</span>
+                        <span style="font-size: 0.9rem; font-weight: bold; color: #1e293b;">Progresso do
+                            Fechamento:</span>
+                        <span id="progresso-fechamento-texto"
+                            style="font-size: 0.9rem; color: #3b82f6; font-weight: bold;">0% (0 de 0)</span>
                     </div>
-                    <div style="width: 100%; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; height: 10px; margin-bottom: 10px;">
-                        <div id="progresso-fechamento-barra" style="width: 0%; height: 100%; background-color: #3b82f6; transition: width 0.3s ease;"></div>
+                    <div
+                        style="width: 100%; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; height: 10px; margin-bottom: 10px;">
+                        <div id="progresso-fechamento-barra"
+                            style="width: 0%; height: 100%; background-color: #3b82f6; transition: width 0.3s ease;">
+                        </div>
                     </div>
                     <div style="text-align: right;">
-                        <button id="btn-cancelar-fechamento" onclick="cancelarFechamento()" style="background-color: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold;">Parar Fechamento</button>
+                        <button id="btn-cancelar-fechamento" onclick="cancelarFechamento()"
+                            style="background-color: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold;">Parar
+                            Fechamento</button>
                     </div>
                 </div>
 
                 <!-- Botões Vencidos / Atendidos (visíveis para GP+ e Fiscais de Posturas nas abas NP/AI) -->
-                <div id="botoes-vencidos-atendidos" style="display:none; margin-bottom: 15px; gap: 10px; flex-wrap: wrap;">
-                    <button id="btn-atendidos-hg" onclick="abrirModalAtendidos()" style="padding: 0.55rem 1.2rem; background: #16a34a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Respondidos
+                <div id="botoes-vencidos-atendidos"
+                    style="display:none; margin-bottom: 15px; gap: 10px; flex-wrap: wrap;">
+                    <button id="btn-atendidos-hg" onclick="abrirModalAtendidos()"
+                        style="padding: 0.55rem 1.2rem; background: #16a34a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        Efetivados
                     </button>
-                    <button id="btn-vencidos-hg" onclick="abrirModalVencidos()" style="padding: 0.55rem 1.2rem; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#b91d1d'" onmouseout="this.style.background='#dc2626'">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <button id="btn-vencidos-hg" onclick="abrirModalVencidos()"
+                        style="padding: 0.55rem 1.2rem; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#b91d1d'" onmouseout="this.style.background='#dc2626'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
                         Vencidos
                     </button>
                 </div>
@@ -1422,8 +1451,17 @@
 
                 <!-- BOTAO CONTROLE INTERNO DE DENUNCIAS -->
                 <div style="margin-bottom: 20px;">
-                    <button onclick="mudarAba('controle-denuncias')" style="padding: 10px 18px; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <button onclick="mudarAba('controle-denuncias')"
+                        style="padding: 10px 18px; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s;"
+                        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
                         Controle Interno de Denúncias
                     </button>
                 </div>
@@ -1432,30 +1470,62 @@
                 <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
                     <!-- Gráfico de Bairros -->
                     <div class="grafico-container" style="padding: 20px; flex: 1.5; min-width: 320px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
                             <h3 style="margin: 0;">Peso por Bairro (Top 10)</h3>
                             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                                <div style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 3px;">
-                                    <button id="btn-filtro-bairros-todos" class="btn-filtro-bairros ativo" onclick="setFiltroBairros('todos')" style="padding: 6px 12px; border: none; border-radius: 6px; background: #0f172a; color: white; font-size: 13px; cursor: pointer; transition: 0.2s;">Todos</button>
-                                    <button id="btn-filtro-bairros-np" class="btn-filtro-bairros" onclick="setFiltroBairros('np')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">NP</button>
-                                    <button id="btn-filtro-bairros-ai" class="btn-filtro-bairros" onclick="setFiltroBairros('ai')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">AI</button>
-                                    <button id="btn-filtro-bairros-denuncias" class="btn-filtro-bairros" onclick="setFiltroBairros('denuncias')" style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">Denúncias</button>
+                                <div
+                                    style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 3px;">
+                                    <button id="btn-filtro-bairros-todos" class="btn-filtro-bairros ativo"
+                                        onclick="setFiltroBairros('todos')"
+                                        style="padding: 6px 12px; border: none; border-radius: 6px; background: #0f172a; color: white; font-size: 13px; cursor: pointer; transition: 0.2s;">Todos</button>
+                                    <button id="btn-filtro-bairros-np" class="btn-filtro-bairros"
+                                        onclick="setFiltroBairros('np')"
+                                        style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">NP</button>
+                                    <button id="btn-filtro-bairros-ai" class="btn-filtro-bairros"
+                                        onclick="setFiltroBairros('ai')"
+                                        style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">AI</button>
+                                    <button id="btn-filtro-bairros-denuncias" class="btn-filtro-bairros"
+                                        onclick="setFiltroBairros('denuncias')"
+                                        style="padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: #475569; font-size: 13px; cursor: pointer; transition: 0.2s;">Denúncias</button>
                                 </div>
                                 <!-- SUB-FILTROS DENUNCIAS -->
-                                <div id="sub-filtros-denuncias-grafico" style="display: none; flex-wrap: wrap; gap: 6px; margin-left: auto;">
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('comunicacao_interna')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Com. Interna</button>
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('vereadores')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Vereadores</button>
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('mp')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">MP</button>
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('app')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">APP</button>
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('ouvidoria')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Ouvidoria</button>
-                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('protocolo')" style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Protocolo</button>
+                                <div id="sub-filtros-denuncias-grafico"
+                                    style="display: none; flex-wrap: wrap; gap: 6px; margin-left: auto;">
+                                    <button class="btn-sub-filtro-den"
+                                        onclick="setSubFiltroDenuncias('comunicacao_interna')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Com.
+                                        Interna</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('vereadores')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Vereadores</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('mp')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">MP</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('app')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">APP</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('ouvidoria')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Ouvidoria</button>
+                                    <button class="btn-sub-filtro-den" onclick="setSubFiltroDenuncias('protocolo')"
+                                        style="padding: 5px 10px; border: 1px solid #d97706; border-radius: 6px; background: white; color: #d97706; font-size: 12px; cursor: pointer;">Protocolo</button>
                                 </div>
-                                <button onclick="abrirModalGraficoBairros()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                                <button onclick="abrirModalGraficoBairros()"
+                                    style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <polyline points="9 21 3 21 3 15"></polyline>
+                                        <line x1="21" y1="3" x2="14" y2="10"></line>
+                                        <line x1="3" y1="21" x2="10" y2="14"></line>
+                                    </svg>
                                     Ver Todos
                                 </button>
-                                <button onclick="baixarRelatorioAreas()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <button onclick="baixarRelatorioAreas()"
+                                    style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
                                     Baixar Dados
                                 </button>
                             </div>
@@ -1467,11 +1537,13 @@
 
                     <!-- Áreas com Maior Demanda -->
                     <div class="grafico-container" style="padding: 20px; flex: 1; min-width: 280px; max-width: 420px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
                             <h3 style="margin: 0;">Áreas com Maior Demanda</h3>
                         </div>
                         <div id="lista-areas-demanda" style="display: flex; flex-direction: column; gap: 8px;">
-                            <div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">Carregando...</div>
+                            <div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">
+                                Carregando...</div>
                         </div>
                     </div>
                 </div>
@@ -1487,66 +1559,80 @@
                         transition: all 0.3s ease;
                         margin-bottom: 30px;
                     }
+
                     #conteudo-mapa-inline {
                         --map-height: 500px;
                     }
+
                     /* Sidebar scroll no desktop */
                     #sidebar-bairros-mapa {
                         max-height: 500px;
                         overflow: hidden;
                     }
+
                     #lista-bairros-mapa {
                         overflow-y: auto !important;
                         -webkit-overflow-scrolling: touch;
                     }
+
                     /* Legenda sempre visível */
                     .leaflet-bottom.leaflet-right {
                         z-index: 800 !important;
                     }
+
                     .info.legend {
                         z-index: 800 !important;
                     }
+
                     @media (max-width: 768px) {
                         #container-mapa-inline {
                             width: calc(100% + 2.4rem);
                             margin-left: -1.2rem;
                             padding: 20px 1.2rem;
                         }
+
                         #conteudo-mapa-inline {
                             height: auto !important;
                             flex-direction: column !important;
                             flex-wrap: nowrap !important;
                         }
+
                         #sidebar-bairros-mapa {
                             height: 300px !important;
                             max-height: 300px !important;
                             flex: none !important;
                             width: 100% !important;
                         }
+
                         /* Container do mapa no mobile */
-                        #conteudo-mapa-inline > div:last-child {
+                        #conteudo-mapa-inline>div:last-child {
                             height: 400px !important;
                             flex: none !important;
                             width: 100% !important;
                             min-width: unset !important;
                         }
+
                         /* Esconder botão minimizar sidebar no mobile */
                         #sidebar-bairros-mapa button[onclick="toggleSidebarMapa()"] {
                             display: none !important;
                         }
+
                         /* Legenda visível no mobile */
                         .leaflet-control-container .leaflet-bottom.leaflet-right {
                             bottom: 5px !important;
                         }
+
                         /* No mobile: esconder mapa inline, mostrar botão */
                         #container-mapa-inline #conteudo-mapa-inline,
-                        #container-mapa-inline > div:first-child > button {
+                        #container-mapa-inline>div:first-child>button {
                             display: none !important;
                         }
+
                         #btn-abrir-mapa-mobile {
                             display: flex !important;
                         }
                     }
+
                     /* Overlay fullscreen do mapa mobile */
                     #overlay-mapa-mobile {
                         display: none;
@@ -1556,9 +1642,11 @@
                         background: white;
                         flex-direction: column;
                     }
+
                     #overlay-mapa-mobile.ativo {
                         display: flex;
                     }
+
                     #overlay-mapa-mobile .overlay-header {
                         display: flex;
                         justify-content: space-between;
@@ -1568,12 +1656,14 @@
                         background: #f8fafc;
                         flex-shrink: 0;
                     }
+
                     #overlay-mapa-mobile .overlay-body {
                         flex: 1;
                         display: flex;
                         flex-direction: column;
                         overflow: hidden;
                     }
+
                     #overlay-mapa-mobile #sidebar-bairros-mobile {
                         height: 250px;
                         flex-shrink: 0;
@@ -1583,53 +1673,88 @@
                         padding: 10px;
                         border-bottom: 1px solid #e2e8f0;
                     }
+
                     #overlay-mapa-mobile #mapa-mobile-container {
                         flex: 1;
                         position: relative;
                     }
                 </style>
                 <div id="container-mapa-inline">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0; display: flex; align-items: center; gap: 10px;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981"
+                                stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
                             Mapa de Atuação por Áreas
                         </h3>
-                        <button onclick="toggleMapaInline()" style="background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; cursor: pointer; color: #64748b; display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                            <svg id="icon-toggle-mapa-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                        <button onclick="toggleMapaInline()"
+                            style="background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; cursor: pointer; color: #64748b; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                            <svg id="icon-toggle-mapa-inline" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <polyline points="18 15 12 9 6 15"></polyline>
+                            </svg>
                             <span id="text-toggle-mapa-inline">Ocultar Mapa</span>
                         </button>
                     </div>
                     <!-- Botão mobile (escondido no desktop via CSS) -->
-                    <button id="btn-abrir-mapa-mobile" onclick="abrirMapaMobile()" style="display: none; width: 100%; padding: 14px; border: 1px solid #10b981; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 14px; font-weight: 600; cursor: pointer; align-items: center; justify-content: center; gap: 8px;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <button id="btn-abrir-mapa-mobile" onclick="abrirMapaMobile()"
+                        style="display: none; width: 100%; padding: 14px; border: 1px solid #10b981; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 14px; font-weight: 600; cursor: pointer; align-items: center; justify-content: center; gap: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
                         Ver Mapa Geográfico
                     </button>
-                    
-                    <div id="conteudo-mapa-inline" style="display: flex; gap: 20px; flex-wrap: wrap; height: var(--map-height); transition: height 0.3s ease, opacity 0.3s ease; overflow: hidden;">
+
+                    <div id="conteudo-mapa-inline"
+                        style="display: flex; gap: 20px; flex-wrap: wrap; height: var(--map-height); transition: height 0.3s ease, opacity 0.3s ease; overflow: hidden;">
                         <!-- Lista Lateral -->
-                        <div id="sidebar-bairros-mapa" style="width: 300px; flex-shrink: 0; max-width: 100%; display: flex; flex-direction: column; transition: width 0.3s ease;">
-                            <div style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                                <h4 id="sidebar-title-mapa" style="font-size: 14px; margin: 0; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Bairros no Sistema</h4>
-                                <button onclick="toggleSidebarMapa()" style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; flex-shrink:0; display:flex;" title="Recolher/Expandir">
-                                    <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <div id="sidebar-bairros-mapa"
+                            style="width: 300px; flex-shrink: 0; max-width: 100%; display: flex; flex-direction: column; transition: width 0.3s ease;">
+                            <div
+                                style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                                <h4 id="sidebar-title-mapa"
+                                    style="font-size: 14px; margin: 0; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    Bairros no Sistema</h4>
+                                <button onclick="toggleSidebarMapa()"
+                                    style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; flex-shrink:0; display:flex;"
+                                    title="Recolher/Expandir">
+                                    <svg id="icon-toggle-sidebar" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="2">
+                                        <polyline points="15 18 9 12 15 6"></polyline>
+                                    </svg>
                                 </button>
                             </div>
-                            <div id="sidebar-content-mapa" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; transition: opacity 0.2s ease;">
-                                <input type="text" id="busca-bairro-mapa" placeholder="Filtrar bairro..." oninput="filtrarBairrosMapa()" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 8px;">
+                            <div id="sidebar-content-mapa"
+                                style="display: flex; flex-direction: column; flex: 1; overflow: hidden; transition: opacity 0.2s ease;">
+                                <input type="text" id="busca-bairro-mapa" placeholder="Filtrar bairro..."
+                                    oninput="filtrarBairrosMapa()"
+                                    style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 8px;">
                                 <div style="display:flex; gap:6px; margin-bottom: 15px;">
-                                    <input type="text" id="busca-endereco-mapa" placeholder="Buscar rua/endereço..." onkeydown="if(event.key==='Enter')buscarEnderecoNoMapa()" style="flex:1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-                                    <button onclick="buscarEnderecoNoMapa()" style="padding: 8px 12px; border: 1px solid #10b981; border-radius: 6px; background: #f0fdf4; color: #166534; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍 Buscar</button>
+                                    <input type="text" id="busca-endereco-mapa" placeholder="Buscar rua/endereço..."
+                                        onkeydown="if(event.key==='Enter')buscarEnderecoNoMapa()"
+                                        style="flex:1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                                    <button onclick="buscarEnderecoNoMapa()"
+                                        style="padding: 8px 12px; border: 1px solid #10b981; border-radius: 6px; background: #f0fdf4; color: #166534; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍
+                                        Buscar</button>
                                 </div>
-                                <div id="lista-bairros-mapa" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
+                                <div id="lista-bairros-mapa"
+                                    style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
                                     <!-- Injetado via JS -->
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- Container do Mapa -->
-                        <div style="flex: 1; min-width: 300px; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); height: 100%;">
+                        <div
+                            style="flex: 1; min-width: 300px; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); height: 100%;">
                             <div id="mapa-container" style="width: 100%; height: 100%; background: #f1f5f9;"></div>
-                            <div id="map-loader" style="position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; pointer-events: none;">
+                            <div id="map-loader"
+                                style="position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; pointer-events: none;">
                                 <div style="text-align: center;">
                                     <div class="spinner" style="margin-bottom: 10px;"></div>
                                     <p style="font-weight: 600; color: #64748b;">Carregando Mapa...</p>
@@ -1643,29 +1768,50 @@
                 <div id="overlay-mapa-mobile">
                     <div class="overlay-header" style="padding-top: 60px;">
                         <h3 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981"
+                                stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
                             Mapa de Áreas
                         </h3>
-                        <button onclick="fecharMapaMobile()" style="background: none; border: none; cursor: pointer; padding: 4px; color: #64748b; display: flex;">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <button onclick="fecharMapaMobile()"
+                            style="background: none; border: none; cursor: pointer; padding: 4px; color: #64748b; display: flex;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
                         </button>
                     </div>
                     <div class="overlay-body">
                         <div id="sidebar-bairros-mobile">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <span style="font-size: 13px; font-weight: 600; color: #1e293b;">Bairros</span>
-                                <button onclick="toggleBairrosMobile()" style="background:none; border:1px solid #e2e8f0; border-radius:4px; cursor:pointer; color:#64748b; padding:2px 6px; display:flex; align-items:center; gap:4px; font-size:11px;">
-                                    <svg id="icon-toggle-bairros-mobile" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                <button onclick="toggleBairrosMobile()"
+                                    style="background:none; border:1px solid #e2e8f0; border-radius:4px; cursor:pointer; color:#64748b; padding:2px 6px; display:flex; align-items:center; gap:4px; font-size:11px;">
+                                    <svg id="icon-toggle-bairros-mobile" width="14" height="14" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="18 15 12 9 6 15"></polyline>
+                                    </svg>
                                     <span id="text-toggle-bairros-mobile">Ocultar</span>
                                 </button>
                             </div>
-                            <div id="conteudo-bairros-mobile" style="display:flex; flex-direction:column; flex:1; overflow:hidden; transition: all 0.3s ease;">
-                                <input type="text" id="busca-bairro-mobile" placeholder="Filtrar bairro..." oninput="filtrarBairrosMapaMobile()" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 6px;">
+                            <div id="conteudo-bairros-mobile"
+                                style="display:flex; flex-direction:column; flex:1; overflow:hidden; transition: all 0.3s ease;">
+                                <input type="text" id="busca-bairro-mobile" placeholder="Filtrar bairro..."
+                                    oninput="filtrarBairrosMapaMobile()"
+                                    style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; margin-bottom: 6px;">
                                 <div style="display:flex; gap:6px; margin-bottom: 10px;">
-                                    <input type="text" id="busca-endereco-mobile" placeholder="Buscar rua/endereço..." onkeydown="if(event.key==='Enter')buscarEnderecoNoMapaMobile()" style="flex:1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-                                    <button onclick="buscarEnderecoNoMapaMobile()" style="padding: 8px 10px; border: 1px solid #10b981; border-radius: 6px; background: #f0fdf4; color: #166534; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍</button>
+                                    <input type="text" id="busca-endereco-mobile" placeholder="Buscar rua/endereço..."
+                                        onkeydown="if(event.key==='Enter')buscarEnderecoNoMapaMobile()"
+                                        style="flex:1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                                    <button onclick="buscarEnderecoNoMapaMobile()"
+                                        style="padding: 8px 10px; border: 1px solid #10b981; border-radius: 6px; background: #f0fdf4; color: #166534; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍</button>
                                 </div>
-                                <div id="lista-bairros-mobile" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
+                                <div id="lista-bairros-mobile"
+                                    style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 5px;">
                                 </div>
                             </div>
                         </div>
@@ -1678,7 +1824,7 @@
                         const content = document.getElementById('conteudo-mapa-inline');
                         const icon = document.getElementById('icon-toggle-mapa-inline');
                         const text = document.getElementById('text-toggle-mapa-inline');
-                        
+
                         if (content.style.height === '0px' || content.style.height === '0') {
                             content.style.height = 'var(--map-height)';
                             content.style.opacity = '1';
@@ -1706,8 +1852,8 @@
                     function abrirMapaMobile() {
                         document.getElementById('overlay-mapa-mobile').classList.add('ativo');
                         document.body.style.overflow = 'hidden';
-                        
-                        setTimeout(function() {
+
+                        setTimeout(function () {
                             var precisaRecriar = false;
                             if (!mapaMobileInstance) {
                                 precisaRecriar = true;
@@ -1725,29 +1871,29 @@
                                     mapaMobileInstance = null;
                                     camadaMarcadoresMobile = null;
                                 }
-                                
+
                                 var centroInicial = [-20.1450, -44.8910];
                                 mapaMobileInstance = L.map('mapa-mobile-container', {
                                     doubleClickZoom: false
                                 }).setView(centroInicial, 13);
-                                
+
                                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                                     attribution: '&copy; OSM'
                                 }).addTo(mapaMobileInstance);
-                                
+
                                 camadaMarcadoresMobile = L.layerGroup().addTo(mapaMobileInstance);
                                 camadaPoligonosMobile = L.layerGroup().addTo(mapaMobileInstance);
-                                
+
                                 // Legenda mobile (com filtro de área clicável)
                                 var legend = L.control({ position: 'bottomright' });
-                                legend.onAdd = function() {
+                                legend.onAdd = function () {
                                     var div = L.DomUtil.create('div', 'info legend');
                                     div.style.cssText = 'background:white; padding:10px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.15); max-height:200px; overflow-y:auto; font-size:11px;';
                                     var html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">' +
                                         '<strong style="color:#1e293b;">Áreas</strong>' +
                                         '<button onclick="toggleLegendaMobile(this)" style="background:none; border:none; cursor:pointer; color:#64748b; padding:0; display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></button>' +
                                         '</div><div id="legend-content-mobile">';
-                                    globalAreas.forEach(function(a) {
+                                    globalAreas.forEach(function (a) {
                                         var cor = mapaCoresAreas[a.id];
                                         var nome = a.fiscal_nome ? a.fiscal_nome.split(' ')[0] : 'Sem Fiscal';
                                         html += '<div onclick="toggleDestaqueAreaMapaMobile(\'' + a.id + '\')" id="legend-mobile-area-' + a.id + '" style="display:flex; align-items:center; gap:5px; margin-bottom:4px; cursor:pointer; transition:0.2s;">' +
@@ -1764,14 +1910,14 @@
                                     return div;
                                 };
                                 legend.addTo(mapaMobileInstance);
-                                
+
                                 // Handler de clique no mapa mobile (igual ao desktop)
-                                mapaMobileInstance.on('click', function(e) {
+                                mapaMobileInstance.on('click', function (e) {
                                     var layerPoint = e.layerPoint;
                                     // Verificar marcadores
                                     var marcadorClicado = null;
                                     if (camadaMarcadoresMobile) {
-                                        camadaMarcadoresMobile.eachLayer(function(m) {
+                                        camadaMarcadoresMobile.eachLayer(function (m) {
                                             if (m._containsPoint && m._containsPoint(layerPoint)) {
                                                 marcadorClicado = m;
                                             }
@@ -1784,7 +1930,7 @@
                                     // Verificar polígonos
                                     var poligonoClicado = null;
                                     if (camadaPoligonosMobile) {
-                                        camadaPoligonosMobile.eachLayer(function(p) {
+                                        camadaPoligonosMobile.eachLayer(function (p) {
                                             if (p._containsPoint && p._containsPoint(layerPoint)) {
                                                 poligonoClicado = p;
                                             }
@@ -1798,15 +1944,15 @@
                             } else {
                                 mapaMobileInstance.invalidateSize();
                             }
-                            
+
                             // Garantir cores disponíveis (fallback se mapa desktop ainda não carregou)
                             if (typeof mapaCoresAreas === 'undefined' || Object.keys(mapaCoresAreas).length === 0) {
                                 mapaCoresAreas = {};
-                                globalAreas.forEach(function(a, index) {
+                                globalAreas.forEach(function (a, index) {
                                     mapaCoresAreas[a.id] = paletaCoresAreas[index % paletaCoresAreas.length];
                                 });
                             }
-                            
+
                             // Sempre replotar marcadores e polígonos para garantir dados atualizados
                             plotarMarcadoresMobile();
                             renderizarPoligonosMobile();
@@ -1820,32 +1966,32 @@
                         if (!camadaMarcadoresMobile || !mapaMobileInstance) return;
                         camadaMarcadoresMobile.clearLayers();
                         marcadoresMobilePorBairroId = {};
-                        
+
                         // Lookup otimizado de áreas para mobile
                         var areasLookup = {};
-                        globalAreas.forEach(function(a) {
+                        globalAreas.forEach(function (a) {
                             areasLookup[a.id] = a;
                         });
-                        
-                        globalBairros.forEach(function(b) {
+
+                        globalBairros.forEach(function (b) {
                             if (!b.latitude || !b.longitude) return;
-                            
+
                             // Não plotar marcador se o bairro tem polígono (o polígono já representa visualmente)
                             if (poligonosMobilePorBairroId[b.id]) return;
-                            
+
                             // Respeitar filtro de área
                             var bAreaId = b.area_id || 'null';
                             var ativo = areasDestacadasMobile.length === 0 || areasDestacadasMobile.includes(bAreaId);
                             if (!ativo) return;
-                            
+
                             var cor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
                             var areaInfo = areasLookup[b.area_id];
                             var areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
-                            
+
                             var marker = L.circleMarker([b.latitude, b.longitude], {
                                 radius: 7, fillColor: cor, color: '#fff', weight: 2, fillOpacity: 0.8
                             }).bindPopup('<b>' + b.nome + '</b><br>' + areaNome);
-                            
+
                             camadaMarcadoresMobile.addLayer(marker);
                             marcadoresMobilePorBairroId[b.id] = marker;
                         });
@@ -1855,12 +2001,12 @@
                         if (!camadaPoligonosMobile || !mapaMobileInstance) return;
                         camadaPoligonosMobile.clearLayers();
                         poligonosMobilePorBairroId = {};
-                        
+
                         if (typeof geojsonBairrosDivinopolis === 'undefined' || !geojsonBairrosDivinopolis) return;
-                        
+
                         // Mapear nomes normalizados
                         var bairrosPorNomeNorm = {};
-                        globalBairros.forEach(function(b) {
+                        globalBairros.forEach(function (b) {
                             var nomeNorm = normalizarNomeBairroGeo(b.nome);
                             bairrosPorNomeNorm[nomeNorm] = b;
                         });
@@ -1882,19 +2028,19 @@
                             'levindopaulapereira': 'lppereira',
                             'nucleocomerciallevindopaulapereira': 'nucleolppereira'
                         };
-                        Object.keys(aliasesBairrosGeo).forEach(function(geoNome) {
+                        Object.keys(aliasesBairrosGeo).forEach(function (geoNome) {
                             var csvNome = aliasesBairrosGeo[geoNome];
                             if (bairrosPorNomeNorm[csvNome] && !bairrosPorNomeNorm[geoNome]) {
                                 bairrosPorNomeNorm[geoNome] = bairrosPorNomeNorm[csvNome];
                             }
                         });
-                        
+
                         var geojson = geojsonBairrosDivinopolis;
                         var areasLookup = {};
-                        globalAreas.forEach(function(a) {
+                        globalAreas.forEach(function (a) {
                             areasLookup[a.id] = a;
                         });
-                        
+
                         // Bairros filhos (ex: prolongamentos) que devem ter seus marcadores ocultados
                         // quando o polígono do bairro pai é renderizado
                         var bairrosFilhosDoPoligono = {
@@ -1936,9 +2082,9 @@
                             'jardimdasacacias': ['prolongamentojardimdasacacias'],
                             'lppereira': ['prolongamentolppereira']
                         };
-                        
+
                         L.geoJSON(geojson, {
-                            style: function(feature) {
+                            style: function (feature) {
                                 var nomeFeature = (feature.properties && feature.properties.name) || '';
                                 var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
                                 var bairro = bairrosPorNomeNorm[nomeNorm];
@@ -1960,7 +2106,7 @@
                                     interactive: ativo
                                 };
                             },
-                            onEachFeature: function(feature, layer) {
+                            onEachFeature: function (feature, layer) {
                                 var nomeFeature = (feature.properties && feature.properties.name) || 'Bairro';
                                 var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
                                 var bairro = bairrosPorNomeNorm[nomeNorm];
@@ -1969,16 +2115,16 @@
                                     areaNome = areasLookup[bairro.area_id].nome;
                                 }
                                 layer.bindPopup('<div style="font-family:Inter,sans-serif;"><strong style="display:block;margin-bottom:4px;">' + nomeFeature + '</strong><span style="font-size:12px;color:#64748b;">Área: ' + areaNome + '</span></div>', { offset: L.point(0, 80) });
-                                layer.on('click', function(e) {
+                                layer.on('click', function (e) {
                                     layer.openPopup();
                                 });
                                 if (bairro) {
                                     poligonosMobilePorBairroId[bairro.id] = layer;
-                                    
+
                                     // Ocultar marcadores de bairros filhos (prolongamentos/sub-bairros sem polígono próprio)
                                     var nomeBairroNorm = normalizarNomeBairroGeo(bairro.nome);
                                     var filhos = bairrosFilhosDoPoligono[nomeBairroNorm] || [];
-                                    filhos.forEach(function(filhoNomeNorm) {
+                                    filhos.forEach(function (filhoNomeNorm) {
                                         var filho = bairrosPorNomeNorm[filhoNomeNorm];
                                         if (filho) {
                                             poligonosMobilePorBairroId[filho.id] = true;
@@ -1998,10 +2144,10 @@
                         } else {
                             areasDestacadasMobile.push(areaId);
                         }
-                        
+
                         // Atualizar estilo visual dos itens da legenda
-                        var ids = globalAreas.map(function(a) { return a.id; }).concat(['null']);
-                        ids.forEach(function(id) {
+                        var ids = globalAreas.map(function (a) { return a.id; }).concat(['null']);
+                        ids.forEach(function (id) {
                             var el = document.getElementById('legend-mobile-area-' + id);
                             if (!el) return;
                             if (areasDestacadasMobile.length === 0 || areasDestacadasMobile.includes(id)) {
@@ -2010,7 +2156,7 @@
                                 el.style.opacity = '0.4';
                             }
                         });
-                        
+
                         // Re-renderizar marcadores e polígonos com o novo filtro
                         plotarMarcadoresMobile();
                         renderizarPoligonosMobile();
@@ -2024,9 +2170,9 @@
                     function renderizarListaBairrosMobile(filtro) {
                         var lista = document.getElementById('lista-bairros-mobile');
                         if (!lista) return;
-                        var bairros = globalBairros.filter(function(b) { return b.nome.toLowerCase().includes(filtro.toLowerCase()); });
-                        lista.innerHTML = bairros.map(function(b) {
-                            var areaInfo = globalAreas.find(function(a) { return a.id === b.area_id; });
+                        var bairros = globalBairros.filter(function (b) { return b.nome.toLowerCase().includes(filtro.toLowerCase()); });
+                        lista.innerHTML = bairros.map(function (b) {
+                            var areaInfo = globalAreas.find(function (a) { return a.id === b.area_id; });
                             var areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
                             var areaCor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
                             return '<div onclick="focarBairroMobile(\'' + b.id + '\')" style="padding:8px; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:8px;">' +
@@ -2073,9 +2219,9 @@
                     }
 
                     function focarBairroMobile(id) {
-                        var b = globalBairros.find(function(x) { return x.id === id; });
+                        var b = globalBairros.find(function (x) { return x.id === id; });
                         if (!b || !mapaMobileInstance) return;
-                        
+
                         // Se o bairro tem polígono, fazer fitBounds para mostrar as ruas
                         var poligono = poligonosMobilePorBairroId[id];
                         if (!poligono && bairroPaiPorFilhoId[id]) {
@@ -2086,12 +2232,12 @@
                             if (poligono.openPopup) poligono.openPopup();
                             return;
                         }
-                        
+
                         // Sem polígono: zoom no ponto com nível de rua
                         if (b.latitude) {
                             mapaMobileInstance.setView([b.latitude, b.longitude], 17);
                         }
-                        
+
                         // Abrir popup do marcador (se ainda estiver visível)
                         var marcador = marcadoresMobilePorBairroId[id];
                         if (marcador && marcador.openPopup) {
@@ -2104,7 +2250,7 @@
                         var sidebar = document.getElementById('sidebar-bairros-mobile');
                         var icon = document.getElementById('icon-toggle-bairros-mobile');
                         var text = document.getElementById('text-toggle-bairros-mobile');
-                        
+
                         if (conteudo.style.display !== 'none') {
                             conteudo.style.display = 'none';
                             sidebar.style.height = 'auto';
@@ -2118,7 +2264,7 @@
                             icon.innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
                             text.innerText = 'Ocultar';
                         }
-                        setTimeout(function() { if (mapaMobileInstance) mapaMobileInstance.invalidateSize(); }, 300);
+                        setTimeout(function () { if (mapaMobileInstance) mapaMobileInstance.invalidateSize(); }, 300);
                     }
 
                     function toggleLegendaMobile(btn) {
@@ -2235,17 +2381,25 @@
 
             <!-- ABA: CONTROLE INTERNO DE DENUNCIAS -->
             <section id="aba-controle-denuncias" class="content-section" style="display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px;">
                     <h1 style="margin: 0;">Controle Interno de Denúncias</h1>
-                    <button onclick="mudarAba('bairros')" style="padding: 8px 14px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+                    <button onclick="mudarAba('bairros')"
+                        style="padding: 8px 14px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 12H5" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
                         Voltar para Bairros
                     </button>
                 </div>
-                <p style="color: #64748b; margin-bottom: 20px;">Acompanhamento de prazos por origem e tipo de demanda.</p>
+                <p style="color: #64748b; margin-bottom: 20px;">Acompanhamento de prazos por origem e tipo de demanda.
+                </p>
 
                 <div class="sub-abas-cp" id="sub-abas-denuncias">
-                    <button class="sub-aba-btn active" onclick="mudarSubAbaDenuncias('comunicacao_interna', this)">Comunicação Interna</button>
+                    <button class="sub-aba-btn active"
+                        onclick="mudarSubAbaDenuncias('comunicacao_interna', this)">Comunicação Interna</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaDenuncias('vereadores', this)">Vereadores</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaDenuncias('mp', this)">MP</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaDenuncias('app', this)">APP</button>
@@ -2253,34 +2407,47 @@
                     <button class="sub-aba-btn" onclick="mudarSubAbaDenuncias('protocolo', this)">Protocolo</button>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1;">
                         <div style="flex: 1; min-width: 200px; max-width: 320px;">
-                            <input type="text" id="busca-denuncias-geral" placeholder="Pesquisar em todas as colunas..." oninput="aplicarFiltrosDenuncias()" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;">
+                            <input type="text" id="busca-denuncias-geral" placeholder="Pesquisar em todas as colunas..."
+                                oninput="aplicarFiltrosDenuncias()"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;">
                         </div>
                         <div style="position: relative;">
                             <button id="btn-filtro-denuncias-toggle" onclick="togglePainelFiltroDenuncias()"
                                 style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;"
-                                onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                onmouseover="this.style.background='#062117'"
+                                onmouseout="this.style.background='#0c3e2b'">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
                                 Filtro
                             </button>
                             <div id="painel-filtro-denuncias-popup"
                                 style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:20px; z-index:100; min-width:290px; border:1px solid #e2e8f0;">
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Origem</label>
-                                    <input type="text" id="filtro-denuncias-origem" list="datalist-denuncias-origem" placeholder="Digite ou selecione..." oninput="aplicarFiltrosDenuncias()"
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Origem</label>
+                                    <input type="text" id="filtro-denuncias-origem" list="datalist-denuncias-origem"
+                                        placeholder="Digite ou selecione..." oninput="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                                     <datalist id="datalist-denuncias-origem"></datalist>
                                 </div>
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Responsável</label>
-                                    <input type="text" id="filtro-denuncias-encaminhado" list="datalist-denuncias-encaminhado" placeholder="Digite ou selecione..." oninput="aplicarFiltrosDenuncias()"
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Responsável</label>
+                                    <input type="text" id="filtro-denuncias-encaminhado"
+                                        list="datalist-denuncias-encaminhado" placeholder="Digite ou selecione..."
+                                        oninput="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                                     <datalist id="datalist-denuncias-encaminhado"></datalist>
                                 </div>
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Status</label>
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Status</label>
                                     <select id="filtro-denuncias-concluido" onchange="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                                         <option value="">Todos</option>
@@ -2289,7 +2456,8 @@
                                     </select>
                                 </div>
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Prazo</label>
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Prazo</label>
                                     <select id="filtro-denuncias-vencido" onchange="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                                         <option value="">Todos</option>
@@ -2298,13 +2466,19 @@
                                     </select>
                                 </div>
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Início</label>
-                                    <input type="date" id="filtro-denuncias-data-inicio" onchange="aplicarFiltrosDenuncias()"
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data
+                                        Início</label>
+                                    <input type="date" id="filtro-denuncias-data-inicio"
+                                        onchange="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                                 </div>
                                 <div style="margin-bottom:14px;">
-                                    <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Fim</label>
-                                    <input type="date" id="filtro-denuncias-data-fim" onchange="aplicarFiltrosDenuncias()"
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data
+                                        Fim</label>
+                                    <input type="date" id="filtro-denuncias-data-fim"
+                                        onchange="aplicarFiltrosDenuncias()"
                                         style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                                 </div>
                                 <button onclick="limparFiltrosDenuncias()"
@@ -2316,8 +2490,14 @@
                             </div>
                         </div>
                     </div>
-                    <button onclick="abrirModalNovaDenuncia()" style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <button onclick="abrirModalNovaDenuncia()"
+                        style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
                         Nova Linha
                     </button>
                 </div>
@@ -2338,15 +2518,15 @@
                     <div class="calendario-container"
                         style="flex: 0.8; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 320px; border: 1px solid #e2e8f0;">
                         <div style="display: flex; gap: 8px; margin-bottom: 20px;">
-                            <button id="btn-filtro-todos" onclick="setFiltroTipoEvento('todos')" 
+                            <button id="btn-filtro-todos" onclick="setFiltroTipoEvento('todos')"
                                 style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #0c3e2b; background: #0c3e2b; color: white; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
                                 Tudo
                             </button>
-                            <button id="btn-filtro-evento" onclick="setFiltroTipoEvento('evento')" 
+                            <button id="btn-filtro-evento" onclick="setFiltroTipoEvento('evento')"
                                 style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #475569; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
                                 Eventos
                             </button>
-                            <button id="btn-filtro-projeto" onclick="setFiltroTipoEvento('projeto')" 
+                            <button id="btn-filtro-projeto" onclick="setFiltroTipoEvento('projeto')"
                                 style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #475569; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s;">
                                 Projetos
                             </button>
@@ -2411,7 +2591,8 @@
                             </button>
                         </div>
 
-                        <div id="lista-eventos-container" style="max-height: 300px; overflow-y: auto; padding: 5px; margin-bottom: 20px;">
+                        <div id="lista-eventos-container"
+                            style="max-height: 300px; overflow-y: auto; padding: 5px; margin-bottom: 20px;">
                             <!-- Cards de eventos injetados pelo tarefas.js -->
                             <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 1rem;">
                                 Carregando eventos do mês...
@@ -2626,7 +2807,8 @@
             <div class="modal-header">
                 <h2 id="titulo-modal-denuncia">Nova Linha</h2>
                 <button class="modal-close" onclick="fecharModalNovaDenuncia()">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -2636,8 +2818,10 @@
                 <input type="hidden" id="denuncia-id">
 
                 <div>
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Tipo</label>
-                    <select id="denuncia-tipo" onchange="ajustarCamposFormDenuncia()" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Tipo</label>
+                    <select id="denuncia-tipo" onchange="ajustarCamposFormDenuncia()"
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                         <option value="comunicacao_interna">Comunicação Interna</option>
                         <option value="vereadores">Vereadores</option>
                         <option value="mp">MP</option>
@@ -2649,12 +2833,17 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data *</label>
-                        <input type="date" id="denuncia-data" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data
+                            *</label>
+                        <input type="date" id="denuncia-data"
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Concluído</label>
-                        <select id="denuncia-concluido" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Concluído</label>
+                        <select id="denuncia-concluido"
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                             <option value="false">Não</option>
                             <option value="true">Sim</option>
                         </select>
@@ -2662,63 +2851,94 @@
                 </div>
 
                 <div>
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Tarefa *</label>
-                    <input type="text" id="denuncia-tarefa" placeholder="Descrição da tarefa..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Tarefa
+                        *</label>
+                    <input type="text" id="denuncia-tarefa" placeholder="Descrição da tarefa..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Origem *</label>
-                        <input type="text" id="denuncia-origem" placeholder="Origem da demanda..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Origem
+                            *</label>
+                        <input type="text" id="denuncia-origem" placeholder="Origem da demanda..."
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                     <div id="wrap-denuncia-protocolo" style="display:none;">
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Protocolo *</label>
-                        <input type="text" id="denuncia-protocolo" placeholder="Nº protocolo..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Protocolo
+                            *</label>
+                        <input type="text" id="denuncia-protocolo" placeholder="Nº protocolo..."
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                 </div>
 
                 <div>
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Descrição</label>
-                    <textarea id="denuncia-descricao" rows="3" placeholder="Descrição detalhada..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; resize:vertical;"></textarea>
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Descrição</label>
+                    <textarea id="denuncia-descricao" rows="3" placeholder="Descrição detalhada..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; resize:vertical;"></textarea>
                 </div>
 
                 <div id="wrap-denuncia-endereco">
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Endereço</label>
-                    <input type="text" id="denuncia-endereco" placeholder="Endereço..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Endereço</label>
+                    <input type="text" id="denuncia-endereco" placeholder="Endereço..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                 </div>
 
                 <div id="wrap-denuncia-bairro">
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Bairro</label>
-                    <input type="text" id="denuncia-bairro" list="datalist-bairros-denuncia" placeholder="Selecione ou digite o bairro..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Bairro</label>
+                    <input type="text" id="denuncia-bairro" list="datalist-bairros-denuncia"
+                        placeholder="Selecione ou digite o bairro..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     <datalist id="datalist-bairros-denuncia"></datalist>
                 </div>
 
                 <div id="wrap-denuncia-solicitante" style="display:none;">
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Solicitante *</label>
-                    <input type="text" id="denuncia-solicitante" placeholder="Nome do solicitante..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Solicitante
+                        *</label>
+                    <input type="text" id="denuncia-solicitante" placeholder="Nome do solicitante..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                 </div>
 
                 <div>
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Encaminhado para *</label>
-                    <input type="text" id="denuncia-encaminhado-busca" list="datalist-usuarios-denuncia" placeholder="Digite para buscar um usuário..." autocomplete="off" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Encaminhado
+                        para *</label>
+                    <input type="text" id="denuncia-encaminhado-busca" list="datalist-usuarios-denuncia"
+                        placeholder="Digite para buscar um usuário..." autocomplete="off"
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                     <input type="hidden" id="denuncia-encaminhado">
                     <datalist id="datalist-usuarios-denuncia"></datalist>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Prazo para Conclusão</label>
-                        <input type="date" id="denuncia-prazo" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Prazo
+                            para Conclusão</label>
+                        <input type="date" id="denuncia-prazo"
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                     <div>
-                        <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data Entrega</label>
-                        <input type="date" id="denuncia-data-entrega" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data
+                            Entrega</label>
+                        <input type="date" id="denuncia-data-entrega"
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
                     </div>
                 </div>
 
                 <div>
-                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Observações</label>
-                    <textarea id="denuncia-obs" rows="2" placeholder="Observações..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; resize:vertical;"></textarea>
+                    <label
+                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Observações</label>
+                    <textarea id="denuncia-obs" rows="2" placeholder="Observações..."
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; resize:vertical;"></textarea>
                 </div>
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
@@ -2730,11 +2950,13 @@
 
     <!-- MODAL GRAFICO COMPLETO DE BAIRROS -->
     <div class="modal-overlay" id="modal-grafico-bairros" style="display: none;">
-        <div class="modal-container" style="max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column;">
+        <div class="modal-container"
+            style="max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column;">
             <div class="modal-header">
                 <h2 id="titulo-modal-bairros">Peso por Bairro — Todos</h2>
                 <button class="modal-close" onclick="fecharModalGraficoBairros()">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -2746,8 +2968,14 @@
                 </div>
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
-                <button class="btn-salvar" onclick="baixarDadosBairros()" style="display: flex; align-items: center; gap: 6px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <button class="btn-salvar" onclick="baixarDadosBairros()"
+                    style="display: flex; align-items: center; gap: 6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
                     Baixar Dados
                 </button>
                 <button class="btn-cancelar" onclick="fecharModalGraficoBairros()">Fechar</button>
@@ -2762,7 +2990,8 @@
     <script src="lib/xlsx.bundle.js"></script>
     <script src="lib/sweetalert2.all.min.js"></script>
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="assets/js/protecao.js"></script>
     <script src="assets/js/cabecalho_img.js"></script>
     <script src="assets/js/produtividade.js"></script>

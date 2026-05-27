@@ -186,7 +186,30 @@ function podeGerenciarDiretores(role) {
 let graficoBairrosInstance = null;
 let graficoFiscaisInstance = null;
 
-// Grafico Home do Gerente: Fiscais x Pontuacao do mes
+// Helper para contornar limite de 1000 registros do Supabase
+async function fetchAllPontuacoes(tabela, ids) {
+    let allData = [];
+    let start = 0;
+    const limit = 1000;
+    while(true) {
+        const { data, error } = await supabaseClient
+            .from(tabela)
+            .select('user_id, pontuacao')
+            .in('user_id', ids)
+            .range(start, start + limit - 1);
+        if (error) {
+            console.error('Erro paginacao ' + tabela, error);
+            break;
+        }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < limit) break;
+        start += limit;
+    }
+    return allData;
+}
+
+// Grafico Home do Gerente: Fiscais x Pontuacao Total
 async function carregarGraficoFiscais() {
     try {
         // 1. Buscar todos os usuarios com role 'fiscal' incluindo avatar
@@ -201,23 +224,12 @@ async function carregarGraficoFiscais() {
             return;
         }
 
-        // 2. Ultimos 30 dias
-        var hoje = new Date();
-        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        // 2. Coletar IDs dos fiscais
         var idsFiscais = fiscais.map(function (f) { return f.id; });
 
-        // 3. Buscar registros
-        const { data: registros } = await supabaseClient
-            .from('registros_produtividade')
-            .select('user_id, pontuacao')
-            .in('user_id', idsFiscais)
-            .gte('created_at', trintaDiasAtras);
-
-        const { data: regCP } = await supabaseClient
-            .from('controle_processual')
-            .select('user_id, pontuacao')
-            .in('user_id', idsFiscais)
-            .gte('created_at', trintaDiasAtras);
+        // 3. Buscar todos os registros com paginação para evitar limite de 1000 linhas
+        const registros = await fetchAllPontuacoes('registros_produtividade', idsFiscais);
+        const regCP = await fetchAllPontuacoes('controle_processual', idsFiscais);
 
         // 4. Agrupar pontuacao
         var mapPontuacao = {};
@@ -315,16 +327,10 @@ async function carregarRankingFiscaisHome() {
             return;
         }
 
-        // 2. Buscar pontuação total (sem limite de 30 dias)
-        const { data: registros } = await supabaseClient
-            .from('registros_produtividade')
-            .select('user_id, pontuacao')
-            .in('user_id', fiscais.map(f => f.id));
-
-        const { data: regCP } = await supabaseClient
-            .from('controle_processual')
-            .select('user_id, pontuacao')
-            .in('user_id', fiscais.map(f => f.id));
+        // 2. Buscar pontuação total com paginação para evitar limite de 1000 linhas
+        const ids = fiscais.map(f => f.id);
+        const registros = await fetchAllPontuacoes('registros_produtividade', ids);
+        const regCP = await fetchAllPontuacoes('controle_processual', ids);
 
         // 3. Agrupar pontuação
         var mapPontuacao = {};

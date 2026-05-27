@@ -299,17 +299,17 @@ const CATEGORIAS = [
         nome: 'Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa',
         pontos: 100,
         destaque: true,
-        campos: [           
-    { nome: 'n_auto', label: 'N° do Auto de Infração', tipo: 'text', obrigatorio: true },
+        campos: [
+            { nome: 'n_auto', label: 'N° do Auto de Infração', tipo: 'text', obrigatorio: true },
 
-    { nome: 'nome', label: 'Nome do Autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'nome', label: 'Nome do Autuado', tipo: 'text', obrigatorio: true },
 
-    { nome: 'cpf', label: 'CPF do Autuado', tipo: 'text', obrigatorio: false },
+            { nome: 'cpf', label: 'CPF do Autuado', tipo: 'text', obrigatorio: false },
 
-    { nome: 'advogado', label: 'Advogado', tipo: 'text', obrigatorio: false },
+            { nome: 'advogado', label: 'Advogado', tipo: 'text', obrigatorio: false },
 
-]
-        
+        ]
+
     },
     {
         id: '12',
@@ -1691,7 +1691,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         }
 
         const nNotificacaoNovo = campos.n_notificacao ? String(campos.n_notificacao).trim() : '';
-        
+
         if (nNotificacaoNovo !== '') {
             // Buscamos na tabela CORRETA (controle_processual) filtrando por categoria e user_id
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1710,10 +1710,10 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     Swal.fire({
                         icon: 'error',
                         title: 'Notificação já cadastrada!',
-                        text: `A Notificação N° ${nNotificacaoNovo} já existe no seu histórico pessoal.`, 
+                        text: `A Notificação N° ${nNotificacaoNovo} já existe no seu histórico pessoal.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1725,8 +1725,8 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             }
         }
     }
- 
-        // ============================================================
+
+    // ============================================================
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.3) - N° DO AR
     // ============================================================
     // ID interno: '1.3' (16.3 - Controle Processual: Aviso de Recebimento (AR))
@@ -1735,11 +1735,11 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const { data: { user } } = await getAuthUser();
         if (!user) {
             salvando = false;
-            return; 
+            return;
         }
 
         const nARNovo = campos.n_ar ? String(campos.n_ar).trim() : '';
-        
+
         if (nARNovo !== '') {
             // Buscamos na tabela controle_processual apenas os registros do usuário para esta categoria
             const { data: historico, error: erroBD } = await supabaseClient
@@ -1761,7 +1761,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         text: `O Aviso de Recebimento N° ${nARNovo} já consta no seu histórico pessoal.`,
                         confirmButtonColor: '#ef4444'
                     });
-                    
+
                     salvando = false;
                     const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
                     if (btnSalvarLocal) {
@@ -1775,54 +1775,54 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     }
 
     // ============================================================
-// VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.6) - N° DO PROTOCOLO
-// ============================================================
-// ID interno: '1.6' (16.6 - Controle Processual: Protocolo)
-if (categoriaAtual.id === '1.6' && !modoEdicao) {
-    const { data: { user } } = await getAuthUser();
-    if (!user) {
-        salvando = false;
-        return;
-    }
+    // VALIDAÇÃO DE DUPLICIDADE (CATEGORIA 16.6) - N° DO PROTOCOLO
+    // ============================================================
+    // ID interno: '1.6' (16.6 - Controle Processual: Protocolo)
+    if (categoriaAtual.id === '1.6' && !modoEdicao) {
+        const { data: { user } } = await getAuthUser();
+        if (!user) {
+            salvando = false;
+            return;
+        }
 
-    const nProtocoloNovo = campos.n_protocolo ? String(campos.n_protocolo).trim() : '';
+        const nProtocoloNovo = campos.n_protocolo ? String(campos.n_protocolo).trim() : '';
 
-    if (nProtocoloNovo !== '') {
-        const { data: historico, error: erroBD } = await supabaseClient
-            .from('controle_processual')
-            .select('campos')
-            .eq('categoria_id', '1.6')
-            .eq('user_id', user.id);
+        if (nProtocoloNovo !== '') {
+            const { data: historico, error: erroBD } = await supabaseClient
+                .from('controle_processual')
+                .select('campos')
+                .eq('categoria_id', '1.6')
+                .eq('user_id', user.id);
 
-        if (!erroBD && historico) {
-            const jaExiste = historico.some(item => {
-                const protocoloExistente = item.campos?.n_protocolo 
-                    ? String(item.campos.n_protocolo).trim() 
-                    : '';
-                return protocoloExistente === nProtocoloNovo;
-            });
-
-            if (jaExiste) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Protocolo já cadastrado!',
-                    text: `O Protocolo N° ${nProtocoloNovo} já consta no seu histórico pessoal.`,
-                    confirmButtonColor: '#ef4444'
+            if (!erroBD && historico) {
+                const jaExiste = historico.some(item => {
+                    const protocoloExistente = item.campos?.n_protocolo
+                        ? String(item.campos.n_protocolo).trim()
+                        : '';
+                    return protocoloExistente === nProtocoloNovo;
                 });
 
-                salvando = false;
-                const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
-                if (btnSalvarLocal) {
-                    btnSalvarLocal.textContent = 'Salvar';
-                    btnSalvarLocal.disabled = false;
+                if (jaExiste) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Protocolo já cadastrado!',
+                        text: `O Protocolo N° ${nProtocoloNovo} já consta no seu histórico pessoal.`,
+                        confirmButtonColor: '#ef4444'
+                    });
+
+                    salvando = false;
+                    const btnSalvarLocal = document.querySelector('#modal-produtividade .btn-salvar');
+                    if (btnSalvarLocal) {
+                        btnSalvarLocal.textContent = 'Salvar';
+                        btnSalvarLocal.disabled = false;
+                    }
+                    return; // BLOQUEIO
                 }
-                return; // BLOQUEIO
             }
         }
     }
-}
 
-    
+
     // Campo especial: data registrada manual (categoria 1.1, primeiros 7 dias)
     let dataRegistradaManual = null;
     if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
@@ -1835,7 +1835,7 @@ if (categoriaAtual.id === '1.6' && !modoEdicao) {
     // 2. Obter usuário logado
     const { data: { user } } = await getAuthUser();
     if (!user) {
-        
+
         alert('Sessão expirada! Faça login novamente.');
         salvando = false;
         window.location.href = 'index.html';
@@ -1856,6 +1856,7 @@ if (categoriaAtual.id === '1.6' && !modoEdicao) {
     }
 
     // 5. Salvar no Supabase
+    let numeroSeqRollback = null;
     try {
         console.log('[Salvar] Iniciando salvamento. modoEdicao:', modoEdicao, 'idEditando:', idEditando, 'categoria:', categoriaAtual?.id);
         let data, error;
@@ -1921,6 +1922,7 @@ if (categoriaAtual.id === '1.6' && !modoEdicao) {
                 const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7', '1.8', '11'];
                 if (categoriasAutoNum.includes(categoriaAtual.id)) {
                     numeroSeq = await gerarNumeroSequencial(categoriaAtual.id);
+                    numeroSeqRollback = numeroSeq;
                 }
 
                 const insertDataCP = {
@@ -2142,6 +2144,15 @@ if (categoriaAtual.id === '1.6' && !modoEdicao) {
         } // Fim de else (CRIAÇÃO)
     } catch (err) {
         console.error("[Salvar] Erro capturado:", err);
+        if (numeroSeqRollback && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numeroSeqRollback.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { console.error('Erro rollback', e); }
+        }
         console.error("[Salvar] Tipo do erro:", typeof err, "JSON:", JSON.stringify(err));
         alert('Ocorreu um erro ao salvar o registro no banco de dados: ' + (err?.message || JSON.stringify(err) || 'Erro desconhecido'));
         fecharModalProdutividade();
@@ -3154,7 +3165,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 }
             }
 
-            if (vResposta.toLowerCase().includes('atendido')) qtdVerde++;
+            if (vResposta.toLowerCase().includes('atendido') || vResposta.toLowerCase().includes('atendida')) qtdVerde++;
             if (vHistoricoInfo !== '') qtdVermelha++;
             if (dtVencimentoVencida && vResposta === '') qtdCinza++;
         });
@@ -3558,7 +3569,7 @@ async function abrirDetalhesAdminHist(id) {
     }
 
     Object.entries(campos).forEach(([chave, valor]) => {
-        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar') return;
+        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'data_vencimento_original' || chave === 'data_dilacao' || chave === 'data_dilacao_anterior' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar') return;
         let label = chave;
         if (catDef) {
             const campoDef = catDef.campos.find(c => c.nome === chave);
@@ -3593,6 +3604,12 @@ async function abrirDetalhesAdminHist(id) {
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de recebimento pelo proprietário: (Admin)</label>
                 <input type="date" id="admin-data-entrada" value="${vEntrada}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
             </div>`;
+            if (campos.data_vencimento_original) {
+                const vVencOrig = campos.data_vencimento_original.split('-').reverse().join('/');
+                htmlCampos += `<div style="margin-bottom:12px; font-size:14px; color:#475569;">
+                    <strong>Data de Vencimento Antes da Dilação de Prazo:</strong> ${vVencOrig}
+                </div>`;
+            }
             htmlCampos += `<div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Data de Vencimento (Admin)</label>
                 <input type="date" id="admin-data-vencimento" value="${vVencimento}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
@@ -3618,7 +3635,21 @@ async function abrirDetalhesAdminHist(id) {
             </div>`;
         } else {
             htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de recebimento pelo proprietário:</strong> ${vEntrada ? vEntrada.split('-').reverse().join('/') : '—'}</div>`;
-            htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento:</strong> ${vVencimento ? vVencimento.split('-').reverse().join('/') : '—'}</div>`;
+
+            if (campos.data_vencimento_original) {
+                const vVencOrig = campos.data_vencimento_original.split('-').reverse().join('/');
+                const vDilacao = vVencimento ? vVencimento.split('-').reverse().join('/') : '—';
+                htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento Original:</strong> ${vVencOrig}</div>`;
+                htmlCampos += `<div style="margin-bottom:8px; color:#8b5cf6;"><strong>Dilação de Prazo:</strong> ${vDilacao}`;
+                if (campos.data_dilacao_anterior) {
+                    const ant = campos.data_dilacao_anterior.split('-').reverse().join('/');
+                    htmlCampos += `<br><span style="font-size:11px; color:#64748b;">(Editado: ${ant})</span>`;
+                }
+                htmlCampos += `</div>`;
+            } else {
+                htmlCampos += `<div style="margin-bottom:8px;"><strong>Data de Vencimento:</strong> ${vVencimento ? vVencimento.split('-').reverse().join('/') : '—'}</div>`;
+            }
+
             htmlCampos += `<div style="margin-bottom:8px;"><strong>AR:</strong> ${vAR || '—'}</div>`;
             if (campos.anexo_ar) {
                 htmlCampos += `<div style="margin-bottom:8px;"><strong>Anexo AR:</strong> <a href="${campos.anexo_ar}" target="_blank" style="color:#0ea5e9; text-decoration:underline;">Visualizar Arquivo</a></div>`;
@@ -3664,7 +3695,7 @@ async function abrirDetalhesAdminHist(id) {
                 </select>
                 <div id="admin-resposta-data-container" style="display:${(vResposta === 'ATENDIDO' || isAtendidoComData) ? 'block' : 'none'};">
                     <label style="display:block; font-size:13px; color:#64748b; margin-bottom:3px;">Data do atendimento</label>
-                    <input type="text" id="admin-resposta-data" value="${dataAtendimento || hojeStr}" placeholder="dd/mm/aa" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">
+                    <input type="text" id="admin-resposta-data" value="${dataAtendimento}" placeholder="dd/mm/aa" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">
                 </div>
                 <div id="admin-resposta-text-container" style="display:${!isOpcaoPadrao ? 'block' : 'none'};">
                     <textarea id="admin-resposta-fiscal" rows="3" placeholder="Digite sua resposta personalizada..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; font-family:inherit;">${(!isOpcaoPadrao) ? vResposta : ''}</textarea>
@@ -3675,7 +3706,21 @@ async function abrirDetalhesAdminHist(id) {
         }
 
         if (isDono) {
-            htmlCampos += `<div style="margin-top:20px; border-top:1px dashed #cbd5e1; padding-top:16px;">
+            htmlCampos += `<div style="margin-top:20px; border-top:1px dashed #cbd5e1; padding-top:16px;">`;
+
+            if (reg.categoria_id !== '1.2') {
+                htmlCampos += `
+                <h4 style="margin-bottom:12px; color:#8b5cf6; font-size:15px;">Dilação de Prazo</h4>
+                <p style="font-size:11px; color:#64748b; margin-bottom:8px; margin-top:0;">Caso queira dilatar o prazo de vencimento, informe a nova data abaixo. A data original será preservada no histórico.</p>
+                <input type="date" id="dono-dilacao-prazo" value="${campos.data_dilacao || ''}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; margin-bottom:${campos.data_dilacao_anterior ? '4px' : '20px'};">`;
+
+                if (campos.data_dilacao_anterior) {
+                    const ant = campos.data_dilacao_anterior.split('-').reverse().join('/');
+                    htmlCampos += `<p style="font-size:11px; color:#ef4444; margin-top:0; margin-bottom:20px;">Editado: ${ant}</p>`;
+                }
+            }
+
+            htmlCampos += `
                 <h4 style="margin-bottom:12px; color:#1e293b; font-size:15px;">Gerenciar Documentos</h4>`;
 
             // Anexo Principal
@@ -3768,6 +3813,7 @@ async function salvarDetalhesHist(id) {
 
     const inputEntrada = document.getElementById('admin-data-entrada');
     const inputVencimento = document.getElementById('admin-data-vencimento');
+    const inputDilacao = document.getElementById('dono-dilacao-prazo');
     const inputAR = document.getElementById('admin-ar');
     const inputAnexoAR = document.getElementById('admin-anexo-ar');
     const checkboxRemoverAR = document.getElementById('admin-remover-anexo-ar');
@@ -3782,7 +3828,20 @@ async function salvarDetalhesHist(id) {
     }
 
     if (inputEntrada) novosCampos.data_entrada = inputEntrada.value;
-    if (inputVencimento) novosCampos.data_vencimento = inputVencimento.value;
+    if (inputVencimento) {
+        novosCampos.data_vencimento = inputVencimento.value;
+    }
+    if (inputDilacao && inputDilacao.value.trim() !== '') {
+        const novaDilacao = inputDilacao.value;
+        if (novosCampos.data_dilacao && novosCampos.data_dilacao !== novaDilacao) {
+            novosCampos.data_dilacao_anterior = novosCampos.data_dilacao;
+        }
+        if (!novosCampos.data_vencimento_original) {
+            novosCampos.data_vencimento_original = novosCampos.data_vencimento;
+        }
+        novosCampos.data_vencimento = novaDilacao;
+        novosCampos.data_dilacao = novaDilacao;
+    }
     if (inputAR) novosCampos.ar = inputAR.value;
     if (inputHistorico) novosCampos.historico_admin = inputHistorico.value;
 
@@ -3901,7 +3960,7 @@ async function salvarDetalhesHist(id) {
         const respostaAntiga = (reg.campos.resposta_fiscal || '').toLowerCase();
         const respostaNova = (novosCampos.resposta_fiscal || '').toLowerCase();
 
-        if (!respostaAntiga.includes('atendido') && respostaNova.includes('atendido')) {
+        if (!(respostaAntiga.includes('atendido') || respostaAntiga.includes('atendida')) && (respostaNova.includes('atendido') || respostaNova.includes('atendida'))) {
             const hoje = new Date();
             const ano = hoje.getFullYear();
             const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -3957,7 +4016,8 @@ async function salvarDetalhesHist(id) {
         }
 
         reg.campos = novosCampos;
-        document.getElementById('modal-detalhes-admin-hist').remove();
+        const modalHist = document.getElementById('modal-detalhes-admin-hist');
+        if (modalHist) modalHist.remove();
 
         // Atualizar tabela de histórico imediatamente
         renderizarTabelaGeral(registrosGeralAtual, reg.categoria_id);
@@ -4856,9 +4916,10 @@ async function abrirEditorAutoInfracao() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
         // Gera número sequencial online e cria rascunho no banco para reservar o número
-        const numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
+        numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
         const tituloDoc = 'AUTO DE INFRAÇÃO Nº';
 
         // Salva rascunho sem pontuação e sem anexo (reserva o número)
@@ -4971,6 +5032,15 @@ async function abrirEditorAutoInfracao() {
 
     } catch (error) {
         console.error('Erro ao preparar documento:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados do documento.');
     } finally {
         if (btnSalvarForm) {
@@ -5013,9 +5083,10 @@ async function abrirEditorOficio() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
         // Gera número sequencial online e cria rascunho no banco para reservar o número
-        const numSequencial = await gerarNumeroSequencial('1.4');
+        numSequencial = await gerarNumeroSequencial('1.4');
 
         // Salva rascunho sem pontuação e sem anexo (reserva o número)
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
@@ -5103,6 +5174,15 @@ async function abrirEditorOficio() {
 
     } catch (error) {
         console.error('Erro ao preparar ofício:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados do ofício.');
     } finally {
         if (btnSalvarForm) {
@@ -5147,9 +5227,10 @@ async function abrirEditorRelatorio() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
         // Gera número sequencial online e cria rascunho no banco para reservar o número
-        const numSequencial = await gerarNumeroSequencial('1.5');
+        numSequencial = await gerarNumeroSequencial('1.5');
 
         // Salva rascunho sem pontuação e sem anexo (reserva o número)
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
@@ -5234,6 +5315,15 @@ async function abrirEditorRelatorio() {
 
     } catch (error) {
         console.error('Erro ao preparar relatório:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados do relatório.');
     } finally {
         if (btnSalvarForm) {
@@ -5278,9 +5368,10 @@ async function abrirEditorReplica() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
         // Gera número sequencial online e cria rascunho no banco para reservar o número
-        const numSequencial = await gerarNumeroSequencial('1.7');
+        numSequencial = await gerarNumeroSequencial('1.7');
 
         // Salva rascunho sem pontuação e sem anexo (reserva o número)
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
@@ -5372,6 +5463,15 @@ async function abrirEditorReplica() {
 
     } catch (error) {
         console.error('Erro ao preparar a réplica:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados da réplica.');
     } finally {
         if (btnSalvarForm) {
@@ -5415,8 +5515,9 @@ async function abrirEditorCertidao() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
-        const numSequencial = await gerarNumeroSequencial('1.8');
+        numSequencial = await gerarNumeroSequencial('1.8');
 
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
         rascunhoDocumento = {
@@ -5502,6 +5603,15 @@ async function abrirEditorCertidao() {
 
     } catch (error) {
         console.error('Erro ao preparar a certidão:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados da certidão.');
     } finally {
         if (btnSalvarForm) {
@@ -5541,8 +5651,9 @@ async function abrirEditorDividaAtiva() {
         btnSalvarForm.disabled = true;
     }
 
+    let numSequencial = null;
     try {
-        const numSequencial = await gerarNumeroSequencial('11');
+        numSequencial = await gerarNumeroSequencial('11');
 
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
         rascunhoDocumento = {
@@ -5577,7 +5688,7 @@ async function abrirEditorDividaAtiva() {
 
         const imgBase64 = await obterBase64Cabecalho();
 
-    const htmlTemplate = `
+        const htmlTemplate = `
     <table width="100%" border="1" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12pt; margin-top: 25px;">
         <tr>
             <td align="center" style="height: 70px; padding: 8px;">
@@ -5617,6 +5728,15 @@ async function abrirEditorDividaAtiva() {
 
     } catch (error) {
         console.error('Erro ao preparar Dívida Ativa:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
         alert('Ocorreu um erro ao processar os dados do documento.');
     } finally {
         if (btnSalvarForm) {
@@ -6033,13 +6153,30 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
 
     const total = comAI.length + semAI.length;
 
-    function montarTabela(registros, secaoId, corBadge, textoBadge, bgSecao) {
+    const semAIComDilacao = [];
+    const semAISemDilacao = [];
+    semAI.forEach(reg => {
+        if (reg.campos && (reg.campos.data_dilacao || reg.campos.data_vencimento_original)) {
+            semAIComDilacao.push(reg);
+        } else {
+            semAISemDilacao.push(reg);
+        }
+    });
+
+    function montarTabela(registros, secaoId, corBadge, textoBadge, bgSecao, tipo = 'padrao') {
         let headerHTML = '<tr>';
         headerHTML += '<th class="col-curta">N°</th>';
         headerHTML += '<th>Nome / Identificador</th>';
         headerHTML += '<th class="col-curta">Bairro</th>';
         headerHTML += '<th class="col-curta">Fiscal</th>';
-        headerHTML += '<th class="col-curta">Data Venc.</th>';
+
+        if (tipo === 'com_dilacao') {
+            headerHTML += '<th class="col-curta">Venc. Original</th>';
+            headerHTML += '<th class="col-curta">Dilação de Prazo</th>';
+        } else {
+            headerHTML += '<th class="col-curta">Data Venc.</th>';
+        }
+
         headerHTML += '<th class="col-curta">AI Vinculado</th>';
         headerHTML += '<th class="col-curta">Anexos</th>';
         headerHTML += '</tr>';
@@ -6050,9 +6187,16 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
             const bairro = (reg.campos && reg.campos.bairro) || '-';
             const fiscal = reg.fiscal_nome || '-';
             const numSeq = (reg.campos && reg.campos.n_notificacao) || (reg.numero_sequencial || '-');
-            const dataVenc = reg.campos && reg.campos.data_vencimento
-                ? reg.campos.data_vencimento.split('-').reverse().join('/')
-                : '-';
+
+            let colsDataHTML = '';
+            if (tipo === 'com_dilacao') {
+                const dvo = reg.campos && reg.campos.data_vencimento_original ? reg.campos.data_vencimento_original.split('-').reverse().join('/') : '-';
+                const dd = reg.campos && reg.campos.data_dilacao ? reg.campos.data_dilacao.split('-').reverse().join('/') : (reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-');
+                colsDataHTML = `<td style="text-align:center; vertical-align:middle;">${dvo}</td><td style="text-align:center; vertical-align:middle; color:#8b5cf6; font-weight:bold;">${dd}</td>`;
+            } else {
+                const dataVenc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-';
+                colsDataHTML = `<td style="text-align:center; vertical-align:middle;">${dataVenc}</td>`;
+            }
 
             const aiVinculado = mapaAI[numSeq];
             let aiHTML = '<span style="color:#94a3b8;font-size:12px;">—</span>';
@@ -6081,7 +6225,7 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
             bodyHTML += `<td style="vertical-align:middle;">${nome}</td>`;
             bodyHTML += `<td style="vertical-align:middle;">${bairro}</td>`;
             bodyHTML += `<td style="vertical-align:middle;">${fiscal}</td>`;
-            bodyHTML += `<td style="text-align:center; vertical-align:middle;">${dataVenc}</td>`;
+            bodyHTML += colsDataHTML;
             bodyHTML += `<td style="text-align:center; vertical-align:middle;">${aiHTML}</td>`;
             bodyHTML += `<td style="text-align:center; vertical-align:middle;">${anexoHTML}</td>`;
             bodyHTML += `</tr>`;
@@ -6154,7 +6298,8 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
             </div>
 
             ${montarTabela(comAI, 'secao-com-ai', '#f59e0b', '⚠️ Notificações Preliminares vencidas com Auto de Infração vinculado', '#fffbeb')}
-            ${montarTabela(semAI, 'secao-sem-ai', '#dc2626', '🔴 Notificações Preliminares vencidas sem Auto de Infração', '#fef2f2')}
+            ${montarTabela(semAIComDilacao, 'secao-sem-ai-dilacao', '#8b5cf6', '⏳ Notificações Preliminares com Dilação de Prazo vencidos', '#f5f3ff', 'com_dilacao')}
+            ${montarTabela(semAISemDilacao, 'secao-sem-ai', '#dc2626', '🔴 Notificações Preliminares vencidas sem Auto de Infração', '#fef2f2')}
         </div>
     `;
 
@@ -6223,7 +6368,7 @@ async function abrirModalVencidos() {
         if (numerosNP.length > 0) {
             Swal.fire({
                 title: 'Verificando vínculos...',
-                text: 'Buscando Autos de Infração vinculados',
+                text: 'Buscando os dados...',
                 allowOutsideClick: false,
                 didOpen: () => { Swal.showLoading(); }
             });
@@ -6262,18 +6407,38 @@ function abrirModalAtendidos() {
     }
 
     const filtrarPorFiscal = usuarioDeveVerApenasSeusRegistros();
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
-    const respondidos = registrosGeralAtual.filter(reg => {
-        const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
-        if (resp === '') return false;
+    const efetivados = registrosGeralAtual.filter(reg => {
         if (filtrarPorFiscal && !pertenceAoFiscalLogado(reg)) return false;
-        return true;
+
+        const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+        if (resp !== '') return true;
+
+        if (subAbaAtual === '1.1') {
+            const venc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.trim() : '';
+            if (venc) {
+                const partes = venc.split('-');
+                if (partes.length === 3) {
+                    const dtVenc = new Date(partes[0], partes[1] - 1, partes[2]);
+                    if (dtVenc >= hoje) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     });
 
     if (subAbaAtual === '1.1') {
-        renderizarModalRespondidosNP(respondidos);
+        renderizarModalRespondidosNP(efetivados);
     } else {
         const tipoDoc = 'Autos de Infração';
+        const respondidos = efetivados.filter(reg => {
+            const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
+            return resp !== '';
+        });
         renderizarModalRelatorio(`${tipoDoc} Respondidos`, respondidos, 'atendidos');
     }
 }
@@ -6282,13 +6447,57 @@ function renderizarModalRespondidosNP(registros) {
     registrosModalAtual = registros;
     tipoModalAtual = 'respondidos_np';
 
+    if (window.criterioRespondidosAtual) {
+        const criterio = window.criterioRespondidosAtual;
+        const ordenar = (a, b) => {
+            switch (criterio) {
+                case 'data_desc': {
+                    const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                    const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                    return db - da;
+                }
+                case 'data_asc': {
+                    const da = a.campos && a.campos.data_vencimento ? new Date(a.campos.data_vencimento) : new Date(0);
+                    const db = b.campos && b.campos.data_vencimento ? new Date(b.campos.data_vencimento) : new Date(0);
+                    return da - db;
+                }
+                case 'data_rec_desc': {
+                    const da = a.campos && a.campos.data_entrada ? new Date(a.campos.data_entrada) : new Date(0);
+                    const db = b.campos && b.campos.data_entrada ? new Date(b.campos.data_entrada) : new Date(0);
+                    return db - da;
+                }
+                case 'data_rec_asc': {
+                    const da = a.campos && a.campos.data_entrada ? new Date(a.campos.data_entrada) : new Date(0);
+                    const db = b.campos && b.campos.data_entrada ? new Date(b.campos.data_entrada) : new Date(0);
+                    return da - db;
+                }
+                case 'fiscal': return (a.fiscal_nome || '').localeCompare(b.fiscal_nome || '');
+                case 'fiscal_desc': return (b.fiscal_nome || '').localeCompare(a.fiscal_nome || '');
+                case 'bairro': return ((a.campos && a.campos.bairro) || '').localeCompare((b.campos && b.campos.bairro) || '');
+                case 'bairro_desc': return ((b.campos && b.campos.bairro) || '').localeCompare((a.campos && a.campos.bairro) || '');
+                case 'nome': return ((a.campos && a.campos.nome) || '').localeCompare((b.campos && b.campos.nome) || '');
+                case 'nome_desc': return ((b.campos && b.campos.nome) || '').localeCompare((a.campos && a.campos.nome) || '');
+                default: return 0;
+            }
+        };
+        registros.sort(ordenar);
+    }
+
     const atendidos = [];
     const viraramAI = [];
     const outros = [];
+    const noPrazoSemDilacao = [];
+    const noPrazoComDilacao = [];
 
     registros.forEach(reg => {
         const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.toLowerCase().trim() : '';
-        if (resp.includes('atendido')) {
+        if (resp === '') {
+            if (reg.campos && (reg.campos.data_dilacao || reg.campos.data_vencimento_original)) {
+                noPrazoComDilacao.push(reg);
+            } else {
+                noPrazoSemDilacao.push(reg);
+            }
+        } else if (resp.includes('atendido') || resp.includes('atendida')) {
             atendidos.push(reg);
         } else if (resp.includes('ai') || resp.includes('auto de infra')) {
             viraramAI.push(reg);
@@ -6303,14 +6512,22 @@ function renderizarModalRespondidosNP(registros) {
     const hojeFmt = new Date().toLocaleDateString('pt-BR');
     const total = registros.length;
 
-    function montarTabelaRespondidos(lista, secaoId, corBadge, textoBadge, bgSecao) {
+    function montarTabelaRespondidos(lista, secaoId, corBadge, textoBadge, bgSecao, tipo = 'padrao') {
         if (lista.length === 0) return '';
         let headerHTML = '<tr>';
         headerHTML += '<th class="col-curta">N°</th>';
         headerHTML += '<th>Nome / Identificador</th>';
         headerHTML += '<th class="col-curta">Bairro</th>';
         headerHTML += '<th class="col-curta">Fiscal</th>';
-        headerHTML += '<th class="col-curta">Data Entrada</th>';
+        headerHTML += '<th class="col-curta">Data de Recebimento</th>';
+
+        if (tipo === 'no_prazo_sem_dilacao') {
+            headerHTML += '<th class="col-curta">Data Vencimento</th>';
+        } else if (tipo === 'no_prazo_com_dilacao') {
+            headerHTML += '<th class="col-curta">Venc. Original</th>';
+            headerHTML += '<th class="col-curta">Dilação de Prazo</th>';
+        }
+
         headerHTML += '<th>Resposta</th>';
         headerHTML += '<th class="col-curta">Anexos</th>';
         headerHTML += '</tr>';
@@ -6321,7 +6538,7 @@ function renderizarModalRespondidosNP(registros) {
             const bairro = (reg.campos && reg.campos.bairro) || '-';
             const fiscal = reg.fiscal_nome || '-';
             const numSeq = reg.campos && reg.campos.n_notificacao ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
-            const dataEntrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
+            const dataEntrada = (reg.campos && reg.campos.data_entrada) ? reg.campos.data_entrada.split('-').reverse().join('/') : '-';
             const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
 
             const anexos = coletarTodosAnexos(reg);
@@ -6336,19 +6553,30 @@ function renderizarModalRespondidosNP(registros) {
                 ).join('');
             }
 
+            let colsDataAdicionais = '';
+            if (tipo === 'no_prazo_sem_dilacao') {
+                const dv = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-';
+                colsDataAdicionais = `<td style="text-align:center; vertical-align:middle; color:#1e293b; font-weight:600;">${dv}</td>`;
+            } else if (tipo === 'no_prazo_com_dilacao') {
+                const dvo = reg.campos && reg.campos.data_vencimento_original ? reg.campos.data_vencimento_original.split('-').reverse().join('/') : '-';
+                const dd = reg.campos && reg.campos.data_dilacao ? reg.campos.data_dilacao.split('-').reverse().join('/') : (reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-');
+                colsDataAdicionais = `<td style="text-align:center; vertical-align:middle;">${dvo}</td><td style="text-align:center; vertical-align:middle; color:#8b5cf6; font-weight:bold;">${dd}</td>`;
+            }
+
             bodyHTML += `<tr style="transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">`;
             bodyHTML += `<td style="text-align:center; vertical-align:middle;">${numSeq}</td>`;
             bodyHTML += `<td style="vertical-align:middle;">${nome}</td>`;
             bodyHTML += `<td style="vertical-align:middle;">${bairro}</td>`;
             bodyHTML += `<td style="vertical-align:middle;">${fiscal}</td>`;
             bodyHTML += `<td style="text-align:center; vertical-align:middle;">${dataEntrada}</td>`;
+            bodyHTML += colsDataAdicionais;
             bodyHTML += `<td style="vertical-align:middle;">${resposta}</td>`;
             bodyHTML += `<td style="text-align:center; vertical-align:middle;">${anexoHTML}</td>`;
             bodyHTML += `</tr>`;
         });
 
         return `
-            <div style="margin-bottom: 24px; padding: 16px; background: ${bgSecao}; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <div id="${secaoId}" class="secao-filtro-np" style="margin-bottom: 24px; padding: 16px; background: ${bgSecao}; border-radius: 10px; border: 1px solid #e2e8f0;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
                     <h3 style="margin:0; color:#1e293b; font-size:16px;">${textoBadge}</h3>
                     <span style="background:${corBadge}; color:white; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700;">
@@ -6375,13 +6603,26 @@ function renderizarModalRespondidosNP(registros) {
             
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
                 <div>
-                    <h2 style="margin:0; color:#1e293b; font-size:20px;">Notificações Preliminares Respondidas</h2>
+                    <h2 style="margin:0; color:#1e293b; font-size:20px;">Notificações Preliminares Efetivadas</h2>
                     <p style="margin:4px 0 0 0; color:#64748b; font-size:13px;">Gerado em ${hojeFmt}</p>
                 </div>
                 <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                     <span style="background:#16a34a; color:white; padding:6px 14px; border-radius:20px; font-size:14px; font-weight:700;">
                         ${total} Respondidos
                     </span>
+                    <select id="select-ordenar-respondidos" onchange="reordenarModalRespondidosNP(this.value)" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; outline: none; background: white; cursor: pointer; color: #334155;">
+                        <option value="" ${!window.criterioRespondidosAtual ? 'selected' : ''}>Ordenar por...</option>
+                        <option value="data_rec_desc" ${window.criterioRespondidosAtual === 'data_rec_desc' ? 'selected' : ''}>Data Receb. (recente → antiga)</option>
+                        <option value="data_rec_asc" ${window.criterioRespondidosAtual === 'data_rec_asc' ? 'selected' : ''}>Data Receb. (antiga → recente)</option>
+                        <option value="data_desc" ${window.criterioRespondidosAtual === 'data_desc' ? 'selected' : ''}>Data Venc. (distante → próxima)</option>
+                        <option value="data_asc" ${window.criterioRespondidosAtual === 'data_asc' ? 'selected' : ''}>Data Venc. (próxima → distante)</option>
+                        <option value="fiscal" ${window.criterioRespondidosAtual === 'fiscal' ? 'selected' : ''}>Fiscal (A → Z)</option>
+                        <option value="fiscal_desc" ${window.criterioRespondidosAtual === 'fiscal_desc' ? 'selected' : ''}>Fiscal (Z → A)</option>
+                        <option value="bairro" ${window.criterioRespondidosAtual === 'bairro' ? 'selected' : ''}>Bairro (A → Z)</option>
+                        <option value="bairro_desc" ${window.criterioRespondidosAtual === 'bairro_desc' ? 'selected' : ''}>Bairro (Z → A)</option>
+                        <option value="nome" ${window.criterioRespondidosAtual === 'nome' ? 'selected' : ''}>Nome (A → Z)</option>
+                        <option value="nome_desc" ${window.criterioRespondidosAtual === 'nome_desc' ? 'selected' : ''}>Nome (Z → A)</option>
+                    </select>
                     <div style="position:relative;">
                         <button id="btn-baixar-modal-rel" style="padding: 0.55rem 1.2rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="toggleMenuDownloadModal()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -6401,7 +6642,17 @@ function renderizarModalRespondidosNP(registros) {
                 </div>
             </div>
 
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                <button onclick="filtrarSecaoModalNP('todas')" style="padding:6px 12px; border-radius:6px; border:1px solid #cbd5e1; background:#f8fafc; color:#334155; cursor:pointer; font-weight:600; font-size:13px; transition:0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">Todas</button>
+                <button onclick="filtrarSecaoModalNP('secao-atendidos')" style="padding:6px 12px; border-radius:6px; border:1px solid #16a34a; background:#f0fdf4; color:#16a34a; cursor:pointer; font-weight:600; font-size:13px; transition:0.2s;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">Atendidas</button>
+                <button onclick="filtrarSecaoModalNP('secao-no-prazo')" style="padding:6px 12px; border-radius:6px; border:1px solid #8b5cf6; background:#f5f3ff; color:#8b5cf6; cursor:pointer; font-weight:600; font-size:13px; transition:0.2s;" onmouseover="this.style.background='#ede9fe'" onmouseout="this.style.background='#f5f3ff'">No prazo de cumprimento</button>
+                <button onclick="filtrarSecaoModalNP('secao-viraram-ai')" style="padding:6px 12px; border-radius:6px; border:1px solid #f59e0b; background:#fffbeb; color:#d97706; cursor:pointer; font-weight:600; font-size:13px; transition:0.2s;" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='#fffbeb'">Viraram AI</button>
+                <button onclick="filtrarSecaoModalNP('secao-outros')" style="padding:6px 12px; border-radius:6px; border:1px solid #3b82f6; background:#eff6ff; color:#2563eb; cursor:pointer; font-weight:600; font-size:13px; transition:0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">Outras respostas</button>
+            </div>
+
             ${montarTabelaRespondidos(atendidos, 'secao-atendidos', '#16a34a', '✅ Notificações Preliminares Atendidas', '#f0fdf4')}
+            ${montarTabelaRespondidos(noPrazoComDilacao, 'secao-no-prazo-com-dilacao', '#8b5cf6', '⏳ Notificações Preliminares com Dilação de Prazo', '#f5f3ff', 'no_prazo_com_dilacao')}
+            ${montarTabelaRespondidos(noPrazoSemDilacao, 'secao-no-prazo-sem-dilacao', '#8b5cf6', '⏳ Notificação Preliminar com data de Vencimento mas sem resposta e ainda no prazo', '#f5f3ff', 'no_prazo_sem_dilacao')}
             ${montarTabelaRespondidos(viraramAI, 'secao-viraram-ai', '#f59e0b', '⚠️ Notificações Preliminares que Viraram AI', '#fffbeb')}
             ${montarTabelaRespondidos(outros, 'secao-outros', '#3b82f6', 'ℹ️ Outras Respostas', '#eff6ff')}
             
@@ -6427,6 +6678,44 @@ function renderizarModalRespondidosNP(registros) {
         }
     });
 }
+
+window.filtrarSecaoModalNP = function (idMostrar) {
+    const secoes = document.querySelectorAll('.secao-filtro-np');
+    secoes.forEach(secao => {
+        if (idMostrar === 'todas' || secao.id.startsWith(idMostrar)) {
+            secao.style.display = 'block';
+        } else {
+            secao.style.display = 'none';
+        }
+    });
+};
+
+window.reordenarModalRespondidosNP = function (criterio) {
+    if (!registrosModalAtual) return;
+    window.criterioRespondidosAtual = criterio;
+
+    // Identificar filtro ativo
+    let secaoAtiva = 'todas';
+    const secoes = document.querySelectorAll('.secao-filtro-np');
+    let visiveis = 0;
+    secoes.forEach(secao => {
+        if (secao.style.display !== 'none') {
+            visiveis++;
+            secaoAtiva = secao.id;
+        }
+    });
+    if (visiveis > 1) secaoAtiva = 'todas';
+
+    // Recriar a janela (removendo e rodando de novo)
+    const modalExistente = document.getElementById('modal-vencidos-atendidos');
+    if (modalExistente) modalExistente.remove();
+
+    renderizarModalRespondidosNP(registrosModalAtual);
+
+    if (secaoAtiva !== 'todas') {
+        window.filtrarSecaoModalNP(secaoAtiva);
+    }
+};
 
 function coletarTodosAnexos(reg) {
     const anexos = [];
@@ -6611,14 +6900,20 @@ async function baixarRelatorioModal(tipoDownload) {
         const atendidos = [];
         const viraramAI = [];
         const outros = [];
+        const noPrazoSemDilacao = [];
+        const noPrazoComDilacao = [];
         registrosModalAtual.forEach(reg => {
             const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.toLowerCase().trim() : '';
-            if (resp.includes('atendido')) atendidos.push(reg);
+            if (resp === '') {
+                if (reg.campos && (reg.campos.data_dilacao || reg.campos.data_vencimento_original)) noPrazoComDilacao.push(reg);
+                else noPrazoSemDilacao.push(reg);
+            }
+            else if (resp.includes('atendido') || resp.includes('atendida')) atendidos.push(reg);
             else if (resp.includes('ai') || resp.includes('auto de infra')) viraramAI.push(reg);
             else outros.push(reg);
         });
 
-        const gerarLinhas = (lista) => {
+        const gerarLinhas = (lista, tipo = 'padrao') => {
             if (lista.length === 0) return '';
             let html = '';
             lista.forEach((reg, idx) => {
@@ -6626,8 +6921,19 @@ async function baixarRelatorioModal(tipoDownload) {
                 const bairro = (reg.campos && reg.campos.bairro) || '-';
                 const fiscal = reg.fiscal_nome || '-';
                 const numSeq = reg.campos && reg.campos.n_notificacao ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
-                const dataEntrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
+                const dataEntrada = (reg.campos && reg.campos.data_entrada) ? reg.campos.data_entrada.split('-').reverse().join('/') : '-';
                 const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+                
+                let colsData = '';
+                if (tipo === 'no_prazo_sem_dilacao') {
+                    const dv = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-';
+                    colsData = `<td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dv}</td>`;
+                } else if (tipo === 'no_prazo_com_dilacao') {
+                    const dvo = reg.campos && reg.campos.data_vencimento_original ? reg.campos.data_vencimento_original.split('-').reverse().join('/') : '-';
+                    const dd = reg.campos && reg.campos.data_dilacao ? reg.campos.data_dilacao.split('-').reverse().join('/') : (reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-');
+                    colsData = `<td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dvo}</td><td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dd}</td>`;
+                }
+
                 html += `
                     <tr>
                         <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
@@ -6636,6 +6942,7 @@ async function baixarRelatorioModal(tipoDownload) {
                         <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
                         <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
                         <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
+                        ${colsData}
                         <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
                     </tr>
                 `;
@@ -6663,16 +6970,36 @@ async function baixarRelatorioModal(tipoDownload) {
             </style>
         </head>
         <body>
-            <h1>Notificações Preliminares Respondidas</h1>
+            <h1>Notificações Preliminares Efetivadas</h1>
             <h2>Total: ${registrosModalAtual.length} registro(s) &nbsp;|&nbsp; Emitido em ${hoje}</h2>
             
             ${atendidos.length > 0 ? `
                 <h3>✅ Notificações Preliminares Atendidas (${atendidos.length})</h3>
                 <table>
                     <thead>
-                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Resposta</th></tr>
                     </thead>
                     <tbody>${gerarLinhas(atendidos)}</tbody>
+                </table>
+            ` : ''}
+
+            ${noPrazoComDilacao.length > 0 ? `
+                <h3>⏳ Notificações Preliminares com Dilação de Prazo (${noPrazoComDilacao.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Venc. Original</th><th>Dilação de Prazo</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhas(noPrazoComDilacao, 'no_prazo_com_dilacao')}</tbody>
+                </table>
+            ` : ''}
+
+            ${noPrazoSemDilacao.length > 0 ? `
+                <h3>⏳ Notificação Preliminar com data de Vencimento mas sem resposta e ainda no prazo (${noPrazoSemDilacao.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Data Venc.</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhas(noPrazoSemDilacao, 'no_prazo_sem_dilacao')}</tbody>
                 </table>
             ` : ''}
 
@@ -6680,7 +7007,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 <h3>⚠️ Notificações Preliminares que Viraram AI (${viraramAI.length})</h3>
                 <table>
                     <thead>
-                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Resposta</th></tr>
                     </thead>
                     <tbody>${gerarLinhas(viraramAI)}</tbody>
                 </table>
@@ -6690,7 +7017,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 <h3>ℹ️ Outras Respostas (${outros.length})</h3>
                 <table>
                     <thead>
-                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data Entrada</th><th>Resposta</th></tr>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Resposta</th></tr>
                     </thead>
                     <tbody>${gerarLinhas(outros)}</tbody>
                 </table>
@@ -6700,8 +7027,115 @@ async function baixarRelatorioModal(tipoDownload) {
         </body>
         </html>
         `;
+    } else if (tipoModalAtual === 'vencidos' && subAbaAtual === '1.1') {
+        const comAI = vencidosComAIGlobal || [];
+        const semAI = vencidosSemAIGlobal || [];
+        const semAIComDilacao = [];
+        const semAISemDilacao = [];
+        semAI.forEach(reg => {
+            if (reg.campos && (reg.campos.data_dilacao || reg.campos.data_vencimento_original)) {
+                semAIComDilacao.push(reg);
+            } else {
+                semAISemDilacao.push(reg);
+            }
+        });
+
+        const gerarLinhasV = (lista, tipo = 'padrao') => {
+            if (lista.length === 0) return '';
+            let html = '';
+            lista.forEach((reg, idx) => {
+                const nome = (reg.campos && reg.campos.nome) || '-';
+                const bairro = (reg.campos && reg.campos.bairro) || '-';
+                const fiscal = reg.fiscal_nome || '-';
+                const numSeq = (reg.campos && reg.campos.n_notificacao) ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
+                const dataEntrada = (reg.campos && reg.campos.data_entrada) ? reg.campos.data_entrada.split('-').reverse().join('/') : '-';
+                const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
+
+                let colsData = '';
+                if (tipo === 'com_dilacao') {
+                    const dvo = reg.campos && reg.campos.data_vencimento_original ? reg.campos.data_vencimento_original.split('-').reverse().join('/') : '-';
+                    const dd = reg.campos && reg.campos.data_dilacao ? reg.campos.data_dilacao.split('-').reverse().join('/') : (reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-');
+                    colsData = `<td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dvo}</td><td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dd}</td>`;
+                } else {
+                    const dataVenc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.split('-').reverse().join('/') : '-';
+                    colsData = `<td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataVenc}</td>`;
+                }
+
+                html += `
+                    <tr>
+                        <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${idx + 1}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${numSeq}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${nome}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${bairro}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${fiscal}</td>
+                        <td style="border:1px solid #cbd5e1; padding:8px; text-align:center;">${dataEntrada}</td>
+                        ${colsData}
+                        <td style="border:1px solid #cbd5e1; padding:8px;">${resposta}</td>
+                    </tr>
+                `;
+            });
+            return html;
+        };
+
+        htmlRelatorio = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>${titulo}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
+                h1 { font-size: 18px; margin-bottom: 6px; }
+                h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
+                h3 { font-size: 15px; margin-top: 25px; margin-bottom: 10px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+                th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                td { border: 1px solid #cbd5e1; padding: 8px; }
+                tr:nth-child(even) { background: #f8fafc; }
+                .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
+                @media print { body { margin: 15px; } }
+            </style>
+        </head>
+        <body>
+            <h1>${titulo} — ${tipoDoc}</h1>
+            <h2>Total: ${registrosModalAtual.length} registro(s) &nbsp;|&nbsp; Emitido em ${hoje}</h2>
+            
+            ${comAI.length > 0 ? `
+                <h3>⚠️ Notificações Preliminares vencidas com Auto de Infração vinculado (${comAI.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Data Venc.</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhasV(comAI)}</tbody>
+                </table>
+            ` : ''}
+
+            ${semAIComDilacao.length > 0 ? `
+                <h3>⏳ Notificações Preliminares com Dilação de Prazo vencidos (${semAIComDilacao.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Venc. Original</th><th>Dilação de Prazo</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhasV(semAIComDilacao, 'com_dilacao')}</tbody>
+                </table>
+            ` : ''}
+
+            ${semAISemDilacao.length > 0 ? `
+                <h3>🔴 Notificações Preliminares vencidas sem Auto de Infração (${semAISemDilacao.length})</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>N°</th><th>Nome / Identificador</th><th>Bairro</th><th>Fiscal</th><th>Data de Recebimento</th><th>Data Venc.</th><th>Resposta</th></tr>
+                    </thead>
+                    <tbody>${gerarLinhasV(semAISemDilacao)}</tbody>
+                </table>
+            ` : ''}
+
+            <div class="footer">SEMAC — Sistema de Gestão da Fiscalização de Posturas</div>
+        </body>
+        </html>
+        `;
     } else {
-        // Logica antiga para Vencidos e AI Respondidos
+        // Logica antiga para Vencidos sem AI ou AI Respondidos
         let rowsHTML = '';
         registrosModalAtual.forEach((reg, idx) => {
             const nome = (reg.campos && reg.campos.nome) || '-';
@@ -6714,9 +7148,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 ? reg.campos.data_vencimento.split('-').reverse().join('/')
                 : '-';
             const resposta = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal : '-';
-            const dataEntrada = reg.created_at
-                ? new Date(reg.created_at).toLocaleDateString('pt-BR')
-                : '-';
+            const dataEntrada = (reg.campos && reg.campos.data_entrada) ? reg.campos.data_entrada.split('-').reverse().join('/') : '-';
 
             rowsHTML += `
                 <tr>
@@ -6761,7 +7193,7 @@ async function baixarRelatorioModal(tipoDownload) {
                             <th>Nome / Identificador</th>
                             <th>Bairro</th>
                             <th>Fiscal</th>
-                            <th>Data Entrada</th>
+                            <th>Data de Recebimento</th>
                             <th>Data Venc.</th>
                             <th>Resposta</th>
                         </tr>
