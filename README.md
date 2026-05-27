@@ -322,7 +322,7 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 - **Excluir tarefa**: botão visível **apenas para o criador** e **somente dentro de 24h** após a criação. Após esse prazo, o botão não aparece mais.
 
 ### Subtarefas
-- **Criar subtarefa** (gerente): mini-modal com título, seletor de responsável, descrição opcional e anexo opcional.
+- **Criar subtarefa** (gerente, criador ou responsável pela tarefa pai): mini-modal com título, seletor de responsável, descrição opcional e anexo opcional.
 - **Editar subtarefa**: botão visível **apenas para o criador** da subtarefa e **somente dentro de 24h** após a criação. Abre o mesmo modal de criação preenchido com os dados salvos (título, descrição, responsáveis), permitindo adicionar um novo anexo.
 - Cada subtarefa pode ter:
   - **Múltiplos responsáveis** (exibido com ícone SVG).
@@ -350,7 +350,7 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 | Alterar status | Apenas das suas | Todas | Todas | Todas | Todas | Próprias + Analistas | Apenas das suas |
 | Criar tarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (apenas para si) |
 | Criar evento/projeto | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
-| Criar subtarefa | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ (só nas próprias) | ✗ |
+| Criar subtarefa | Só nas suas | ✓ | ✓ | ✓ | ✓ | ✓ (só nas próprias) | Só nas suas |
 | Editar tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
 | Editar subtarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | ✗ | ✗ |
 | Excluir tarefa | ✗ | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) | Só as próprias (≤24h) |
@@ -408,7 +408,10 @@ Relação N:N entre tarefas e usuários. Campos: `tarefa_id` (FK → tarefas), `
 Anexos PDF vinculados a tarefas/subtarefas. Campos: `tarefa_id` (FK → tarefas), `nome_arquivo`, `url` (public URL do Storage), `uploaded_by` (FK → auth.users).
 
 ### `tarefa_comentarios` (Módulo de Tarefas)
-Comentários em tarefas. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name`, `texto`, `anexo_url`, `anexo_nome`, `created_at`.
+Comentários em tarefas e respostas. Campos: `tarefa_id` (FK → tarefas), `resposta_id` (FK → tarefa_respostas, opcional), `user_id` (FK → auth.users), `user_name`, `texto`, `anexo_url`, `anexo_nome`, `created_at`.
+
+### `tarefa_respostas` (Módulo de Tarefas)
+Respostas individuais dos responsáveis em tarefas principais. Permite múltiplas respostas por tarefa, cada uma com seu autor. Campos: `tarefa_id` (FK → tarefas), `user_id` (FK → auth.users), `user_name`, `texto`, `created_at`.
 
 ### `tarefa_comentario_anexos` (Módulo de Tarefas)
 Anexos vinculados a comentários (suporte a múltiplos arquivos por comentário). Campos: `comentario_id` (FK → tarefa_comentarios), `nome_arquivo`, `url`, `uploaded_by`.
@@ -1605,3 +1608,30 @@ O arquivo `assets/geojson/bairros_divinopolis.geojson` segue o padrão GeoJSON:
 Para adicionar novos polígonos, edite o arquivo GeoJSON (ex: via QGIS ou geojson.io) e adicione novas features com a propriedade `name` correspondendo ao nome do bairro no banco (ou adicione um alias).
 
 > 📌 **Nota:** O sistema também aceita carregar o GeoJSON via variável global `geojsonBairrosDivinopolis` (útil para evitar problemas de CORS em `file://`).
+
+---
+
+## 🆕 Atualizações Recentes (27/05/2026) — Estabilidade e Dilação de Prazo
+
+### ⏱️ Separação Visual: Dilação de Prazo (GP+)
+- **Histórico Geral (Aba NP)**: A lista de Notificações Preliminares "No prazo" foi dividida em duas tabelas para facilitar o acompanhamento:
+  - **Notificações Preliminares (Sem Dilação)**
+  - **Notificações com Dilação de Prazo ativas**
+- **Modal de Vencidos (NP)**: A seção de NP vencidas sem Auto de Infração também foi dividida, destacando primeiro as notificações que tiveram dilação de prazo vencida, seguidas das notificações com vencimento original expirado.
+- **Colunas Dinâmicas**: Para registros com dilação, o sistema exibe duas colunas de datas: "Data Venc. Original" e "Dilação de Prazo".
+- **Exportação Consistente**: Relatórios HTML e exportações ZIP respeitam as novas tabelas e incluem as colunas adicionais de dilação de prazo.
+
+### 📅 Correção de Datas Automáticas em Registros Antigos
+- **Bug Fix**: Notificações antigas cujo status era alterado para "ATENDIDO" (mas que não possuíam data salva no banco) estavam exibindo a data de hoje.
+- **Solução**: A data automática só é injetada quando o fiscal seleciona ativamente a opção "ATENDIDO" no momento da ação, mantendo os registros antigos com o campo vazio, a menos que sejam explicitamente atualizados.
+
+### 🛡️ Prevenção de Saltos na Numeração Sequencial (Rollback Automático)
+- **O Problema**: Se a geração de um documento oficial (Auto de Infração, Ofício, etc.) falhasse no banco de dados (ex: erro de internet ou RLS), o número sequencial recém-gerado era perdido, criando um "buraco" na numeração.
+- **A Solução**: Implementado um sistema de **Rollback (Reversão)** em todos os editores de documentos (Auto, Ofício, Relatório, Réplica, Certidão, Dívida Ativa) e na função principal `salvarRegistro`. 
+- **Como Funciona**: Ao interceptar qualquer erro na inserção no banco, o sistema aciona silenciosamente a RPC `devolver_numero_sequencial`, retornando o identificador para a tabela `numeros_disponiveis`. A sequência permanece íntegra para o próximo documento.
+
+### 📅 Extensão de Prazo em Tarefas e Subtarefas
+- **Solicitação de Responsável**: Agora qualquer responsável pode solicitar extensão de prazo em tarefas ou subtarefas (mesmo se estiverem atrasadas), clicando no botão "📅 Solicitar extensão de prazo".
+- **Notificação e Aprovação Integrada**: A solicitação notifica automaticamente o criador da tarefa ou gestores com permissão, para aprovar ou recusar a mudança através de um card flutuante amarelo na UI da tarefa. Em caso de subtarefas, os responsáveis da tarefa pai também são notificados e detém poder de controle.
+- **Histórico Completo de Prazos (JSONB)**: Em vez de simplesmente sobrescrever o prazo, as extensões aprovadas preservam o prazo que foi substituído numa lista de histórico na coluna `prazo_anterior` (migrada para JSONB no Supabase). 
+- **Display Discreto**: Na interface, todo o histórico anterior aparece listado acima do prazo vigente, em cinza claro e no formato tachado (riscado), conferindo fácil rastreabilidade e controle das falhas de cronograma sem poluir visualmente o card.

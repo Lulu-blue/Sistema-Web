@@ -706,11 +706,22 @@ recriar/atualizar as tabelas e políticas de segurança do módulo de Tarefas:
 CREATE TABLE IF NOT EXISTS public.tarefa_comentarios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tarefa_id UUID NOT NULL REFERENCES public.tarefas(id) ON DELETE CASCADE,
+    resposta_id UUID REFERENCES public.tarefa_respostas(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     user_name TEXT,
     texto TEXT NOT NULL,
     anexo_url TEXT,
     anexo_nome TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Tabela de respostas da tarefa (múltiplas respostas por responsável)
+CREATE TABLE IF NOT EXISTS public.tarefa_respostas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tarefa_id UUID NOT NULL REFERENCES public.tarefas(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_name TEXT,
+    texto TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
@@ -781,6 +792,15 @@ DROP POLICY IF EXISTS "Comentários: SELECT para autenticados" ON public.tarefa_
 CREATE POLICY "Comentários: SELECT para autenticados" ON public.tarefa_comentarios FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Comentários: INSERT para autenticados" ON public.tarefa_comentarios;
 CREATE POLICY "Comentários: INSERT para autenticados" ON public.tarefa_comentarios FOR INSERT TO authenticated WITH CHECK (true);
+
+-- Políticas RLS: tarefa_respostas
+ALTER TABLE public.tarefa_respostas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Respostas: SELECT para autenticados" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: SELECT para autenticados" ON public.tarefa_respostas FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Respostas: INSERT para autenticados" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: INSERT para autenticados" ON public.tarefa_respostas FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Respostas: DELETE próprias" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: DELETE próprias" ON public.tarefa_respostas FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 -- Políticas RLS: tarefa_comentario_anexos
 ALTER TABLE public.tarefa_comentario_anexos ENABLE ROW LEVEL SECURITY;
@@ -3543,3 +3563,87 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+
+
+---
+
+## 🆕 MIGRAÇÃO: Respostas Múltiplas em Tarefas
+
+> Execute esta seção para criar a infraestrutura de múltiplas respostas por responsável nas tarefas principais, com suporte a comentários aninhados em cada resposta.
+
+### Tabela `tarefa_respostas`
+
+> **Importante:** Crie esta tabela **antes** de adicionar a coluna `resposta_id` em `tarefa_comentarios`.
+
+```sql
+CREATE TABLE IF NOT EXISTS public.tarefa_respostas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tarefa_id UUID NOT NULL REFERENCES public.tarefas(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_name TEXT,
+    texto TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+```
+
+### Alteração na tabela `tarefa_comentarios`
+
+> Execute **após** a criação da tabela `tarefa_respostas` acima.
+
+```sql
+ALTER TABLE public.tarefa_comentarios 
+ADD COLUMN IF NOT EXISTS resposta_id UUID REFERENCES public.tarefa_respostas(id) ON DELETE CASCADE;
+```
+
+### Políticas RLS: `tarefa_respostas`
+
+```sql
+ALTER TABLE public.tarefa_respostas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Respostas: SELECT para autenticados" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: SELECT para autenticados" ON public.tarefa_respostas FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Respostas: INSERT para autenticados" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: INSERT para autenticados" ON public.tarefa_respostas FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Respostas: DELETE próprias" ON public.tarefa_respostas;
+CREATE POLICY "Respostas: DELETE próprias" ON public.tarefa_respostas FOR DELETE TO authenticated USING (user_id = auth.uid());
+```
+
+---
+
+## 🆕 MIGRAÇÃO: Extensão de Prazo em Tarefas e Subtarefas
+
+> Execute este bloco SQL no **Editor SQL** do Supabase para adicionar suporte à solicitação e aprovação de extensões de prazo.
+
+```sql
+-- Colunas para controle de solicitação de extensão de prazo
+ALTER TABLE public.tarefas DROP COLUMN IF EXISTS prazo_anterior;
+ALTER TABLE public.tarefas ADD COLUMN prazo_anterior JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS prazo_solicitado DATE;
+ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS prazo_solicitado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS prazo_solicitado_nome TEXT;
+ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS prazo_solicitado_motivo TEXT;
+```
+
+### Campos adicionados à tabela `tarefas`:
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `prazo_anterior` | `JSONB` | Array de prazos originais antes das extensões aprovadas (histórico) |
+| `prazo_solicitado` | `DATE` | Nova data solicitada pelo responsável (pendente de aprovação) |
+| `prazo_solicitado_por` | `UUID` | ID do usuário que fez a solicitação |
+| `prazo_solicitado_nome` | `TEXT` | Nome desnormalizado do solicitante |
+| `prazo_solicitado_motivo` | `TEXT` | Justificativa da solicitação (opcional) |
+
+### Fluxo de funcionamento:
+1. **Responsável** clica em "📅 Solicitar extensão" no modal da tarefa/subtarefa.
+2. Escolhe a nova data e informa motivo (opcional).
+3. O sistema salva `prazo_solicitado` e envia **notificação** ao criador (e responsáveis da tarefa pai, para subtarefas).
+4. **Criador/Gerente** vê o painel amarelo de solicitação pendente no modal e pode **Aprovar** ou **Recusar**.
+5. Ao **aprovar**: `prazo_anterior = prazo atual`, `prazo = prazo_solicitado`, campos de solicitação são limpos.
+6. Ao **recusar**: campos de solicitação são limpos e responsáveis são notificados.
+
+### Tipos de notificação adicionados:
+| `tipo` | Quando é enviada |
+|--------|-----------------|
+| `solicitacao_prazo` | Quando um responsável solicita extensão |
+| `prazo_aprovado` | Quando o criador aprova a solicitação |
+| `prazo_recusado` | Quando o criador recusa a solicitação |

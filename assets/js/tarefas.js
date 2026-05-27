@@ -10,6 +10,7 @@ var userRoleGlobal = '';
 var userIdGlobal = '';
 var ehGerenteKanban = false;
 var _abrindoDetalhe = false;
+var _abrindoDetalheSub = false;
 var diretorModoVisualizacao = 'direcao'; // 'direcao', 'gerencia_posturas' ou 'gerencia_ambiental'
 var carregandoTarefas = false;
 var idsGerentesGlobal = []; // Gerentes de Posturas
@@ -1867,8 +1868,9 @@ async function salvarTarefa() {
     }
 }
 
-async function salvarRespostaSubtarefa(subId, tarefaPaiId) {
-    var area = document.getElementById('resposta-sub-' + subId);
+async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
+    var areaId = viaModalSub ? ('resposta-sub-modal-' + subId) : ('resposta-sub-' + subId);
+    var area = document.getElementById(areaId);
     if (!area) return;
     var texto = area.value.trim();
     if (!texto) {
@@ -1900,8 +1902,14 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId) {
             showConfirmButton: false
         });
         
-        // Recarregar detalhe para mostrar a resposta atualizada (mantém o modal aberto)
-        abrirDetalheTarefa(tarefaPaiId);
+        if (viaModalSub) {
+            // Fechar modal da subtarefa e reabri-lo com dados atualizados
+            fecharModal('modal-detalhe-subtarefa');
+            setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+        } else {
+            // Recarregar o modal da tarefa pai
+            abrirDetalheTarefa(tarefaPaiId);
+        }
     } catch (err) {
         console.error('Erro ao salvar resposta:', err);
         Swal.fire('Erro', 'Não foi possível salvar a resposta.', 'error');
@@ -1909,6 +1917,655 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId) {
 }
 
 window.salvarRespostaSubtarefa = salvarRespostaSubtarefa;
+
+// ==========================================
+// MODAL DEDICADO DA SUBTAREFA
+// ==========================================
+async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
+    if (_abrindoDetalheSub) return;
+    _abrindoDetalheSub = true;
+
+    var loadingId = 'loading-detalhe-sub-' + subId;
+    try {
+        var loadingHtml = '<div id="' + loadingId + '" class="modal-overlay ativo" style="z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);"><div style="background:white;padding:24px 32px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 10px 25px rgba(0,0,0,0.1);"><div style="width:36px;height:36px;border:4px solid #e2e8f0;border-top:4px solid #3b82f6;border-radius:50%;animation:spinLoading 1s linear infinite;"></div><div style="color:#334155;font-weight:600;font-size:15px;">Carregando subtarefa...</div></div></div>';
+        document.body.insertAdjacentHTML('beforeend', loadingHtml);
+
+        // Buscar dados da subtarefa
+        var { data: sub } = await supabaseClient.from('tarefas').select('*').eq('id', subId).maybeSingle();
+        if (!sub) { _abrindoDetalheSub = false; var le = document.getElementById(loadingId); if (le) le.remove(); return; }
+
+        // Buscar nome do criador
+        var nomeCriador = '';
+        if (sub.criado_por) {
+            var { data: pc } = await supabaseClient.from('profiles').select('full_name').eq('id', sub.criado_por).maybeSingle();
+            nomeCriador = pc ? pc.full_name : '';
+        }
+
+        // Buscar responsáveis
+        var { data: resps } = await supabaseClient.from('tarefa_responsaveis').select('*').eq('tarefa_id', subId);
+        resps = resps || [];
+
+        // Buscar avatares dos responsáveis
+        var respIds = resps.map(function(r) { return r.user_id; });
+        var avMap = {};
+        if (respIds.length > 0) {
+            var { data: perfisR } = await supabaseClient.from('profiles').select('id, avatar_url').in('id', respIds);
+            (perfisR || []).forEach(function(p) { avMap[p.id] = p.avatar_url || ''; });
+        }
+
+        // Buscar anexos
+        var { data: anexos } = await supabaseClient.from('tarefa_anexos').select('*').eq('tarefa_id', subId).order('uploaded_at', { ascending: true });
+        anexos = anexos || [];
+
+        // Buscar nomes dos uploaders
+        var uploaderIds = anexos.map(function(a) { return a.uploaded_by; }).filter(Boolean);
+        var uploaderMap = {};
+        if (uploaderIds.length > 0) {
+            var { data: perfisUp } = await supabaseClient.from('profiles').select('id, full_name').in('id', uploaderIds);
+            (perfisUp || []).forEach(function(p) { uploaderMap[p.id] = p.full_name || ''; });
+        }
+
+        // Buscar visualizações
+        var { data: vizs } = await supabaseClient.from('tarefa_visualizacoes').select('*').eq('tarefa_id', subId);
+        vizs = vizs || [];
+
+        // Registrar visualização se for responsável
+        var ehRespSub = resps.some(function(r) { return r.user_id === userIdGlobal; });
+        if (ehRespSub && sub.criado_por !== userIdGlobal) {
+            await supabaseClient.from('tarefa_visualizacoes').upsert({ tarefa_id: subId, user_id: userIdGlobal }, { onConflict: 'tarefa_id, user_id' });
+            var agora2 = new Date().toISOString();
+            if (!vizs.some(function(v) { return v.user_id === userIdGlobal; })) {
+                vizs.push({ tarefa_id: subId, user_id: userIdGlobal, visualizado_at: agora2 });
+            }
+        }
+
+        // Permissões
+        var roleLow = (userRoleGlobal || '').toLowerCase();
+        var roleLowNorm = roleLow.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        var ehDir = roleLow.includes('diretor');
+        var ehSec = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
+        var ehGer = roleLow.includes('gerente');
+        var podeConcluir = ehDir || ehSec || ehGer || ehRespSub;
+
+        // Dados da resposta salva
+        var dadosResp = null;
+        if (sub.resposta) {
+            try { dadosResp = sub.resposta.startsWith('{') ? JSON.parse(sub.resposta) : { texto: sub.resposta }; }
+            catch(e) { dadosResp = { texto: sub.resposta }; }
+        }
+
+        var subTemAnexo = anexos.length > 0;
+        var subJaConcluida = sub.status === 'concluida';
+        var statusCor = subJaConcluida ? '#10b981' : (sub.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
+        var statusLabel = subJaConcluida ? 'Concluída' : (sub.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+
+        // --- Montar HTML do modal ---
+        var h = '<div class="modal-overlay ativo" id="modal-detalhe-subtarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-subtarefa\')" style="z-index:99998;">';
+        h += '<div class="modal-container" style="max-width:560px;">';
+
+        // Header
+        h += '<div class="modal-header">';
+        h += '<div style="display:flex; flex-direction:column; gap:2px;">';
+        h += '<div style="display:flex; align-items:center; gap:8px;">';
+        h += '<span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; background:' + statusCor + '20; color:' + statusCor + ';">↳ Subtarefa • ' + statusLabel + '</span>';
+        h += '</div>';
+        if (nomeCriador) h += '<div style="font-size:12px; color:#64748b; font-weight:500;">Criado por ' + escapeHtmlTarefa(nomeCriador) + '</div>';
+        h += '<h2 style="margin:0; font-size:18px;">' + escapeHtmlTarefa(sub.titulo) + '</h2>';
+        h += '</div>';
+        h += '<button class="modal-close" onclick="fecharModal(\'modal-detalhe-subtarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+        h += '</div>';
+
+        // Body
+        h += '<div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">';
+
+        // Botões de status
+        if (podeConcluir) {
+            h += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
+            [
+                { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
+                { val: 'em_progresso', label: 'Em Progresso', cor: '#3b82f6' },
+                { val: 'concluida', label: 'Concluída', cor: '#10b981' }
+            ].forEach(function(st) {
+                var ativo = sub.status === st.val;
+                if (st.val === 'concluida' && !subTemAnexo && !dadosResp) {
+                    h += '<button disabled style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:not-allowed; border:2px solid #cbd5e1; background:#f1f5f9; color:#94a3b8; opacity:0.6;" title="Responda ou anexe um documento primeiro">' + st.label + '</button>';
+                } else {
+                    h += '<button onclick="alterarStatusTarefa(\'' + subId + '\',\'' + st.val + '\')" style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:pointer; border:2px solid ' + st.cor + '; background:' + (ativo ? st.cor : 'white') + '; color:' + (ativo ? 'white' : st.cor) + ';">' + st.label + '</button>';
+                }
+            });
+            h += '</div>';
+        } else {
+            h += '<div><span style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; background:' + statusCor + '; color:white;">' + statusLabel + '</span></div>';
+        }
+
+        // Descrição
+        if (sub.descricao) {
+            h += '<div style="background:#f8fafc; padding:12px; border-radius:8px; font-size:15px; color:#475569; border:1px solid #e2e8f0;">';
+            h += '<strong style="color:#1e293b;">Observações:</strong><br>' + escapeHtmlTarefa(sub.descricao).replace(/\n/g, '<br>');
+            h += '</div>';
+        }
+
+        // Responsáveis
+        if (resps.length > 0) {
+            h += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
+            h += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
+            resps.forEach(function(r) {
+                var viz = vizs.find(function(v) { return v.user_id === r.user_id; });
+                var vizData = viz && viz.visualizado_at ? new Date(viz.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+                h += '<div style="display:flex; flex-direction:column; gap:1px;">';
+                h += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
+                var av = avMap[r.user_id] || '';
+                if (av) { h += '<img src="' + av + '" style="width:22px; height:22px; border-radius:50%; object-fit:cover;">'; }
+                else { h += '<svg width="22" height="22" viewBox="0 0 24 24" fill="#cbd5e1" stroke="none"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>'; }
+                h += '<span style="font-size:14px;">' + escapeHtmlTarefa(r.user_name) + '</span>';
+                h += '</div>';
+                if (vizData) h += '<div style="font-size:11px; color:#10b981; font-weight:500; margin-left:6px;">✓ Visualizou ' + vizData + '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        // Prazo (com suporte a extensão)
+        if (sub.prazo || sub.prazo_solicitado) {
+            var pDtSub = sub.prazo ? new Date(sub.prazo) : null;
+            var pAtrasadaSub = pDtSub && pDtSub < new Date() && sub.status !== 'concluida';
+            h += '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">';
+            h += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">';
+            h += '<div>';
+            h += '<div style="font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px;">Prazo</div>';
+            if (sub.prazo_anterior) {
+                var arrAntSub = [];
+                try { arrAntSub = typeof sub.prazo_anterior === 'string' && sub.prazo_anterior.startsWith('[') ? JSON.parse(sub.prazo_anterior) : (Array.isArray(sub.prazo_anterior) ? sub.prazo_anterior : [sub.prazo_anterior]); } catch(e) { arrAntSub = [sub.prazo_anterior]; }
+                if (arrAntSub && arrAntSub.length > 0) {
+                    var strAntigosSub = arrAntSub.map(function(d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    h += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigosSub + '</div>';
+                }
+            }
+            if (pDtSub) {
+                h += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasadaSub ? '#ef4444' : '#1e293b') + ';">' + pDtSub.toLocaleDateString('pt-BR') + (pAtrasadaSub ? ' ⚠ Atrasada' : '') + '</div>';
+            }
+            h += '</div>';
+            h += '</div>';
+            // Solicitação pendente
+            if (sub.prazo_solicitado) {
+                var pSolSub = new Date(sub.prazo_solicitado + 'T12:00:00');
+                h += '<div style="margin-top:10px; padding:10px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px;">';
+                h += '<div style="font-size:13px; font-weight:600; color:#92400e; margin-bottom:4px;">⏳ Solicitação de extensão pendente</div>';
+                h += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + pSolSub.toLocaleDateString('pt-BR') + '</strong>';
+                if (sub.prazo_solicitado_nome) h += ' por ' + escapeHtmlTarefa(sub.prazo_solicitado_nome);
+                h += '</div>';
+                if (sub.prazo_solicitado_motivo) h += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(sub.prazo_solicitado_motivo) + '</div>';
+                var podeAprovarSub = (sub.criado_por === userIdGlobal) || ehDir || ehSec || ehGer;
+                if (podeAprovarSub) {
+                    h += '<div style="display:flex; gap:8px; margin-top:8px;">';
+                    h += '<button onclick="aprovarExtensaoPrazo(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="background:#10b981; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✓ Aprovar</button>';
+                    h += '<button onclick="negarExtensaoPrazo(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="background:#ef4444; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✕ Recusar</button>';
+                    h += '</div>';
+                }
+                h += '</div>';
+            }
+            h += '</div>'; // card prazo
+        }
+        // Botão solicitar extensão — sempre visível para responsável (não-criador), tarefa não concluída
+        if (ehRespSub && sub.criado_por !== userIdGlobal && !sub.prazo_solicitado && !subJaConcluida) {
+            h += '<button onclick="solicitarExtensaoPrazo(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:5px; width:fit-content;">📅 Solicitar extensão de prazo</button>';
+        }
+
+        // Resposta
+        h += '<div style="border-top:1px solid #e2e8f0; padding-top:12px;">';
+        h += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Resposta</strong>';
+
+        if (dadosResp) {
+            // Exibir resposta existente
+            h += '<div style="font-size:13px; color:#1e293b; background:#f0fdf4; padding:12px; border-radius:8px; border:1px solid #dcfce7; margin-bottom:10px;">';
+            h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">';
+            h += '<strong style="font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.05em;">Resposta registrada</strong>';
+            if (dadosResp.at) {
+                var drData = new Date(dadosResp.at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                h += '<span style="font-size:10px; color:#166534; opacity:0.7;">' + drData + '</span>';
+            }
+            h += '</div>';
+            h += '<div style="line-height:1.6;">' + escapeHtmlTarefa(dadosResp.texto).replace(/\n/g, '<br>') + '</div>';
+            if (dadosResp.user_name) h += '<div style="font-size:11px; color:#166534; font-weight:600; margin-top:6px;">— ' + escapeHtmlTarefa(dadosResp.user_name) + '</div>';
+            h += '</div>';
+        }
+
+        if (podeConcluir && !subJaConcluida) {
+            h += '<div style="display:flex; gap:8px; align-items:flex-end;">';
+            h += '<div style="flex:1;">';
+            h += '<label style="font-size:12px; color:#64748b; font-weight:600; display:block; margin-bottom:4px;">' + (dadosResp ? 'Atualizar Resposta:' : 'Sua Resposta:') + '</label>';
+            h += '<textarea id="resposta-sub-modal-' + subId + '" rows="4" placeholder="Digite sua resposta detalhada aqui..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; resize:vertical; outline:none; transition:border-color 0.2s; font-family:inherit;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'">' + (dadosResp ? dadosResp.texto : '') + '</textarea>';
+            h += '</div>';
+            h += '</div>';
+            h += '<button onclick="salvarRespostaSubtarefa(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="width:100%; margin-top:8px; background:#10b981; color:white; border:none; border-radius:6px; padding:10px; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">Salvar Resposta</button>';
+        }
+        h += '</div>'; // resposta
+
+        // Anexos
+        h += '<div>';
+        h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
+        h += '<strong style="font-size:15px; color:#1e293b;">Anexos (' + anexos.length + ')</strong>';
+        if (podeConcluir) {
+            h += '<label style="background:#8b5cf6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Anexar<input type="file" onchange="uploadAnexoSubModal(\'' + subId + '\', \'' + tarefaPaiId + '\', this)" style="display:none;"></label>';
+        }
+        h += '</div>';
+        if (anexos.length === 0) {
+            h += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhum anexo.</div>';
+        } else {
+            anexos.forEach(function(a) {
+                var dataUp = a.uploaded_at ? formatarDataBRTarefa(a.uploaded_at.substring(0, 10)) : '';
+                var infoUp = (uploaderMap[a.uploaded_by] ? 'Por ' + uploaderMap[a.uploaded_by] : '') + (dataUp ? ' em ' + dataUp : '');
+                h += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
+                h += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+                h += '<div style="flex:1; min-width:0;">';
+                h += '<a href="' + a.url + '" target="_blank" style="font-size:15px; color:#3b82f6; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtmlTarefa(a.nome_arquivo) + '</a>';
+                if (infoUp) h += '<div style="font-size:12px; color:#475569; font-weight:500;">' + escapeHtmlTarefa(infoUp) + '</div>';
+                h += '</div>';
+                if (a.uploaded_by === userIdGlobal) {
+                    h += '<button onclick="excluirAnexoSubModal(\'' + a.id + '\',\'' + subId + '\',\'' + tarefaPaiId + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;" title="Remover anexo">✕</button>';
+                }
+                h += '</div>';
+            });
+        }
+        h += '</div>'; // anexos
+
+        // Botão voltar
+        h += '<button onclick="fecharModal(\'modal-detalhe-subtarefa\'); abrirDetalheTarefa(\'' + tarefaPaiId + '\')" style="width:100%; padding:8px; border-radius:8px; border:1px solid #e2e8f0; background:white; color:#64748b; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:background 0.2s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'white\'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg> Voltar para tarefa</button>';
+
+        h += '</div></div></div>'; // body, container, overlay
+
+        var le = document.getElementById(loadingId);
+        if (le) le.remove();
+        document.body.insertAdjacentHTML('beforeend', h);
+
+    } catch (err) {
+        console.error('Erro ao abrir subtarefa:', err);
+        Swal.fire('Erro', 'Não foi possível abrir a subtarefa.', 'error');
+    } finally {
+        var leFinal = document.getElementById(loadingId);
+        if (leFinal) leFinal.remove();
+        _abrindoDetalheSub = false;
+    }
+}
+
+// Upload de anexo a partir do modal da subtarefa
+async function uploadAnexoSubModal(subId, tarefaPaiId, inputEl) {
+    if (!inputEl.files || !inputEl.files[0]) return;
+    var file = inputEl.files[0];
+    // Sanitizar nome do arquivo
+    var nomeSanitizado = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    var caminho = userIdGlobal + '/' + Date.now() + '_' + nomeSanitizado;
+    try {
+        var { error: upErr } = await supabaseClient.storage.from('tarefa_anexos').upload(caminho, file, { cacheControl: '3600', upsert: false });
+        if (upErr) throw upErr;
+        var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(caminho);
+        var { error: insErr } = await supabaseClient.from('tarefa_anexos').insert({ tarefa_id: subId, nome_arquivo: file.name, url: urlData.publicUrl, uploaded_by: userIdGlobal });
+        if (insErr) throw insErr;
+        // Se estava pendente, muda para em_progresso
+        var { data: stData } = await supabaseClient.from('tarefas').select('status').eq('id', subId).maybeSingle();
+        if (stData && stData.status === 'pendente') {
+            await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', subId);
+        }
+        Swal.fire({ icon: 'success', title: 'Arquivo enviado!', timer: 1200, showConfirmButton: false });
+        fecharModal('modal-detalhe-subtarefa');
+        setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+    } catch (err) {
+        Swal.fire('Erro', 'Não foi possível enviar o arquivo: ' + err.message, 'error');
+    }
+}
+
+// Exclusão de anexo a partir do modal da subtarefa
+async function excluirAnexoSubModal(anexoId, subId, tarefaPaiId) {
+    if (!confirm('Remover este anexo?')) return;
+    try {
+        var { error } = await supabaseClient.from('tarefa_anexos').delete().eq('id', anexoId);
+        if (error) throw error;
+        // Verificar se era o último anexo de uma subtarefa concluída → reverter para pendente
+        var { data: restantes } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', subId);
+        var { data: subAtual } = await supabaseClient.from('tarefas').select('status, resposta').eq('id', subId).maybeSingle();
+        if (subAtual && subAtual.status === 'concluida' && (!restantes || restantes.length === 0) && !subAtual.resposta) {
+            await supabaseClient.from('tarefas').update({ status: 'pendente' }).eq('id', subId);
+        }
+        fecharModal('modal-detalhe-subtarefa');
+        setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+    } catch (err) {
+        Swal.fire('Erro', 'Não foi possível remover o anexo.', 'error');
+    }
+}
+
+window.abrirDetalheSubtarefa = abrirDetalheSubtarefa;
+window.uploadAnexoSubModal = uploadAnexoSubModal;
+window.excluirAnexoSubModal = excluirAnexoSubModal;
+
+// ==========================================
+// SOLICITAÇÃO DE EXTENSÃO DE PRAZO
+// ==========================================
+
+/**
+ * Abre diálogo para o responsável solicitar extensão de prazo.
+ * @param {string} tarefaId - ID da tarefa ou subtarefa
+ * @param {string|null} tarefaPaiId - ID da tarefa pai (se for subtarefa), null para tarefa normal
+ * @param {boolean} ehSubtarefa - se é subtarefa (afeta quem será notificado)
+ */
+async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
+    var hoje = new Date();
+    var minDate = new Date(hoje);
+    minDate.setDate(minDate.getDate() + 1);
+    var minDateStr = minDate.toISOString().split('T')[0];
+
+    var { value: novaData } = await Swal.fire({
+        title: 'Solicitar Extensão de Prazo',
+        html:
+            '<p style="color:#475569; font-size:14px; margin-bottom:12px;">Informe o novo prazo que deseja solicitar:</p>' +
+            '<input id="swal-nova-data" type="date" min="' + minDateStr + '" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:15px; outline:none;">' +
+            '<textarea id="swal-motivo-prazo" rows="3" placeholder="Motivo da solicitação (opcional)..." style="width:100%; margin-top:10px; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; resize:vertical; outline:none; font-family:inherit;"></textarea>',
+        showCancelButton: true,
+        confirmButtonText: 'Enviar Solicitação',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#3b82f6',
+        focusConfirm: false,
+        didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; },
+        preConfirm: function() {
+            var data = document.getElementById('swal-nova-data').value;
+            if (!data) { Swal.showValidationMessage('Selecione uma data.'); return false; }
+            var motivo = document.getElementById('swal-motivo-prazo').value.trim();
+            return { data: data, motivo: motivo };
+        }
+    });
+
+    if (!novaData) return;
+
+    try {
+        // Buscar nome do solicitante
+        var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeSolicitante = perfil ? perfil.full_name : 'Usuário';
+
+        // Montar payload da solicitação
+        var payload = {
+            prazo_solicitado: novaData.data,
+            prazo_solicitado_por: userIdGlobal,
+            prazo_solicitado_nome: nomeSolicitante,
+            prazo_solicitado_motivo: novaData.motivo || null
+        };
+
+        var { error } = await supabaseClient.from('tarefas').update(payload).eq('id', tarefaId);
+        if (error) throw error;
+
+        // Determinar quem notificar
+        var notificarIds = [];
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, titulo').eq('id', tarefaId).maybeSingle();
+
+        if (ehSubtarefa && tarefaPaiId) {
+            // Notificar: criador da subtarefa + responsáveis da tarefa pai
+            if (tarefa && tarefa.criado_por && tarefa.criado_por !== userIdGlobal) {
+                notificarIds.push(tarefa.criado_por);
+            }
+            var { data: respPai } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaPaiId);
+            (respPai || []).forEach(function(r) {
+                if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
+                    notificarIds.push(r.user_id);
+                }
+            });
+        } else {
+            // Notificar: criador da tarefa
+            if (tarefa && tarefa.criado_por && tarefa.criado_por !== userIdGlobal) {
+                notificarIds.push(tarefa.criado_por);
+            }
+        }
+
+        // Formatar data solicitada para exibição
+        var dataExibicao = new Date(novaData.data + 'T12:00:00').toLocaleDateString('pt-BR');
+        var tituloTarefa = tarefa ? tarefa.titulo : 'tarefa';
+
+        // Enviar notificações
+        for (var i = 0; i < notificarIds.length; i++) {
+            await supabaseClient.from('notificacoes').insert({
+                user_id: notificarIds[i],
+                tipo: 'solicitacao_prazo',
+                titulo: 'Solicitação de extensão de prazo',
+                mensagem: nomeSolicitante + ' solicita extensão do prazo de "' + tituloTarefa + '" para ' + dataExibicao + (novaData.motivo ? '. Motivo: ' + novaData.motivo : '') + '.',
+                tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
+            });
+        }
+        if (notificarIds.length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
+
+        Swal.fire({ icon: 'success', title: 'Solicitação enviada!', text: 'O responsável será notificado para aprovar ou recusar.', timer: 2000, showConfirmButton: false });
+
+        // Recarregar o modal
+        if (ehSubtarefa && tarefaPaiId) {
+            fecharModal('modal-detalhe-subtarefa');
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+        } else {
+            fecharModal('modal-detalhe-tarefa');
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
+        }
+    } catch (err) {
+        console.error('Erro ao solicitar extensão de prazo:', err);
+        Swal.fire('Erro', 'Não foi possível enviar a solicitação: ' + err.message, 'error');
+    }
+}
+
+/**
+ * Aprova a solicitação de extensão de prazo.
+ */
+async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
+    try {
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('prazo, prazo_anterior, prazo_solicitado, prazo_solicitado_nome, titulo').eq('id', tarefaId).maybeSingle();
+        if (!tarefa || !tarefa.prazo_solicitado) return;
+
+        var arrayAntigos = [];
+        if (tarefa.prazo_anterior) {
+            try {
+                arrayAntigos = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') 
+                                ? JSON.parse(tarefa.prazo_anterior) 
+                                : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]);
+            } catch(e) { arrayAntigos = [tarefa.prazo_anterior]; }
+        }
+        if (tarefa.prazo) {
+            arrayAntigos.push(tarefa.prazo);
+        }
+
+        var dataExibicao = new Date(tarefa.prazo_solicitado + 'T12:00:00').toLocaleDateString('pt-BR');
+        var { isConfirmed } = await Swal.fire({
+            title: 'Aprovar extensão de prazo?',
+            html: '<p style="color:#475569;">O prazo será alterado para <strong>' + dataExibicao + '</strong>.</p><p style="color:#94a3b8; font-size:13px;">O prazo anterior ficará registrado no histórico.</p>',
+            showCancelButton: true,
+            confirmButtonText: 'Aprovar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#10b981',
+            didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; }
+        });
+        if (!isConfirmed) return;
+
+        var { error } = await supabaseClient.from('tarefas').update({
+            prazo: tarefa.prazo_solicitado,
+            prazo_anterior: arrayAntigos.length > 0 ? arrayAntigos : null,
+            prazo_solicitado: null,
+            prazo_solicitado_por: null,
+            prazo_solicitado_nome: null,
+            prazo_solicitado_motivo: null
+        }).eq('id', tarefaId);
+        if (error) throw error;
+
+        // Notificar o solicitante
+        var { data: tarefaAtualizada } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaId).maybeSingle();
+        var { data: solicitante } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        // Buscar quem havia solicitado (salvo antes da limpeza)
+        // Notificamos todos os responsáveis da tarefa
+        var notifIds = (solicitante || []).map(function(r) { return r.user_id; });
+        for (var i = 0; i < notifIds.length; i++) {
+            if (notifIds[i] !== userIdGlobal) {
+                await supabaseClient.from('notificacoes').insert({
+                    user_id: notifIds[i],
+                    tipo: 'prazo_aprovado',
+                    titulo: 'Extensão de prazo aprovada',
+                    mensagem: 'Seu prazo para "' + (tarefa.titulo || 'tarefa') + '" foi estendido para ' + dataExibicao + '.',
+                    tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
+                });
+            }
+        }
+        if (notifIds.length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
+
+        Swal.fire({ icon: 'success', title: 'Prazo aprovado!', timer: 1500, showConfirmButton: false });
+        if (ehSubtarefa && tarefaPaiId) {
+            fecharModal('modal-detalhe-subtarefa');
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+        } else {
+            fecharModal('modal-detalhe-tarefa');
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
+        }
+    } catch (err) {
+        Swal.fire('Erro', 'Não foi possível aprovar: ' + err.message, 'error');
+    }
+}
+
+/**
+ * Recusa a solicitação de extensão de prazo.
+ */
+async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
+    var { isConfirmed } = await Swal.fire({
+        title: 'Recusar solicitação?',
+        text: 'A solicitação de extensão de prazo será cancelada.',
+        showCancelButton: true,
+        confirmButtonText: 'Recusar',
+        cancelButtonText: 'Voltar',
+        confirmButtonColor: '#ef4444',
+        didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; }
+    });
+    if (!isConfirmed) return;
+
+    try {
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('titulo').eq('id', tarefaId).maybeSingle();
+        var { error } = await supabaseClient.from('tarefas').update({
+            prazo_solicitado: null,
+            prazo_solicitado_por: null,
+            prazo_solicitado_nome: null,
+            prazo_solicitado_motivo: null
+        }).eq('id', tarefaId);
+        if (error) throw error;
+
+        // Notificar responsáveis da tarefa sobre a recusa
+        var { data: resps } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        for (var i = 0; i < (resps || []).length; i++) {
+            if (resps[i].user_id !== userIdGlobal) {
+                await supabaseClient.from('notificacoes').insert({
+                    user_id: resps[i].user_id,
+                    tipo: 'prazo_recusado',
+                    titulo: 'Extensão de prazo recusada',
+                    mensagem: 'Sua solicitação de extensão de prazo para "' + (tarefa ? tarefa.titulo : 'tarefa') + '" foi recusada.',
+                    tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
+                });
+            }
+        }
+        if ((resps || []).length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
+
+        Swal.fire({ icon: 'info', title: 'Solicitação recusada.', timer: 1500, showConfirmButton: false });
+        if (ehSubtarefa && tarefaPaiId) {
+            fecharModal('modal-detalhe-subtarefa');
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+        } else {
+            fecharModal('modal-detalhe-tarefa');
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
+        }
+    } catch (err) {
+        Swal.fire('Erro', 'Não foi possível recusar: ' + err.message, 'error');
+    }
+}
+
+window.solicitarExtensaoPrazo = solicitarExtensaoPrazo;
+window.aprovarExtensaoPrazo = aprovarExtensaoPrazo;
+window.negarExtensaoPrazo = negarExtensaoPrazo;
+
+async function salvarRespostaTarefa(tarefaId) {
+    var area = document.getElementById('nova-resposta-tarefa-' + tarefaId);
+    if (!area) return;
+    var texto = area.value.trim();
+    if (!texto) {
+        Swal.fire('Campo Vazio', 'Por favor, digite uma resposta antes de salvar.', 'warning');
+        return;
+    }
+    
+    try {
+        var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
+
+        // Inserir nova resposta na tabela dedicada
+        var { error } = await supabaseClient.from('tarefa_respostas').insert({
+            tarefa_id: tarefaId,
+            user_id: userIdGlobal,
+            user_name: nomeUsuario,
+            texto: texto
+        });
+        if (error) throw error;
+        
+        // Buscar status e criador para notificação e atualização de status
+        var { data: tarefaAtual } = await supabaseClient.from('tarefas').select('status, criado_por, titulo').eq('id', tarefaId).maybeSingle();
+        
+        // Mudar para em_progresso automaticamente se estiver pendente
+        if (tarefaAtual && tarefaAtual.status === 'pendente') {
+            await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaId);
+        }
+        
+        // Notificar o criador da tarefa
+        if (tarefaAtual && tarefaAtual.criado_por && tarefaAtual.criado_por !== userIdGlobal) {
+            await supabaseClient.from('notificacoes').insert({
+                user_id: tarefaAtual.criado_por,
+                tipo: 'resposta_tarefa',
+                titulo: 'Nova resposta em tarefa',
+                mensagem: nomeUsuario + ' respondeu a tarefa "' + (tarefaAtual.titulo || '') + '".',
+                tarefa_id: tarefaId
+            });
+            window.dispatchEvent(new CustomEvent('novaNotificacao'));
+        }
+        
+        fecharModal('modal-detalhe-tarefa');
+        abrirDetalheTarefa(tarefaId);
+        carregarTarefas();
+    } catch (err) {
+        console.error('Erro ao salvar resposta:', err);
+        Swal.fire('Erro', 'Não foi possível salvar a resposta: ' + err.message, 'error');
+    }
+}
+
+async function comentarRespostaTarefa(respostaId, tarefaId) {
+    var input = document.getElementById('comentario-resposta-' + respostaId);
+    if (!input) return;
+    var texto = input.value.trim();
+    if (!texto) {
+        Swal.fire('Campo Vazio', 'Digite um comentário antes de enviar.', 'warning');
+        return;
+    }
+    
+    try {
+        var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
+        
+        var { error } = await supabaseClient.from('tarefa_comentarios').insert({
+            tarefa_id: tarefaId,
+            resposta_id: respostaId,
+            user_id: userIdGlobal,
+            user_name: nomeUsuario,
+            texto: texto
+        });
+        if (error) throw error;
+        
+        // Mudar tarefa para em_progresso se estiver pendente
+        var { data: tarefaAtual } = await supabaseClient.from('tarefas').select('status').eq('id', tarefaId).maybeSingle();
+        if (tarefaAtual && tarefaAtual.status === 'pendente') {
+            await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaId);
+        }
+        
+        fecharModal('modal-detalhe-tarefa');
+        abrirDetalheTarefa(tarefaId);
+        carregarTarefas();
+    } catch (err) {
+        console.error('Erro ao comentar resposta:', err);
+        Swal.fire('Erro', 'Não foi possível enviar o comentário.', 'error');
+    }
+}
+
+window.salvarRespostaTarefa = salvarRespostaTarefa;
+window.comentarRespostaTarefa = comentarRespostaTarefa;
 
 // ==========================================
 // DETALHE DA TAREFA (MODAL COMPLETO)
@@ -2083,6 +2740,13 @@ async function abrirDetalheTarefa(id) {
             .eq('tarefa_id', id)
             .order('created_at', { ascending: true });
 
+        // Buscar respostas da tarefa
+        var { data: respostasData } = await supabaseClient
+            .from('tarefa_respostas')
+            .select('*')
+            .eq('tarefa_id', id)
+            .order('created_at', { ascending: true });
+
         // Buscar anexos dos comentários
         var comentarioIds = (comentarios || []).map(function(c) { return c.id; });
         var comentarioAnexosMap = {};
@@ -2193,17 +2857,59 @@ async function abrirDetalheTarefa(id) {
             html += '</div>';
         }
 
-        // Prazo
-        if (tarefa.prazo) {
-            var pDt = new Date(tarefa.prazo);
-            html += '<div style="font-size:15px; color:#475569;"><strong>Prazo:</strong> ' + pDt.toLocaleDateString('pt-BR') + '</div>';
+        // Prazo (com suporte a extensão)
+        if (tarefa.prazo || tarefa.prazo_solicitado) {
+            var pDt = tarefa.prazo ? new Date(tarefa.prazo) : null;
+            var pAtrasada = pDt && pDt < new Date() && tarefa.status !== 'concluida';
+            html += '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">';
+            html += '<div>';
+            html += '<div style="font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px;">Prazo</div>';
+            // Prazos anteriores (histórico de extensões aprovadas)
+            if (tarefa.prazo_anterior) {
+                var arrAnt = [];
+                try { arrAnt = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') ? JSON.parse(tarefa.prazo_anterior) : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]); } catch(e) { arrAnt = [tarefa.prazo_anterior]; }
+                if (arrAnt && arrAnt.length > 0) {
+                    var strAntigos = arrAnt.map(function(d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    html += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigos + '</div>';
+                }
+            }
+            if (pDt) {
+                html += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasada ? '#ef4444' : '#1e293b') + ';">' + pDt.toLocaleDateString('pt-BR') + (pAtrasada ? ' ⚠ Atrasada' : '') + '</div>';
+            }
+            html += '</div>'; // info prazo
+            html += '</div>'; // flex
+            // Solicitação pendente
+            if (tarefa.prazo_solicitado) {
+                var pSol = new Date(tarefa.prazo_solicitado + 'T12:00:00');
+                html += '<div style="margin-top:10px; padding:10px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px;">';
+                html += '<div style="font-size:13px; font-weight:600; color:#92400e; margin-bottom:4px;">⏳ Solicitação de extensão pendente</div>';
+                html += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + pSol.toLocaleDateString('pt-BR') + '</strong>';
+                if (tarefa.prazo_solicitado_nome) html += ' por ' + escapeHtmlTarefa(tarefa.prazo_solicitado_nome);
+                html += '</div>';
+                if (tarefa.prazo_solicitado_motivo) html += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(tarefa.prazo_solicitado_motivo) + '</div>';
+                // Botões aprovar/negar — visíveis para quem pode (criador da tarefa ou gerente/diretor/secretário)
+                var podeAprovar = (tarefa.criado_por === userIdGlobal) || ehDiretor || ehSecretario || ehGerente;
+                if (podeAprovar) {
+                    html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+                    html += '<button onclick="aprovarExtensaoPrazo(\'' + id + '\', null, false)" style="background:#10b981; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✓ Aprovar</button>';
+                    html += '<button onclick="negarExtensaoPrazo(\'' + id + '\', null, false)" style="background:#ef4444; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✕ Recusar</button>';
+                    html += '</div>';
+                }
+                html += '</div>'; // aviso pendente
+            }
+            html += '</div>'; // card prazo
+        }
+        // Botão solicitar extensão — sempre visível para o responsável (não-criador), inclusive se atrasada ou sem prazo
+        if (ehResponsavel && tarefa.criado_por !== userIdGlobal && !tarefa.prazo_solicitado && tarefa.status !== 'concluida') {
+            html += '<button onclick="solicitarExtensaoPrazo(\'' + id + '\', null, false)" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:5px; width:fit-content;">📅 Solicitar extensão de prazo</button>';
         }
 
         // Subtarefas
         html += '<div>';
         html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">';
         html += '<strong style="font-size:15px; color:#1e293b;">Subtarefas (' + subs.length + ')</strong>';
-        // Diretor, Secretário, Gerente ou Consórcio (se criou a tarefa pai) podem criar subtarefas
+        // Diretor, Secretário, Gerente, Consórcio (se criou) ou Responsável podem criar subtarefas
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
         var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var ehDiretorReal = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
@@ -2211,7 +2917,7 @@ async function abrirDetalheTarefa(id) {
         var ehGerente = roleLowerRaw.includes('gerente');
         var gerenteCriouTarefa = ehGerente && tarefa.criado_por === userIdGlobal;
         var consorcioCriouTarefa = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista') && tarefa.criado_por === userIdGlobal;
-        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa) {
+        if (ehDiretorReal || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa || ehResponsavel) {
             html += '<button onclick="abrirCriarSubtarefa(\'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:4px 10px; font-size:14px; font-weight:600; cursor:pointer;">+ Subtarefa</button>';
         }
         html += '</div>';
@@ -2228,131 +2934,81 @@ async function abrirDetalheTarefa(id) {
             html += '</div></div>';
 
             subs.forEach(function (s) {
-                var subCheck = s.status === 'concluida' ? 'checked' : '';
-                var subResp = subRespMap[s.id] || '';
                 var subAnx = subAnexoMap[s.id] || [];
-
-                html += '<div style="padding:8px 0; border-bottom:1px solid #f1f5f9;">';
-                html += '<div style="display:flex; align-items:center; gap:8px;">';
                 var subRespUserIds = subRespUserIdMap[s.id] || [];
-                var podeConcluirSub = ehGerente || (subRespUserIds.indexOf(userIdGlobal) !== -1);
+                var podeConcluirSub = ehGerente || ehDiretorReal || ehSecretario || (subRespUserIds.indexOf(userIdGlobal) !== -1);
                 var subTemAnexo = subAnx.length > 0;
                 var subJaConcluida = s.status === 'concluida';
-                if (podeConcluirSub && (subTemAnexo || subJaConcluida)) {
-                    html += '<input type="checkbox" ' + subCheck + ' onchange="toggleSubtarefa(\'' + s.id + '\', this.checked)" style="width:16px; height:16px; accent-color:#10b981;">';
-                } else if (podeConcluirSub && !subTemAnexo) {
-                    html += '<input type="checkbox" disabled style="width:16px; height:16px; accent-color:#10b981; opacity:0.4;" title="Anexe um documento antes de concluir">';
-                } else {
-                    // Não é responsável: mostra apenas um indicador visual
-                    html += '<span style="width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; color:' + (subJaConcluida ? '#10b981' : '#cbd5e1') + '; font-size:14px;">' + (subJaConcluida ? '✔' : '○') + '</span>';
-                }
-                html += '<div style="flex:1;">';
-                html += '<span style="font-size:15px; color:' + (s.status === 'concluida' ? '#94a3b8' : '#334155') + '; ' + (s.status === 'concluida' ? 'text-decoration:line-through;' : '') + '">' + s.titulo + '</span>';
-                var nomeSubCriador = subCriadorMap[s.criado_por] || '';
-                if (nomeSubCriador) {
-                    html += '<div style="font-size:12px; color:#94a3b8;">Por ' + escapeHtmlTarefa(nomeSubCriador) + '</div>';
-                }
-                // Mostrar responsáveis da subtarefa com visualização
-                var subRespIds = subRespUserIdMap[s.id] || [];
+                var temResposta = !!s.resposta;
+
+                // Cor e label de status
+                var statusCor = subJaConcluida ? '#10b981' : (s.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
+                var statusLabel = subJaConcluida ? 'Concluída' : (s.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+
+                // Nomes dos responsáveis
                 var subRespsNomes = {};
                 (subResps || []).forEach(function(r) { if (r.tarefa_id === s.id) subRespsNomes[r.user_id] = r.user_name; });
-                subRespIds.forEach(function(uid) {
-                    var nomeR = subRespsNomes[uid] || '';
-                    if (nomeR) {
-                        html += '<div style="font-size:14px; color:#64748b;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + nomeR + '</div>';
-                        var visSub = (subVisualizacoesMap[s.id] || []).find(function(v) { return v.user_id === uid; });
-                        if (visSub && visSub.visualizado_at) {
-                            var visSubData = new Date(visSub.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-                            html += '<div style="font-size:11px; color:#10b981; font-weight:500; margin-left:14px;">✓ Visualizou ' + visSubData + '</div>';
-                        }
-                    }
-                });
-                if (s.descricao) html += '<div style="font-size:13px; color:#64748b; margin-top:3px; background:#f8fafc; padding:4px 6px; border-radius:4px;">' + escapeHtmlTarefa(s.descricao).replace(/\n/g, '<br>') + '</div>';
-                html += '</div>';
-                // Campo de Resposta (opção responder em campo de texto)
-                if (podeConcluirSub || s.resposta) {
-                    var dadosResposta = null;
-                    if (s.resposta) {
-                        try {
-                            if (s.resposta.startsWith('{')) {
-                                dadosResposta = JSON.parse(s.resposta);
-                            } else {
-                                dadosResposta = { texto: s.resposta };
-                            }
-                        } catch (e) {
-                            dadosResposta = { texto: s.resposta };
-                        }
-                    }
+                var nomesResp = subRespUserIds.map(function(uid) { return subRespsNomes[uid] || ''; }).filter(Boolean);
 
-                    html += '<div style="margin-left:24px; margin-top:8px; margin-bottom:12px;">';
-                    if (podeConcluirSub && s.status !== 'concluida') {
-                        html += '<div style="display:flex; gap:8px; align-items:flex-end;">';
-                        html += '<div style="flex:1;">';
-                        html += '<label style="font-size:12px; color:#64748b; font-weight:600; display:block; margin-bottom:2px;">Sua Resposta:</label>';
-                        html += '<textarea id="resposta-sub-' + s.id + '" rows="1" placeholder="Digite sua resposta..." style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; resize:vertical; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'">' + (dadosResposta ? dadosResposta.texto : '') + '</textarea>';
-                        html += '</div>';
-                        html += '<button onclick="salvarRespostaSubtarefa(\'' + s.id + '\', \'' + id + '\')" style="background:#10b981; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; height:32px; transition:background 0.2s;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">Salvar</button>';
-                        html += '</div>';
-                    } else if (dadosResposta) {
-                        html += '<div style="font-size:13px; color:#1e293b; background:#f0fdf4; padding:10px; border-radius:8px; border:1px solid #dcfce7; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">';
-                        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">';
-                        html += '<div style="display:flex; align-items:center; gap:5px;">';
-                        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
-                        html += '<strong style="font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.05em;">Resposta registrada</strong>';
-                        html += '</div>';
-                        if (dadosResposta.at) {
-                            var dataResp = new Date(dadosResposta.at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-                            html += '<span style="font-size:10px; color:#166534; font-weight:500; opacity:0.7;">' + dataResp + '</span>';
-                        }
-                        html += '</div>';
-                        html += '<div style="line-height:1.5; margin-bottom:2px;">' + escapeHtmlTarefa(dadosResposta.texto).replace(/\n/g, '<br>') + '</div>';
-                        if (dadosResposta.user_name) {
-                            html += '<div style="font-size:11px; color:#166534; font-weight:600; margin-top:4px;">— ' + escapeHtmlTarefa(dadosResposta.user_name) + '</div>';
-                        }
-                        html += '</div>';
-                    }
-                    html += '</div>';
-                }
-                if (podeConcluirSub) {
-                    html += '<div style="display:flex; align-items:center; gap:6px; margin-top:5px; margin-left:24px;">';
-                    html += '<label style="background:#8b5cf6; color:white; border:none; border-radius:4px; padding:2px 6px; font-size:15px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center;" title="Anexar arquivo"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" onchange="uploadAnexo(\'' + s.id + '\', this)" style="display:none;"></label>';
-                    if (!subTemAnexo && !subJaConcluida && !s.resposta) {
-                        html += '<span style="font-size:11px; color:#ef4444; white-space:nowrap;">Anexe um doc ou responda</span>';
-                    }
-                    html += '</div>';
-                }
-                
-                // Botões de ação da subtarefa (Editar/Excluir)
-                html += '<div style="display:flex; align-items:center; gap:8px; margin-top:5px; margin-left:24px;">';
+                // Botões de ação fora da área clicável
                 var horasCriacaoSub = s.created_at ? ((new Date() - new Date(s.created_at)) / (1000 * 60 * 60)) : 999;
+                var botoesAcao = '';
                 if (s.criado_por === userIdGlobal && horasCriacaoSub < 24) {
-                    html += '<button onclick="editarSubtarefaExistente(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#0284c7; cursor:pointer; font-size:14px;" title="Editar subtarefa">✎</button>';
+                    botoesAcao += '<button onclick="event.stopPropagation();editarSubtarefaExistente(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#0284c7; cursor:pointer; font-size:14px;" title="Editar subtarefa">✎</button>';
                 }
-                if (ehDiretorReal || ehSecretario || gerenteCriouTarefa) {
-                    html += '<button onclick="excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;" title="Excluir subtarefa">✕</button>';
+                if (ehDiretorReal || ehSecretario || gerenteCriouTarefa || ehResponsavel) {
+                    botoesAcao += '<button onclick="event.stopPropagation();excluirSubtarefa(\'' + s.id + '\',\'' + id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px;" title="Excluir subtarefa">✕</button>';
+                }
+
+                // Card clicável
+                html += '<div style="padding:10px; border-bottom:1px solid #f1f5f9; border-left:3px solid ' + statusCor + '; margin-bottom:2px; border-radius:0 6px 6px 0; background:#fafcff;">';
+                html += '<div style="display:flex; align-items:flex-start; gap:10px;">';
+
+                // Checkbox (stopPropagation para não disparar clique no card)
+                html += '<div onclick="event.stopPropagation()" style="padding-top:2px; flex-shrink:0;">';
+                if (podeConcluirSub && (subTemAnexo || subJaConcluida)) {
+                    html += '<input type="checkbox" ' + (subJaConcluida ? 'checked' : '') + ' onchange="toggleSubtarefa(\'' + s.id + '\', this.checked)" style="width:16px; height:16px; accent-color:#10b981; cursor:pointer;">';
+                } else if (podeConcluirSub && !subTemAnexo) {
+                    html += '<input type="checkbox" disabled style="width:16px; height:16px; accent-color:#10b981; opacity:0.4;" title="Abra a subtarefa para responder ou anexar antes de concluir">';
+                } else {
+                    html += '<span style="width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; color:' + (subJaConcluida ? '#10b981' : '#cbd5e1') + '; font-size:14px;">' + (subJaConcluida ? '✔' : '○') + '</span>';
                 }
                 html += '</div>';
 
+                // Área clicável — abre modal da subtarefa
+                html += '<div style="flex:1; cursor:pointer;" onclick="abrirDetalheSubtarefa(\'' + s.id + '\', \'' + id + '\')">'; 
+                html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
+                html += '<span style="font-size:15px; font-weight:600; color:' + (subJaConcluida ? '#94a3b8' : '#1e293b') + '; ' + (subJaConcluida ? 'text-decoration:line-through;' : '') + '">' + escapeHtmlTarefa(s.titulo) + '</span>';
+                html += '<span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; background:' + statusCor + '20; color:' + statusCor + '; white-space:nowrap;">' + statusLabel + '</span>';
                 html += '</div>';
-                // Mostrar anexos da subtarefa
-                if (subAnx.length > 0) {
-                    subAnx.forEach(function (a) {
-                        var dataUploadSub = a.uploaded_at ? formatarDataBRTarefa(a.uploaded_at.substring(0, 10)) : '';
-                        var infoUploaderSub = (a._nomeUploader ? 'Por ' + a._nomeUploader : '') + (dataUploadSub ? ' em ' + dataUploadSub : '');
-                        html += '<div style="display:flex; align-items:center; gap:6px; margin-left:28px; margin-top:3px;">';
-                        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-                        html += '<div style="flex:1; min-width:0;">';
-                        html += '<a href="' + a.url + '" target="_blank" style="font-size:14px; color:#3b82f6; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + a.nome_arquivo + '</a>';
-                        if (infoUploaderSub) html += '<div style="font-size:12px; color:#475569; font-weight:500;">' + escapeHtmlTarefa(infoUploaderSub) + '</div>';
-                        html += '</div>';
-                        if (a.uploaded_by === userIdGlobal) {
-                            html += '<button onclick="excluirAnexo(\'' + a.id + '\',\'' + s.id + '\')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px;">✕</button>';
-                        }
-                        html += '</div>';
-                    });
+
+                if (nomesResp.length > 0) {
+                    html += '<div style="font-size:12px; color:#64748b; margin-top:3px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + escapeHtmlTarefa(nomesResp.join(', ')) + '</div>';
                 }
-                html += '</div>';
+
+                html += '<div style="display:flex; gap:8px; margin-top:5px; align-items:center;">';
+                if (subTemAnexo) {
+                    html += '<span style="font-size:11px; color:#8b5cf6;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> ' + subAnx.length + ' anexo(s)</span>';
+                }
+                if (temResposta) {
+                    html += '<span style="font-size:11px; color:#10b981;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Respondida</span>';
+                }
+                if (!subTemAnexo && !temResposta && !subJaConcluida && podeConcluirSub) {
+                    html += '<span style="font-size:11px; color:#ef4444;">⚠ Pendente resposta/anexo</span>';
+                }
+                html += '<span style="font-size:11px; color:#94a3b8; margin-left:auto;">Ver detalhes →</span>';
+                html += '</div>'; // indicadores
+                html += '</div>'; // área clicável
+
+                // Botões de ação
+                if (botoesAcao) {
+                    html += '<div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">' + botoesAcao + '</div>';
+                }
+
+                html += '</div>'; // flex container principal
+                html += '</div>'; // card da subtarefa
             });
+
         }
         html += '</div>';
 
@@ -2380,14 +3036,81 @@ async function abrirDetalheTarefa(id) {
         });
         html += '</div>';
 
-        // Comentários
+        // Respostas da Tarefa
+        if (ehResponsavel || ehDiretor || ehSecretario || tarefa.criado_por === userIdGlobal) {
+            var respostas = respostasData || [];
+            var comentariosPorResposta = {};
+            coments.forEach(function(c) {
+                if (c.resposta_id) {
+                    if (!comentariosPorResposta[c.resposta_id]) comentariosPorResposta[c.resposta_id] = [];
+                    comentariosPorResposta[c.resposta_id].push(c);
+                }
+            });
+
+            html += '<div style="border-top:1px solid #e2e8f0; padding-top:12px; margin-top:8px;">';
+            html += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Respostas da Tarefa</strong>';
+
+            if (tarefa.status !== 'concluida') {
+                html += '<div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:12px;">';
+                html += '<div style="flex:1;">';
+                html += '<textarea id="nova-resposta-tarefa-' + id + '" rows="2" placeholder="Digite uma nova resposta..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; resize:vertical; outline:none; transition:border-color 0.2s;" onfocus="this.style.borderColor=\'#3b82f6\'" onblur="this.style.borderColor=\'#cbd5e1\'"></textarea>';
+                html += '</div>';
+                html += '<button onclick="salvarRespostaTarefa(\'' + id + '\')" style="background:#10b981; color:white; border:none; border-radius:6px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">Salvar Resposta</button>';
+                html += '</div>';
+            }
+
+            if (respostas.length === 0) {
+                html += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhuma resposta ainda.</div>';
+            } else {
+                respostas.forEach(function(r) {
+                    var dataResp = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+                    html += '<div style="background:#f0fdf4; border:1px solid #dcfce7; border-radius:8px; padding:12px; margin-bottom:12px;">';
+                    html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">';
+                    html += '<strong style="font-size:13px; color:#166534;">' + escapeHtmlTarefa(r.user_name || 'Usuário') + '</strong>';
+                    html += '<span style="font-size:11px; color:#166534; opacity:0.7;">' + dataResp + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-size:14px; color:#1e293b; line-height:1.5; margin-bottom:8px;">' + escapeHtmlTarefa(r.texto).replace(/\n/g, '<br>') + '</div>';
+
+                    // Comentários nesta resposta
+                    var comentariosResp = comentariosPorResposta[r.id] || [];
+                    if (comentariosResp.length > 0) {
+                        html += '<div style="margin-left:12px; padding-left:12px; border-left:2px solid #86efac; margin-bottom:8px;">';
+                        comentariosResp.forEach(function(cr) {
+                            var dataCr = cr.created_at ? new Date(cr.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+                            html += '<div style="background:white; border-radius:6px; padding:8px; margin-bottom:6px;">';
+                            html += '<div style="display:flex; justify-content:space-between; margin-bottom:2px;">';
+                            html += '<span style="font-size:12px; font-weight:600; color:#1e293b;">' + escapeHtmlTarefa(cr.user_name || 'Usuário') + '</span>';
+                            html += '<span style="font-size:11px; color:#94a3b8;">' + dataCr + '</span>';
+                            html += '</div>';
+                            html += '<div style="font-size:13px; color:#475569;">' + escapeHtmlTarefa(cr.texto) + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    // Campo para comentar na resposta
+                    if (tarefa.status !== 'concluida') {
+                        html += '<div style="display:flex; gap:6px; align-items:flex-end;">';
+                        html += '<input type="text" id="comentario-resposta-' + r.id + '" placeholder="Comentar esta resposta..." style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">';
+                        html += '<button onclick="comentarRespostaTarefa(\'' + r.id + '\', \'' + id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Comentar</button>';
+                        html += '</div>';
+                    }
+
+                    html += '</div>';
+                });
+            }
+            html += '</div>';
+        }
+
+        // Comentários (apenas os que não são de respostas)
+        var comentsTarefa = coments.filter(function(c) { return !c.resposta_id; });
         html += '<div style="border-top:1px solid #e2e8f0; padding-top:12px; margin-top:8px;">';
-        html += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Comentários (' + coments.length + ')</strong>';
+        html += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Comentários (' + comentsTarefa.length + ')</strong>';
         html += '<div id="tarefa-comentarios-lista" style="display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; margin-bottom:12px;">';
-        if (coments.length === 0) {
+        if (comentsTarefa.length === 0) {
             html += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhum comentário ainda.</div>';
         } else {
-            coments.forEach(function(c) {
+            comentsTarefa.forEach(function(c) {
                 var dataHora = c.created_at ? new Date(c.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
                 var anexosC = comentarioAnexosMap[c.id] || [];
                 html += '<div style="background:#f8fafc; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">';
@@ -2514,13 +3237,11 @@ async function alterarStatusTarefa(id, novoStatus) {
                 }
             }
             
-            // Verificar anexos
+            // Verificar anexos ou respostas na tabela dedicada
             const { data: anexos } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', id).limit(1);
-            // Verificar resposta (supondo que resposta seja um campo na tabela tarefas ou em outra vinculada)
-            // Por enquanto, verificamos se há anexos ou se a tarefa tem algum metadado de resposta se existir
-            const { data: tarefa } = await supabaseClient.from('tarefas').select('resposta').eq('id', id).maybeSingle();
+            const { data: respostasExistentes } = await supabaseClient.from('tarefa_respostas').select('id').eq('tarefa_id', id).limit(1);
 
-            if ((!anexos || anexos.length === 0) && (!tarefa || !tarefa.resposta)) {
+            if ((!anexos || anexos.length === 0) && (!respostasExistentes || respostasExistentes.length === 0)) {
                 Swal.fire('Ação Bloqueada', 'Para concluir esta tarefa, é obrigatório anexar um documento ou inserir uma resposta detalhada.', 'warning');
                 return;
             }
@@ -2604,10 +3325,12 @@ function abrirCriarSubtarefa(tarefaPaiId, editarSubtarefaId = null) {
     html += '<button class="modal-close" onclick="fecharModal(\'modal-nova-subtarefa\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     html += '</div><div class="modal-body">';
     html += '<div class="campo-grupo"><label>Título da Subtarefa</label><input type="text" id="subtarefa-titulo" placeholder="Ex: Verificar documentos"></div>';
+    html += '<div class="campo-grupo"><label>Prazo (opcional)</label><input type="date" id="subtarefa-prazo" style="font-size:14px;"></div>';
     html += '<div class="campo-grupo"><label>Descrição (opcional)</label><textarea id="subtarefa-descricao" rows="3" placeholder="Detalhes da subtarefa..."></textarea></div>';
     html += '<div class="campo-grupo"><label>Anexo da descrição (opcional)</label><input type="file" id="subtarefa-anexo-descricao" style="font-size:14px;"></div>';
     html += '<div class="campo-grupo"><label>Responsáveis</label><div id="subtarefa-responsaveis-list" style="max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#f8fafc;">Carregando...</div></div>';
     html += '</div><div class="modal-footer">';
+
     html += '<button class="btn-cancelar" onclick="fecharModal(\'modal-nova-subtarefa\')">Cancelar</button>';
     html += '<button class="btn-salvar" onclick="confirmarSubtarefa(\'' + tarefaPaiId + '\')">' + textoBotao + '</button>';
     html += '</div></div></div>';
@@ -2823,8 +3546,10 @@ async function carregarDadosSubtarefaParaEdicao() {
         if (subtarefa) {
             var inputTitulo = document.getElementById('subtarefa-titulo');
             var inputDesc = document.getElementById('subtarefa-descricao');
+            var inputPrazo = document.getElementById('subtarefa-prazo');
             if (inputTitulo) inputTitulo.value = subtarefa.titulo || '';
             if (inputDesc) inputDesc.value = subtarefa.descricao || '';
+            if (inputPrazo && subtarefa.prazo) inputPrazo.value = subtarefa.prazo; // formato 'YYYY-MM-DD'
         }
 
         _responsaveisSubEditandoIds = (responsaveis || []).map(function(r) { return r.user_id; });
@@ -2862,23 +3587,26 @@ function atualizarContadorSelecionadosSub() {
 }
 
 async function confirmarSubtarefa(tarefaPaiId) {
-    // Verificação de segurança: Diretor, Secretário e Gerente/Consórcio (se criou a tarefa pai) podem criar subtarefas
+    // Verificação de segurança: Diretor, Secretário, criador da tarefa ou responsável podem criar subtarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
-    var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var ehDiretor = roleLowerRaw.includes('diretor');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-    var ehGerente = roleLowerRaw.includes('gerente');
-    var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
     
-    // Se for Gerente ou Consórcio, verificar se criou a tarefa pai
-    var gerentePodeCriar = false;
-    if ((ehGerente || ehConsorcio) && !ehDiretor && !ehSecretario) {
+    var temPermissao = false;
+    if (!ehDiretor && !ehSecretario && !_subtarefaEditandoId) {
         var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
-        gerentePodeCriar = tarefaPai && tarefaPai.criado_por === userIdGlobal;
+        var { data: responsaveis } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaPaiId);
+        
+        var ehCriador = tarefaPai && tarefaPai.criado_por === userIdGlobal;
+        var ehResponsavel = (responsaveis || []).some(function(r) { return r.user_id === userIdGlobal; });
+        
+        temPermissao = ehCriador || ehResponsavel;
+    } else {
+        temPermissao = true; // Edição, Diretor ou Secretário passam direto
     }
     
-    if (!ehDiretor && !ehSecretario && !gerentePodeCriar && !_subtarefaEditandoId) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou quem criou a tarefa pode criar subtarefas.', 'error');
+    if (!temPermissao) {
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a), criador ou responsável podem criar subtarefas.', 'error');
         return;
     }
     
@@ -2886,6 +3614,8 @@ async function confirmarSubtarefa(tarefaPaiId) {
     if (!titulo) { alert('Preencha o título da subtarefa.'); return; }
 
     var descricao = document.getElementById('subtarefa-descricao').value.trim();
+    var prazoInput = document.getElementById('subtarefa-prazo');
+    var prazo = prazoInput && prazoInput.value ? prazoInput.value : null;
     var anexoInput = document.getElementById('subtarefa-anexo-descricao');
     var anexoFile = anexoInput && anexoInput.files[0] ? anexoInput.files[0] : null;
 
@@ -2906,7 +3636,8 @@ async function confirmarSubtarefa(tarefaPaiId) {
                 .from('tarefas')
                 .update({
                     titulo: titulo,
-                    descricao: descricao || null
+                    descricao: descricao || null,
+                    prazo: prazo || null
                 })
                 .eq('id', _subtarefaEditandoId);
             if (updError) throw updError;
@@ -2950,7 +3681,8 @@ async function confirmarSubtarefa(tarefaPaiId) {
                 descricao: descricao || null,
                 status: 'pendente',
                 tarefa_pai_id: tarefaPaiId,
-                criado_por: userIdGlobal
+                criado_por: userIdGlobal,
+                prazo: prazo || null
             }).select().maybeSingle();
             if (errSub) throw errSub;
 
@@ -4577,6 +5309,8 @@ window.confirmarSubtarefa = confirmarSubtarefa;
 window.excluirSubtarefa = excluirSubtarefa;
 window.toggleSubtarefa = toggleSubtarefa;
 window.salvarRespostaSubtarefa = salvarRespostaSubtarefa;
+window.salvarRespostaTarefa = salvarRespostaTarefa;
+window.comentarRespostaTarefa = comentarRespostaTarefa;
 window.uploadAnexo = uploadAnexo;
 window.excluirAnexo = excluirAnexo;
 window.enviarComentarioTarefa = enviarComentarioTarefa;
