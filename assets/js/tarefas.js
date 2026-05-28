@@ -1894,11 +1894,29 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
         var { error } = await supabaseClient.from('tarefa_respostas').insert(payload);
         if (error) throw error;
         
+        // Concluir automaticamente a subtarefa ao enviar uma resposta
+        await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', subId);
+
+        // Atualizar status da tarefa pai automaticamente
+        if (tarefaPaiId) {
+            var { data: todasSubs } = await supabaseClient
+                .from('tarefas')
+                .select('id, status')
+                .eq('tarefa_pai_id', tarefaPaiId);
+            var todasConcluidas = (todasSubs || []).every(function (s) { return s.status === 'concluida'; });
+            if (todasConcluidas && todasSubs && todasSubs.length > 0) {
+                await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', tarefaPaiId);
+            } else {
+                await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaPaiId);
+            }
+            if (typeof carregarTarefas === 'function') carregarTarefas(); // Atualiza Kanban em background
+        }
+
         Swal.fire({
             icon: 'success',
             title: 'Resposta Salva',
-            text: 'Sua resposta foi registrada com sucesso.',
-            timer: 1500,
+            text: 'Sua resposta foi registrada com sucesso e a subtarefa foi concluída.',
+            timer: 2000,
             showConfirmButton: false
         });
         
@@ -3776,12 +3794,12 @@ async function toggleSubtarefa(subId, checked) {
                 .eq('tarefa_id', subId);
             
             var { data: subData } = await supabaseClient
-                .from('tarefas')
-                .select('resposta')
-                .eq('id', subId)
-                .maybeSingle();
+                .from('tarefa_respostas')
+                .select('id')
+                .eq('tarefa_id', subId)
+                .limit(1);
 
-            if ((!anexos || anexos.length === 0) && (!subData || !subData.resposta)) {
+            if ((!anexos || anexos.length === 0) && (!subData || subData.length === 0)) {
                 Swal.fire('Ação Bloqueada', 'Para concluir esta subtarefa, é obrigatório anexar um documento ou inserir uma resposta detalhada.', 'warning');
                 if (subInfo.tarefa_pai_id) {
                     fecharModal('modal-detalhe-tarefa');
