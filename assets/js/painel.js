@@ -3176,7 +3176,7 @@ async function salvarNovoFuncionarioCuidadoAnimal(dados) {
         }
 
         // Criar usuário
-        var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+        var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
             email: email,
             password: senha,
             options: {

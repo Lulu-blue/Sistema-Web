@@ -229,3 +229,26 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
     // Expor função global para verificação manual
     window.verificarConexao = checkConnection;
 })();
+
+// =============================================
+// FUNÇÃO PARA CRIAR USUÁRIOS SEM PERDER A SESSÃO ATUAL
+// =============================================
+window.criarUsuarioAutenticacaoSemMudarSessao = async function(payload) {
+    // 1. Salvar a sessão atual antes de criar o usuário
+    var sessaoAtual = await supabaseClient.auth.getSession();
+    var refreshG = sessaoAtual.data && sessaoAtual.data.session ? sessaoAtual.data.session.refresh_token : null;
+    var tokenG = sessaoAtual.data && sessaoAtual.data.session ? sessaoAtual.data.session.access_token : null;
+
+    // 2. Criar o usuário no Auth (isso automaticamente loga o novo usuário no client)
+    var result = await supabaseClient.auth.signUp(payload);
+
+    // 3. Restaurar a sessão original do administrador/gerente
+    if (refreshG && tokenG) {
+        await supabaseClient.auth.setSession({
+            access_token: tokenG,
+            refresh_token: refreshG
+        });
+    }
+
+    return result;
+};

@@ -2919,7 +2919,7 @@ async function salvarNovoFiscal() {
         } else {
             // Se não existe, criamos no Auth
             console.log("Novo perfil. Criando no Auth...");
-            var { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
+            var { data: signUpData, error: signUpErr } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -4415,7 +4415,7 @@ async function salvarNovoGerente() {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -4699,7 +4699,7 @@ async function salvarNovoGerenteAmbiental() {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -6025,7 +6025,7 @@ async function salvarNovoDiretor() {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -6439,7 +6439,7 @@ async function salvarNovoFuncionarioAmbiental() {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -7499,7 +7499,7 @@ async function salvarNovoFuncionarioPorCargo(cargo) {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
@@ -7630,7 +7630,7 @@ async function salvarNovoFuncionarioEquipe() {
         if (existingProfile) {
             userId = existingProfile.id;
         } else {
-            var { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            var { data: authData, error: authError } = await window.criarUsuarioAutenticacaoSemMudarSessao({
                 email: emailFicticio,
                 password: '123456'
             });
