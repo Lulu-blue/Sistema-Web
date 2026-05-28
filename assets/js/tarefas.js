@@ -1885,13 +1885,13 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
         var agora = new Date().toISOString();
 
         var payload = {
+            tarefa_id: subId,
             texto: texto,
             user_id: userIdGlobal,
-            user_name: nomeUsuario,
-            at: agora
+            user_name: nomeUsuario
         };
 
-        var { error } = await supabaseClient.from('tarefas').update({ resposta: JSON.stringify(payload) }).eq('id', subId);
+        var { error } = await supabaseClient.from('tarefa_respostas').insert(payload);
         if (error) throw error;
         
         Swal.fire({
@@ -1988,10 +1988,15 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         var podeConcluir = ehDir || ehSec || ehGer || ehRespSub;
 
         // Dados da resposta salva
+        var { data: respsSub } = await supabaseClient.from('tarefa_respostas')
+            .select('*')
+            .eq('tarefa_id', subId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
         var dadosResp = null;
-        if (sub.resposta) {
-            try { dadosResp = sub.resposta.startsWith('{') ? JSON.parse(sub.resposta) : { texto: sub.resposta }; }
-            catch(e) { dadosResp = { texto: sub.resposta }; }
+        if (respsSub && respsSub.length > 0) {
+            dadosResp = { texto: respsSub[0].texto, user_name: respsSub[0].user_name, at: respsSub[0].created_at };
         }
 
         var subTemAnexo = anexos.length > 0;
@@ -2222,8 +2227,9 @@ async function excluirAnexoSubModal(anexoId, subId, tarefaPaiId) {
         if (error) throw error;
         // Verificar se era o último anexo de uma subtarefa concluída → reverter para pendente
         var { data: restantes } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', subId);
-        var { data: subAtual } = await supabaseClient.from('tarefas').select('status, resposta').eq('id', subId).maybeSingle();
-        if (subAtual && subAtual.status === 'concluida' && (!restantes || restantes.length === 0) && !subAtual.resposta) {
+        var { data: subAtual } = await supabaseClient.from('tarefas').select('status').eq('id', subId).maybeSingle();
+        var { data: respsSubEx } = await supabaseClient.from('tarefa_respostas').select('id').eq('tarefa_id', subId).limit(1);
+        if (subAtual && subAtual.status === 'concluida' && (!restantes || restantes.length === 0) && (!respsSubEx || respsSubEx.length === 0)) {
             await supabaseClient.from('tarefas').update({ status: 'pendente' }).eq('id', subId);
         }
         fecharModal('modal-detalhe-subtarefa');

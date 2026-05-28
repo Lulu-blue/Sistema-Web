@@ -815,6 +815,8 @@ DROP POLICY IF EXISTS "Visualizações: SELECT para autenticados" ON public.tare
 CREATE POLICY "Visualizações: SELECT para autenticados" ON public.tarefa_visualizacoes FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Visualizações: INSERT para autenticados" ON public.tarefa_visualizacoes;
 CREATE POLICY "Visualizações: INSERT para autenticados" ON public.tarefa_visualizacoes FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Visualizações: UPDATE próprias" ON public.tarefa_visualizacoes;
+CREATE POLICY "Visualizações: UPDATE próprias" ON public.tarefa_visualizacoes FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 -- Políticas RLS: notificacoes
 ALTER TABLE public.notificacoes ENABLE ROW LEVEL SECURITY;
