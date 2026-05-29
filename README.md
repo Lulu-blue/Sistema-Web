@@ -234,12 +234,17 @@ Módulo com 6 sub-abas independentes para acompanhamento de demandas externas:
 - **Comunicação Interna**, **Vereadores**, **MP**, **APP**, **Ouvidoria**, **Protocolo**
 - **CRUD completo**: Formulário modal para criar/editar/excluir registros por tipo.
 - **Campos por tipo**: Protocolo usa `protocolo` + `solicitante`; os demais usam `tarefa` + `origem`.
-- **Filtros e Busca Avançados**: 
+- **Área de Preservação Permanente (APP)**: Coluna e campo em **todos os tipos de denúncia**. No formulário de criação/edição, exibe select **Sim/Não** (default: **Não**). Na tabela, exibe badge "Sim" (verde) ou "Não" (cinza).
+- **Botão "Área de Preservação Permanente"**: Botão exclusivo acima das sub-abas que abre modal com todos os registros (de todos os tipos) marcados como `app_preservacao = true`.
+  - **Modal com filtros completos**: Popup "Filtro" com Origem, Responsável, Tipo, Status, Prazo, Data Início/Fim + busca textual global + datalists dinâmicos.
+  - **Download CSV**: Exportação `.csv` diretamente do modal, com colunas completas e BOM UTF-8.
+- **Filtros e Busca Avançados na tabela comum**: 
   - Botão de popup unificado ("Filtro") para evitar que elementos cortem em telas menores (mobile-friendly).
   - Busca textual global.
   - Filtros de **Origem** e **Responsável** via inputs textuais com **autocomplete** (datalists dinâmicos).
   - Filtros por **Período** (Data Início / Data Fim) e status de **Prazo** (Vencido / No Prazo).
   - Ao trocar de sub-aba, os filtros são limpos automaticamente garantindo visualização integral da aba.
+- **Download CSV na tabela comum**: Botão "Baixar CSV" exporta todos os registros da aba ativa em formato `.csv` com separador `;` e BOM UTF-8.
 - **Campo Bairro**: Datalist populada com os bairros cadastrados, permitindo também texto livre.
 - **Identificação do Criador**: Na tabela, abaixo dos botões de ação, o sistema exibe discretamente "Por: Nome" identificando o criador.
 - **Destaques visuais automáticos**: Registros concluídos (`concluido = true`) ficam em verde claro. Registros com prazo vencido e não concluídos ficam com fundo vermelho claro.
@@ -429,7 +434,7 @@ Tabela de áreas de atuação dos fiscais. Campos: `nome`, `fiscal_id` (FK → a
 Tabela de bairros mapeados. Campos: `nome`, `area_id` (FK → areas_atuacao), `fiscal_id` (FK → auth.users), `created_at`.
 
 ### `controle_denuncias` (Controle Interno de Denúncias)
-Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo). Campos: `tipo` (text, com check constraint), `data` (date), `tarefa` (text), `protocolo` (text), `origem` (text), `solicitante` (text), `descricao` (text), `endereco` (text), `bairro` (text), `encaminhado_para` (FK → auth.users), `encaminhado_para_nome` (text), `prazo_conclusao` (date), `data_entrega` (date), `obs` (text), `concluido` (boolean), `created_by` (FK → auth.users).
+Tabela única para registro e acompanhamento de demandas internas (Comunicação Interna, Vereadores, MP, APP, Ouvidoria, Protocolo). Campos: `tipo` (text, com check constraint), `data` (date), `tarefa` (text), `protocolo` (text), `origem` (text), `solicitante` (text), `descricao` (text), `endereco` (text), `bairro` (text), `encaminhado_para` (FK → auth.users), `encaminhado_para_nome` (text), `prazo_conclusao` (date), `data_entrega` (date), `obs` (text), `concluido` (boolean), `app_preservacao` (boolean, default false), `created_by` (FK → auth.users).
 
 ### `exclusao_logs` (Auditoria)
 Tabela de logs de exclusão de usuários. Substituíu a antiga `log_exclusoes`. Campos: dados do registro de auditoria.

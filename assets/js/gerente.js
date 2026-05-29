@@ -1156,6 +1156,12 @@ function togglePainelFiltroDenuncias() {
     painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
 }
 
+function togglePainelFiltroAreaPreservacao() {
+    var painel = document.getElementById('painel-filtro-area-preservacao-popup');
+    if (!painel) return;
+    painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
+}
+
 function limparFiltrosDenuncias() {
     var elBusca = document.getElementById('busca-denuncias-geral');
     var elOrigem = document.getElementById('filtro-denuncias-origem');
@@ -1222,6 +1228,7 @@ function renderizarTabelaDenuncias(registros, tipo) {
     colunas.push({ chave: 'prazo_conclusao', label: 'Prazo', tipo: 'date' });
     colunas.push({ chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' });
     colunas.push({ chave: 'obs', label: 'Obs' });
+    colunas.push({ chave: 'app_preservacao', label: 'APP', tipo: 'boolean' });
     colunas.push({ chave: 'concluido', label: 'Concluído', tipo: 'boolean' });
     colunas.push({ chave: 'acoes', label: 'Ações', tipo: 'acoes' });
 
@@ -1238,7 +1245,7 @@ function renderizarTabelaDenuncias(registros, tipo) {
     html += '<div class="denuncias-scroll-dummy" style="height:1px;"></div>';
     html += '</div>';
     html += '<div class="denuncias-scroll-bottom" style="overflow-x:auto; overflow-y:visible;">';
-    html += '<table style="width:100%; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
+    html += '<table style="width:100%; min-width:1400px; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
     colunas.forEach(function (c) {
         html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap; position:sticky; top:14px; background:#f8fafc; z-index:10;">' + c.label + '</th>';
     });
@@ -1308,7 +1315,7 @@ function renderizarTabelaDenuncias(registros, tipo) {
     // Sincronizar scroll horizontal e ajustar largura do dummy
     setTimeout(function () {
         sincronizarScrollDenuncias(wrapperId);
-    }, 0);
+    }, 100);
 }
 
 function sincronizarScrollDenuncias(wrapperId) {
@@ -1323,15 +1330,33 @@ function sincronizarScrollDenuncias(wrapperId) {
     // Ajusta largura do dummy para igualar a largura real da tabela
     dummy.style.width = table.scrollWidth + 'px';
 
+    // Flag para evitar loop infinito entre os dois listeners
+    var isSyncing = false;
+
     // Sincroniza scrollTop -> scrollBottom
     scrollTop.addEventListener('scroll', function () {
+        if (isSyncing) return;
+        isSyncing = true;
         scrollBottom.scrollLeft = scrollTop.scrollLeft;
+        isSyncing = false;
     });
 
     // Sincroniza scrollBottom -> scrollTop
     scrollBottom.addEventListener('scroll', function () {
+        if (isSyncing) return;
+        isSyncing = true;
         scrollTop.scrollLeft = scrollBottom.scrollLeft;
+        isSyncing = false;
     });
+
+    // Recalcular largura do dummy ao redimensionar a janela
+    var resizeHandler = function () {
+        dummy.style.width = table.scrollWidth + 'px';
+    };
+    window.addEventListener('resize', resizeHandler);
+
+    // Guardar referência do handler no wrapper para poder remover depois se necessário
+    wrapper._resizeHandler = resizeHandler;
 }
 
 async function carregarUsuariosDenuncias() {
@@ -1539,6 +1564,7 @@ function abrirModalNovaDenuncia() {
     document.getElementById('denuncia-solicitante').value = '';
     document.getElementById('denuncia-obs').value = '';
     document.getElementById('denuncia-concluido').value = 'false';
+    document.getElementById('denuncia-app-preservacao').value = 'false';
     document.getElementById('titulo-modal-denuncia').innerText = 'Nova Linha';
 
     ajustarCamposFormDenuncia();
@@ -1610,6 +1636,7 @@ async function salvarDenuncia() {
         var protocolo = document.getElementById('denuncia-protocolo').value.trim();
         var solicitante = document.getElementById('denuncia-solicitante').value.trim();
         var obs = document.getElementById('denuncia-obs').value.trim();
+        var appPreservacao = document.getElementById('denuncia-app-preservacao').value === 'true';
 
         // Validar obrigatórios
         if (!data) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Data.', confirmButtonColor: '#0f172a' }); return; }
@@ -1643,7 +1670,8 @@ async function salvarDenuncia() {
             protocolo: protocolo,
             solicitante: solicitante,
             obs: obs,
-            concluido: concluido
+            concluido: concluido,
+            app_preservacao: appPreservacao
         };
 
         var result;
@@ -1695,6 +1723,7 @@ async function editarDenuncia(id) {
         document.getElementById('denuncia-solicitante').value = reg.solicitante || '';
         document.getElementById('denuncia-obs').value = reg.obs || '';
         document.getElementById('denuncia-concluido').value = reg.concluido ? 'true' : 'false';
+        document.getElementById('denuncia-app-preservacao').value = reg.app_preservacao ? 'true' : 'false';
         document.getElementById('titulo-modal-denuncia').innerText = 'Editar Linha';
 
         ajustarCamposFormDenuncia();
@@ -1743,6 +1772,7 @@ async function editarDenunciaConcluido(id) {
         document.getElementById('denuncia-solicitante').value = reg.solicitante || '';
         document.getElementById('denuncia-obs').value = reg.obs || '';
         document.getElementById('denuncia-concluido').value = reg.concluido ? 'true' : 'false';
+        document.getElementById('denuncia-app-preservacao').value = reg.app_preservacao ? 'true' : 'false';
         document.getElementById('titulo-modal-denuncia').innerText = 'Alterar Status';
 
         ajustarCamposFormDenuncia();
@@ -1801,6 +1831,331 @@ async function excluirDenuncia(id) {
         console.error('Erro ao excluir denúncia:', err);
         Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível excluir.', confirmButtonColor: '#0f172a' });
     }
+}
+
+var registrosAreaPreservacaoAtual = [];
+
+async function abrirModalAreaPreservacao() {
+    try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
+        var modal = document.getElementById('modal-area-preservacao');
+        var container = document.getElementById('area-preservacao-tabela-container');
+        if (!modal || !container) return;
+
+        // Limpar filtros ao abrir
+        var elBusca = document.getElementById('busca-area-preservacao');
+        if (elBusca) elBusca.value = '';
+        var elTipo = document.getElementById('filtro-area-preservacao-tipo');
+        if (elTipo) elTipo.value = '';
+        var elOrigem = document.getElementById('filtro-area-preservacao-origem');
+        if (elOrigem) elOrigem.value = '';
+        var elEnc = document.getElementById('filtro-area-preservacao-encaminhado');
+        if (elEnc) elEnc.value = '';
+        var elConcl = document.getElementById('filtro-area-preservacao-concluido');
+        if (elConcl) elConcl.value = '';
+        var elVenc = document.getElementById('filtro-area-preservacao-vencido');
+        if (elVenc) elVenc.value = '';
+        var elDtIni = document.getElementById('filtro-area-preservacao-data-inicio');
+        if (elDtIni) elDtIni.value = '';
+        var elDtFim = document.getElementById('filtro-area-preservacao-data-fim');
+        if (elDtFim) elDtFim.value = '';
+
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:#64748b;">Carregando...</div>';
+        modal.style.display = 'flex';
+        modal.classList.add('ativo');
+
+        var { data, error } = await supabaseClient
+            .from('controle_denuncias')
+            .select('*')
+            .eq('app_preservacao', true)
+            .order('data', { ascending: false });
+
+        if (error) throw error;
+
+        registrosAreaPreservacaoAtual = data || [];
+        if (registrosAreaPreservacaoAtual.length === 0) {
+            container.innerHTML = '<div style="padding:40px; text-align:center; color:#64748b;">Nenhum registro com Área de Preservação Permanente encontrado.</div>';
+            return;
+        }
+
+        // Popular datalists de origem e responsável
+        popularDatalistsAreaPreservacao();
+
+        renderizarTabelaAreaPreservacao(registrosAreaPreservacaoAtual);
+    } catch (err) {
+        console.error('Erro ao carregar Área de Preservação Permanente:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível carregar os dados.', confirmButtonColor: '#0f172a' });
+    }
+}
+
+function fecharModalAreaPreservacao() {
+    var modal = document.getElementById('modal-area-preservacao');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('ativo');
+}
+
+function popularDatalistsAreaPreservacao() {
+    var dlOrigem = document.getElementById('datalist-area-preservacao-origem');
+    var dlEnc = document.getElementById('datalist-area-preservacao-encaminhado');
+    if (!dlOrigem || !dlEnc || !registrosAreaPreservacaoAtual) return;
+
+    var origens = {};
+    var encs = {};
+    registrosAreaPreservacaoAtual.forEach(function (r) {
+        if (r.origem) origens[r.origem] = true;
+        if (r.encaminhado_para_nome) encs[r.encaminhado_para_nome] = true;
+    });
+
+    dlOrigem.innerHTML = '';
+    Object.keys(origens).sort().forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o;
+        dlOrigem.appendChild(opt);
+    });
+
+    dlEnc.innerHTML = '';
+    Object.keys(encs).sort().forEach(function (e) {
+        var opt = document.createElement('option');
+        opt.value = e;
+        dlEnc.appendChild(opt);
+    });
+}
+
+function aplicarFiltrosAreaPreservacao() {
+    if (!registrosAreaPreservacaoAtual || registrosAreaPreservacaoAtual.length === 0) return;
+
+    var termo = (document.getElementById('busca-area-preservacao')?.value || '').toLowerCase().trim();
+    var tipo = document.getElementById('filtro-area-preservacao-tipo')?.value || '';
+    var origem = (document.getElementById('filtro-area-preservacao-origem')?.value || '').toLowerCase().trim();
+    var encaminhado = (document.getElementById('filtro-area-preservacao-encaminhado')?.value || '').toLowerCase().trim();
+    var concluido = document.getElementById('filtro-area-preservacao-concluido')?.value || '';
+    var vencido = document.getElementById('filtro-area-preservacao-vencido')?.value || '';
+    var dataInicio = document.getElementById('filtro-area-preservacao-data-inicio')?.value || '';
+    var dataFim = document.getElementById('filtro-area-preservacao-data-fim')?.value || '';
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var filtrados = registrosAreaPreservacaoAtual.filter(function (reg) {
+        if (tipo && reg.tipo !== tipo) return false;
+        if (origem && (!reg.origem || !reg.origem.toLowerCase().includes(origem))) return false;
+        if (encaminhado && (!reg.encaminhado_para_nome || !reg.encaminhado_para_nome.toLowerCase().includes(encaminhado))) return false;
+        if (concluido !== '') {
+            var val = concluido === 'true';
+            if (reg.concluido !== val) return false;
+        }
+        if (vencido !== '') {
+            if (!reg.prazo_conclusao) return false;
+            var partes = reg.prazo_conclusao.split('-');
+            var dPrazo = new Date(partes[0], partes[1] - 1, partes[2]);
+            var isVencido = dPrazo < hoje;
+            if (vencido === 'vencido' && !isVencido) return false;
+            if (vencido === 'no_prazo' && isVencido) return false;
+        }
+        if (dataInicio || dataFim) {
+            if (!reg.data) return false;
+            var dReg = new Date(reg.data + 'T00:00:00');
+            if (dataInicio) {
+                var dIni = new Date(dataInicio + 'T00:00:00');
+                if (dReg < dIni) return false;
+            }
+            if (dataFim) {
+                var dFim = new Date(dataFim + 'T23:59:59');
+                if (dReg > dFim) return false;
+            }
+        }
+        if (termo) {
+            var campos = [
+                reg.tipo, reg.tarefa, reg.origem, reg.descricao,
+                reg.endereco, reg.bairro, reg.encaminhado_para_nome,
+                reg.protocolo, reg.solicitante, reg.obs
+            ];
+            var encontrou = campos.some(function (campo) {
+                return campo && campo.toString().toLowerCase().includes(termo);
+            });
+            if (!encontrou) return false;
+        }
+        return true;
+    });
+
+    renderizarTabelaAreaPreservacao(filtrados);
+}
+
+function limparFiltrosAreaPreservacao() {
+    document.getElementById('busca-area-preservacao').value = '';
+    document.getElementById('filtro-area-preservacao-tipo').value = '';
+    document.getElementById('filtro-area-preservacao-origem').value = '';
+    document.getElementById('filtro-area-preservacao-encaminhado').value = '';
+    document.getElementById('filtro-area-preservacao-concluido').value = '';
+    document.getElementById('filtro-area-preservacao-vencido').value = '';
+    document.getElementById('filtro-area-preservacao-data-inicio').value = '';
+    document.getElementById('filtro-area-preservacao-data-fim').value = '';
+    renderizarTabelaAreaPreservacao(registrosAreaPreservacaoAtual);
+}
+
+function renderizarTabelaAreaPreservacao(registros) {
+    var container = document.getElementById('area-preservacao-tabela-container');
+    if (!container) return;
+
+    var tipoMap = {
+        'comunicacao_interna': 'Comunicação Interna',
+        'vereadores': 'Vereadores',
+        'mp': 'MP',
+        'app': 'APP',
+        'ouvidoria': 'Ouvidoria',
+        'protocolo': 'Protocolo'
+    };
+
+    var colunas = [
+        { chave: 'tipo', label: 'Tipo', tipo: 'tipo' },
+        { chave: 'data', label: 'Data', tipo: 'date' },
+        { chave: 'tarefa', label: 'Tarefa' },
+        { chave: 'origem', label: 'Origem' },
+        { chave: 'endereco', label: 'Endereço' },
+        { chave: 'bairro', label: 'Bairro' },
+        { chave: 'encaminhado_para_nome', label: 'Encaminhado para' },
+        { chave: 'prazo_conclusao', label: 'Prazo', tipo: 'date' },
+        { chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' },
+        { chave: 'concluido', label: 'Concluído', tipo: 'boolean' }
+    ];
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var wrapperId = 'app-preservacao-wrapper-' + Date.now();
+    var html = '<div id="' + wrapperId + '" style="position:relative; height:100%;">';
+    html += '<div class="denuncias-scroll-top" style="position:sticky; top:0; z-index:20; overflow-x:auto; overflow-y:hidden; height:14px; background:#fff; border-bottom:1px solid #e2e8f0; scrollbar-width:thin;">';
+    html += '<div class="denuncias-scroll-dummy" style="height:1px;"></div>';
+    html += '</div>';
+    html += '<div class="denuncias-scroll-bottom" style="overflow-x:auto; overflow-y:auto; height:calc(100% - 14px);">';
+    html += '<table style="width:100%; min-width:1400px; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
+    colunas.forEach(function (c) {
+        html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap; position:sticky; top:14px; background:#f8fafc; z-index:10;">' + c.label + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    registros.forEach(function (reg) {
+        var corFundo = '';
+        var corTexto = '';
+        if (reg.concluido) {
+            corFundo = '#dcfce7';
+            corTexto = '#14532d';
+        } else if (reg.prazo_conclusao) {
+            var partes = reg.prazo_conclusao.split('-');
+            if (partes.length === 3) {
+                var dPrazo = new Date(partes[0], partes[1] - 1, partes[2]);
+                if (dPrazo < hoje) {
+                    corFundo = '#fee2e2';
+                    corTexto = '#7f1d1d';
+                }
+            }
+        }
+
+        var styleLinha = '';
+        if (corFundo) styleLinha = 'background:' + corFundo + '; color:' + corTexto + ';';
+
+        html += '<tr style="border-bottom:1px solid #e2e8f0; ' + styleLinha + '" onmouseover="this.style.filter=\'brightness(0.97)\'" onmouseout="this.style.filter=\'none\'">';
+
+        colunas.forEach(function (c) {
+            var val = '-';
+            if (c.tipo === 'tipo') {
+                val = tipoMap[reg[c.chave]] || reg[c.chave] || '-';
+            } else if (c.tipo === 'boolean') {
+                val = reg[c.chave] ? '<span style="color:#16a34a; font-weight:600;">Sim</span>' : '<span style="color:#64748b;">Não</span>';
+            } else if (c.tipo === 'date') {
+                if (reg[c.chave]) {
+                    var p = reg[c.chave].split('-');
+                    val = p[2] + '/' + p[1] + '/' + p[0];
+                }
+            } else {
+                val = reg[c.chave] || '-';
+            }
+            html += '<td style="padding:10px 12px; border:1px solid #e2e8f0; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis;">' + val + '</td>';
+        });
+
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div></div>';
+    container.innerHTML = html;
+
+    setTimeout(function () {
+        sincronizarScrollDenuncias(wrapperId);
+    }, 100);
+}
+
+function gerarCSVControleDenuncias(registros) {
+    var tipoMap = {
+        'comunicacao_interna': 'Comunicação Interna',
+        'vereadores': 'Vereadores',
+        'mp': 'MP',
+        'app': 'APP',
+        'ouvidoria': 'Ouvidoria',
+        'protocolo': 'Protocolo'
+    };
+
+    var colunas = [
+        { chave: 'tipo', label: 'Tipo', transform: function(v) { return tipoMap[v] || v; } },
+        { chave: 'data', label: 'Data' },
+        { chave: 'tarefa', label: 'Tarefa' },
+        { chave: 'origem', label: 'Origem' },
+        { chave: 'descricao', label: 'Descrição' },
+        { chave: 'endereco', label: 'Endereço' },
+        { chave: 'bairro', label: 'Bairro' },
+        { chave: 'encaminhado_para_nome', label: 'Encaminhado para' },
+        { chave: 'protocolo', label: 'Protocolo' },
+        { chave: 'solicitante', label: 'Solicitante' },
+        { chave: 'prazo_conclusao', label: 'Prazo' },
+        { chave: 'data_entrega', label: 'Data Entrega' },
+        { chave: 'obs', label: 'Observações' },
+        { chave: 'concluido', label: 'Concluído', transform: function(v) { return v ? 'Sim' : 'Não'; } },
+        { chave: 'app_preservacao', label: 'Área de Preservação Permanente', transform: function(v) { return v ? 'Sim' : 'Não'; } }
+    ];
+
+    var linhas = [];
+    var header = colunas.map(function(c) { return '"' + c.label + '"'; }).join(';');
+    linhas.push(header);
+
+    registros.forEach(function (reg) {
+        var linha = colunas.map(function (c) {
+            var val = reg[c.chave];
+            if (c.transform) val = c.transform(val);
+            val = (val === null || val === undefined) ? '' : String(val);
+            // Escapar aspas duplas
+            val = val.replace(/"/g, '""');
+            return '"' + val + '"';
+        }).join(';');
+        linhas.push(linha);
+    });
+
+    var csv = '\uFEFF' + linhas.join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'controle_denuncias_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function baixarCSVControleDenuncias() {
+    if (!registrosDenunciasAtual || registrosDenunciasAtual.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Nenhum registro disponível para download.', confirmButtonColor: '#0f172a' });
+        return;
+    }
+    gerarCSVControleDenuncias(registrosDenunciasAtual);
+}
+
+function baixarCSVAreaPreservacao() {
+    if (!registrosAreaPreservacaoAtual || registrosAreaPreservacaoAtual.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Nenhum registro disponível para download.', confirmButtonColor: '#0f172a' });
+        return;
+    }
+    gerarCSVControleDenuncias(registrosAreaPreservacaoAtual);
 }
 
 // ============ GESTÃO DE ÁREAS E BAIRROS ============

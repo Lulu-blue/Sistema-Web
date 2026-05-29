@@ -2418,6 +2418,16 @@
                 <p style="color: #64748b; margin-bottom: 20px;">Acompanhamento de prazos por origem e tipo de demanda.
                 </p>
 
+                <div style="margin-bottom: 12px;">
+                    <button onclick="abrirModalAreaPreservacao()"
+                        style="background: #065f46; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        Área de Preservação Permanente
+                    </button>
+                </div>
+
                 <div class="sub-abas-cp" id="sub-abas-denuncias">
                     <button class="sub-aba-btn active"
                         onclick="mudarSubAbaDenuncias('comunicacao_interna', this)">Comunicação Interna</button>
@@ -2511,6 +2521,17 @@
                             </div>
                         </div>
                     </div>
+                    <button onclick="baixarCSVControleDenuncias()"
+                        style="padding: 0.55rem 1.2rem; background: #1e3a5f; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e3a5f'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Baixar CSV
+                    </button>
                     <button onclick="abrirModalNovaDenuncia()"
                         style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
                         onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
@@ -2852,7 +2873,7 @@
                     </select>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                     <div>
                         <label
                             style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Data
@@ -2864,6 +2885,15 @@
                         <label
                             style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Concluído</label>
                         <select id="denuncia-concluido"
+                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                            <option value="false">Não</option>
+                            <option value="true">Sim</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label
+                            style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Área de Preservação Permanente</label>
+                        <select id="denuncia-app-preservacao"
                             style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
                             <option value="false">Não</option>
                             <option value="true">Sim</option>
@@ -2965,6 +2995,125 @@
             <div class="modal-footer" style="justify-content: space-between;">
                 <button class="btn-cancelar" onclick="fecharModalNovaDenuncia()">Cancelar</button>
                 <button class="btn-salvar" onclick="salvarDenuncia()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL AREA DE PRESERVACAO PERMANENTE -->
+    <div class="modal-overlay" id="modal-area-preservacao" style="display: none;">
+        <div class="modal-container" style="max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>Área de Preservação Permanente</h2>
+                <button class="modal-close" onclick="fecharModalAreaPreservacao()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-area-preservacao-body" style="flex: 1; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+                <!-- Barra de filtros fixa -->
+                <div id="area-preservacao-filtros" style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px; max-width: 320px;">
+                        <input type="text" id="busca-area-preservacao" placeholder="Pesquisar em todas as colunas..."
+                            oninput="aplicarFiltrosAreaPreservacao()"
+                            style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;">
+                    </div>
+                    <div style="position: relative;">
+                        <button id="btn-filtro-area-preservacao-toggle" onclick="togglePainelFiltroAreaPreservacao()"
+                            style="padding: 0.55rem 1.2rem; background: #0c3e2b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;"
+                            onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            Filtro
+                        </button>
+                        <div id="painel-filtro-area-preservacao-popup"
+                            style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:20px; z-index:100; min-width:290px; border:1px solid #e2e8f0;">
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Tipo</label>
+                                <select id="filtro-area-preservacao-tipo" onchange="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                                    <option value="">Todos</option>
+                                    <option value="comunicacao_interna">Comunicação Interna</option>
+                                    <option value="vereadores">Vereadores</option>
+                                    <option value="mp">MP</option>
+                                    <option value="app">APP</option>
+                                    <option value="ouvidoria">Ouvidoria</option>
+                                    <option value="protocolo">Protocolo</option>
+                                </select>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Origem</label>
+                                <input type="text" id="filtro-area-preservacao-origem" list="datalist-area-preservacao-origem" placeholder="Digite ou selecione..."
+                                    oninput="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                <datalist id="datalist-area-preservacao-origem"></datalist>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Responsável</label>
+                                <input type="text" id="filtro-area-preservacao-encaminhado" list="datalist-area-preservacao-encaminhado" placeholder="Digite ou selecione..."
+                                    oninput="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                <datalist id="datalist-area-preservacao-encaminhado"></datalist>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Status</label>
+                                <select id="filtro-area-preservacao-concluido" onchange="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                                    <option value="">Todos</option>
+                                    <option value="true">Concluído</option>
+                                    <option value="false">Pendente</option>
+                                </select>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Prazo</label>
+                                <select id="filtro-area-preservacao-vencido" onchange="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                                    <option value="">Todos</option>
+                                    <option value="vencido">Vencido</option>
+                                    <option value="no_prazo">No Prazo</option>
+                                </select>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Início</label>
+                                <input type="date" id="filtro-area-preservacao-data-inicio"
+                                    onchange="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Data Fim</label>
+                                <input type="date" id="filtro-area-preservacao-data-fim"
+                                    onchange="aplicarFiltrosAreaPreservacao()"
+                                    style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                            </div>
+                            <button onclick="limparFiltrosAreaPreservacao()"
+                                style="width:100%; padding:8px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; transition:0.2s;"
+                                onmouseover="this.style.background='#e2e8f0'"
+                                onmouseout="this.style.background='#f1f5f9'">
+                                Limpar Filtros
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Container da tabela -->
+                <div id="area-preservacao-tabela-container" style="flex: 1; overflow: hidden;"></div>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button onclick="baixarCSVAreaPreservacao()"
+                    style="padding: 0.55rem 1.2rem; background: #1e3a5f; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                    onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e3a5f'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Baixar CSV
+                </button>
+                <button class="btn-cancelar" onclick="fecharModalAreaPreservacao()">Fechar</button>
             </div>
         </div>
     </div>
