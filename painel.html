@@ -1358,6 +1358,27 @@
                         </svg>
                         Efetivados
                     </button>
+                    <button id="btn-pendentes-hg" onclick="abrirModalPendentes()"
+                        style="padding: 0.55rem 1.2rem; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Pendentes
+                    </button>
+                    <button id="btn-nao-efetivados-hg" onclick="abrirModalNaoEfetivados()"
+                        style="padding: 0.55rem 1.2rem; background: #f59e0b; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
+                        onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 3l18 18"></path>
+                            <path d="M10.5 10.5l-4.5 4.5"></path>
+                            <path d="M13.5 13.5l4.5 -4.5"></path>
+                        </svg>
+                        Não Efetivados
+                    </button>
                     <button id="btn-vencidos-hg" onclick="abrirModalVencidos()"
                         style="padding: 0.55rem 1.2rem; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;"
                         onmouseover="this.style.background='#b91d1d'" onmouseout="this.style.background='#dc2626'">

@@ -1635,3 +1635,9 @@ Para adicionar novos polígonos, edite o arquivo GeoJSON (ex: via QGIS ou geojso
 - **Notificação e Aprovação Integrada**: A solicitação notifica automaticamente o criador da tarefa ou gestores com permissão, para aprovar ou recusar a mudança através de um card flutuante amarelo na UI da tarefa. Em caso de subtarefas, os responsáveis da tarefa pai também são notificados e detém poder de controle.
 - **Histórico Completo de Prazos (JSONB)**: Em vez de simplesmente sobrescrever o prazo, as extensões aprovadas preservam o prazo que foi substituído numa lista de histórico na coluna `prazo_anterior` (migrada para JSONB no Supabase). 
 - **Display Discreto**: Na interface, todo o histórico anterior aparece listado acima do prazo vigente, em cinza claro e no formato tachado (riscado), conferindo fácil rastreabilidade e controle das falhas de cronograma sem poluir visualmente o card.
+
+### ⏳ Nova Aba de "Pendentes" e Padronização Visual de Modais
+- **Aba "Pendentes"**: Adicionada uma nova visualização no Histórico Geral para listar documentos pendentes. Um registro é filtrado como "Pendente" quando não possui nenhuma data de andamento preenchida (Data de Vencimento, Data de Recebimento, Histórico Admin ou Resposta do Fiscal).
+- **Alerta de Atraso**: Registros pendentes há mais de 180 dias agora recebem um destaque visual vermelho direto na coluna "Período Pendente".
+- **Padronização de UI e Ordenação Persistente**: O modal de Pendentes recebeu o mesmo design robusto dos demais. Foi adicionada correção em todos os modais (Vencidos, Não Efetivados, Atendidos, Pendentes) para garantir que o menu dropdown de "Ordenar por..." não perca a seleção após aplicar a ordem visual.
+- **Nomenclatura Dinâmica em Não Efetivados**: A aba agora exibe o texto da categoria de documento correta baseada na seleção (ex: mostrando "Autos de Infração Devolvidos" em vez de ficar chumbado como "Notificações").
