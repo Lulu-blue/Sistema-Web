@@ -2940,12 +2940,14 @@
                 </div>
 
                 <div id="wrap-denuncia-bairro">
-                    <label
-                        style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Bairro</label>
-                    <select id="denuncia-bairro"
-                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
-                        <option value="">Selecione o bairro...</option>
-                    </select>
+                    <label style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Bairro(s) *</label>
+                    <div style="border:1px solid #cbd5e1; border-radius:6px; background:white; padding: 6px;">
+                        <div id="denuncia-bairro-selecionados" style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; display: none;"></div>
+                        <input type="text" id="denuncia-bairro-busca" placeholder="Pesquisar bairro..." style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; margin-bottom:6px; outline:none;">
+                        <div id="denuncia-bairro-lista" style="max-height: 140px; overflow-y: auto; font-size: 13px; padding-right: 5px;">
+                            <!-- Checkboxes renderizados via JS -->
+                        </div>
+                    </div>
                 </div>
 
                 <div id="wrap-denuncia-solicitante" style="display:none;">
