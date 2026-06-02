@@ -860,7 +860,7 @@ function renderizarAreasDemanda() {
     var demandas = calcularDemandaAreas();
     var comDemanda = demandas.filter(function (d) { return d.total > 0; });
     if (comDemanda.length === 0) {
-        container.innerHTML = '<div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">Nenhuma demanda nos últimos 30 dias.</div>';
+        container.innerHTML = '<div style="color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0;">Nenhuma demanda registrada.</div>';
         return;
     }
 
@@ -905,14 +905,12 @@ async function carregarGraficoBairros(tentativa) {
 
     try {
         var hoje = new Date();
-        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
         // Buscar NP + AI
         var { data: registrosCP, error } = await supabaseClient
             .from('controle_processual')
             .select('categoria_id, campos')
-            .in('categoria_id', ['1.1', '1.2']) // 1.1 = NP, 1.2 = AI
-            .gte('created_at', trintaDiasAtras);
+            .in('categoria_id', ['1.1', '1.2']); // 1.1 = NP, 1.2 = AI
 
         if (error) throw error;
         if (!registrosCP) registrosCP = [];
@@ -934,11 +932,15 @@ async function carregarGraficoBairros(tentativa) {
         // Buscar Denúncias
         var { data: registrosDen, errorDen } = await supabaseClient
             .from('controle_denuncias')
-            .select('bairro, tipo')
-            .gte('created_at', trintaDiasAtras);
+            .select('bairro, tipo');
+
+        if (errorDen) {
+            console.error('Erro ao buscar denúncias para gráfico:', errorDen);
+        }
 
         var contagemDenuncias = {};
         if (!errorDen && registrosDen) {
+            console.log('[Gráfico Bairros] Denúncias carregadas:', registrosDen.length);
             registrosDen.forEach(function (r) {
                 var bairro = r.bairro ? normalizarNomeBairro(r.bairro) : '';
                 if (!bairro) return; // Ignora denúncias sem bairro
@@ -946,6 +948,7 @@ async function carregarGraficoBairros(tentativa) {
                 var t = r.tipo || 'outro';
                 contagemDenuncias[bairro][t] = (contagemDenuncias[bairro][t] || 0) + 1;
             });
+            console.log('[Gráfico Bairros] Contagem denúncias por bairro:', contagemDenuncias);
         }
 
         dadosGraficoBairros.np = contagemNP;
@@ -1524,24 +1527,59 @@ function ajustarCamposFormDenuncia() {
     colocarDepois(elDataPrazo, elObs);
 }
 
-async function carregarDatalistBairrosDenuncia() {
-    var datalist = document.getElementById('datalist-bairros-denuncia');
-    if (!datalist) return;
-    if (datalist.children.length > 0) return; // já carregado
+var bairrosDenunciaCache = [];
+
+async function carregarSelectBairroDenuncia() {
+    var select = document.getElementById('denuncia-bairro');
+    if (!select) return;
+    // Preservar valor atual se já carregado
+    var valorAtual = select.value;
+    if (bairrosDenunciaCache.length > 0) {
+        renderizarSelectBairroDenuncia(bairrosDenunciaCache);
+        if (valorAtual) select.value = valorAtual;
+        return;
+    }
     try {
         var { data, error } = await supabaseClient
             .from('bairros')
             .select('nome')
             .order('nome', { ascending: true });
         if (error) throw error;
-        (data || []).forEach(function (b) {
-            var opt = document.createElement('option');
-            opt.value = b.nome;
-            datalist.appendChild(opt);
-        });
+        bairrosDenunciaCache = (data || []).map(function (b) { return b.nome; });
+        renderizarSelectBairroDenuncia(bairrosDenunciaCache);
+        if (valorAtual) select.value = valorAtual;
     } catch (err) {
-        console.error('Erro ao carregar bairros para datalist:', err);
+        console.error('Erro ao carregar bairros para denúncias:', err);
     }
+}
+
+function renderizarSelectBairroDenuncia(lista) {
+    var select = document.getElementById('denuncia-bairro');
+    if (!select) return;
+    // Preservar valor atual para não perder seleção do usuário durante carregamento async
+    var valorAtual = select.value;
+    select.innerHTML = '<option value="">Selecione o bairro...</option>';
+    lista.forEach(function (nome) {
+        var opt = document.createElement('option');
+        opt.value = nome;
+        opt.textContent = nome;
+        select.appendChild(opt);
+    });
+    if (valorAtual) {
+        select.value = valorAtual;
+    }
+}
+
+function obterBairroSelecionadoDenuncia() {
+    var select = document.getElementById('denuncia-bairro');
+    if (!select) return '';
+    return select.value;
+}
+
+function marcarBairroSelecionadoDenuncia(valor) {
+    var select = document.getElementById('denuncia-bairro');
+    if (!select) return;
+    select.value = valor || '';
 }
 
 function abrirModalNovaDenuncia() {
@@ -1556,6 +1594,7 @@ function abrirModalNovaDenuncia() {
     document.getElementById('denuncia-descricao').value = '';
     document.getElementById('denuncia-endereco').value = '';
     document.getElementById('denuncia-bairro').value = '';
+    marcarBairroSelecionadoDenuncia('');
     document.getElementById('denuncia-encaminhado').value = '';
     document.getElementById('denuncia-encaminhado-busca').value = '';
     document.getElementById('denuncia-data-entrega').value = '';
@@ -1569,7 +1608,7 @@ function abrirModalNovaDenuncia() {
 
     ajustarCamposFormDenuncia();
     carregarSelectFiscaisPosturas();
-    carregarDatalistBairrosDenuncia();
+    carregarSelectBairroDenuncia();
 
     modal.style.display = 'flex';
     modal.classList.add('ativo');
@@ -1620,6 +1659,7 @@ async function salvarDenuncia() {
             Swal.fire({ icon: 'success', title: 'Salvo!', text: 'Status atualizado com sucesso.', confirmButtonColor: '#0f172a', timer: 1500 });
             fecharModalNovaDenuncia();
             carregarControleDenuncias(subAbaDenunciasAtual);
+            await carregarGraficoBairros();
             return;
         }
 
@@ -1629,7 +1669,7 @@ async function salvarDenuncia() {
         var origem = document.getElementById('denuncia-origem').value.trim();
         var descricao = document.getElementById('denuncia-descricao').value.trim();
         var endereco = document.getElementById('denuncia-endereco').value.trim();
-        var bairro = document.getElementById('denuncia-bairro').value.trim();
+        var bairro = obterBairroSelecionadoDenuncia();
         var encaminhado = document.getElementById('denuncia-encaminhado').value;
         var dataEntrega = document.getElementById('denuncia-data-entrega').value;
         var prazo = document.getElementById('denuncia-prazo').value;
@@ -1650,6 +1690,7 @@ async function salvarDenuncia() {
         if ((tipo === 'vereadores' || tipo === 'mp' || tipo === 'ouvidoria') && !descricao) {
             Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha a Descrição.', confirmButtonColor: '#0f172a' }); return;
         }
+        if (!bairro) { Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Selecione o Bairro.', confirmButtonColor: '#0f172a' }); return; }
 
         var fiscalNome = '';
         var fiscalEncontrado = usuariosDenunciasGlobal.find(function (f) { return f.id === encaminhado; });
@@ -1687,6 +1728,7 @@ async function salvarDenuncia() {
         Swal.fire({ icon: 'success', title: 'Salvo!', text: 'Registro salvo com sucesso.', confirmButtonColor: '#0f172a', timer: 1500 });
         fecharModalNovaDenuncia();
         carregarControleDenuncias(subAbaDenunciasAtual);
+        await carregarGraficoBairros();
     } catch (err) {
         console.error('Erro ao salvar denúncia:', err);
         Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível salvar. Tente novamente.', confirmButtonColor: '#0f172a' });
@@ -1716,7 +1758,6 @@ async function editarDenuncia(id) {
         document.getElementById('denuncia-origem').value = reg.origem || '';
         document.getElementById('denuncia-descricao').value = reg.descricao || '';
         document.getElementById('denuncia-endereco').value = reg.endereco || '';
-        document.getElementById('denuncia-bairro').value = reg.bairro || '';
         document.getElementById('denuncia-data-entrega').value = reg.data_entrega || '';
         document.getElementById('denuncia-prazo').value = reg.prazo_conclusao || '';
         document.getElementById('denuncia-protocolo').value = reg.protocolo || '';
@@ -1727,6 +1768,8 @@ async function editarDenuncia(id) {
         document.getElementById('titulo-modal-denuncia').innerText = 'Editar Linha';
 
         ajustarCamposFormDenuncia();
+        await carregarSelectBairroDenuncia();
+        marcarBairroSelecionadoDenuncia(reg.bairro || '');
         await carregarUsuariosDenuncias();
         document.getElementById('denuncia-encaminhado').value = reg.encaminhado_para || '';
         var usuarioEnc = usuariosDenunciasGlobal.find(function (u) { return u.id === reg.encaminhado_para; });
@@ -1765,7 +1808,6 @@ async function editarDenunciaConcluido(id) {
         document.getElementById('denuncia-origem').value = reg.origem || '';
         document.getElementById('denuncia-descricao').value = reg.descricao || '';
         document.getElementById('denuncia-endereco').value = reg.endereco || '';
-        document.getElementById('denuncia-bairro').value = reg.bairro || '';
         document.getElementById('denuncia-data-entrega').value = reg.data_entrega || '';
         document.getElementById('denuncia-prazo').value = reg.prazo_conclusao || '';
         document.getElementById('denuncia-protocolo').value = reg.protocolo || '';
@@ -1776,6 +1818,8 @@ async function editarDenunciaConcluido(id) {
         document.getElementById('titulo-modal-denuncia').innerText = 'Alterar Status';
 
         ajustarCamposFormDenuncia();
+        await carregarSelectBairroDenuncia();
+        marcarBairroSelecionadoDenuncia(reg.bairro || '');
         await carregarUsuariosDenuncias();
         document.getElementById('denuncia-encaminhado').value = reg.encaminhado_para || '';
         var usuarioEnc = usuariosDenunciasGlobal.find(function (u) { return u.id === reg.encaminhado_para; });
@@ -1827,6 +1871,7 @@ async function excluirDenuncia(id) {
         if (error) throw error;
         Swal.fire({ icon: 'success', title: 'Excluído!', text: 'Registro removido.', confirmButtonColor: '#0f172a', timer: 1500 });
         carregarControleDenuncias(subAbaDenunciasAtual);
+        await carregarGraficoBairros();
     } catch (err) {
         console.error('Erro ao excluir denúncia:', err);
         Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível excluir.', confirmButtonColor: '#0f172a' });
@@ -2210,29 +2255,31 @@ async function carregarGestaoBairrosAreas() {
         if (errBairros) throw errBairros;
 
         // 3. Buscar Registros Processuais (para contagem igual ao grafico)
-        var hoje = new Date();
-        var trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
         var { data: registrosCP, error: errCP } = await supabaseClient
             .from('controle_processual')
             .select('categoria_id, campos')
-            .in('categoria_id', ['1.1', '1.2']) // NP e AI
-            .gte('created_at', trintaDiasAtras);
+            .in('categoria_id', ['1.1', '1.2']); // NP e AI
 
         // 3.1 Buscar Denúncias para contagem por bairro
         var { data: registrosDen, error: errDen } = await supabaseClient
             .from('controle_denuncias')
-            .select('bairro, tipo')
-            .gte('created_at', trintaDiasAtras);
+            .select('bairro, tipo');
 
         var denPorBairro = {};
         if (!errDen && registrosDen) {
+            console.log('[Gestão Bairros] Denúncias carregadas:', registrosDen.length);
             registrosDen.forEach(function (r) {
-                var b = r.bairro ? normalizarNomeBairro(r.bairro) : '';
-                if (!b) return; // Ignora denúncias sem bairro
-                if (!denPorBairro[b]) denPorBairro[b] = {};
-                var t = r.tipo || 'outro';
-                denPorBairro[b][t] = (denPorBairro[b][t] || 0) + 1;
+                var bairros = r.bairro ? r.bairro.split(',').map(function (b) { return normalizarNomeBairro(b.trim()); }).filter(function (b) { return b; }) : [];
+                if (bairros.length === 0) return; // Ignora denúncias sem bairro
+                bairros.forEach(function (b) {
+                    if (!denPorBairro[b]) denPorBairro[b] = {};
+                    var t = r.tipo || 'outro';
+                    denPorBairro[b][t] = (denPorBairro[b][t] || 0) + 1;
+                });
             });
+            console.log('[Gestão Bairros] Contagem denúncias por bairro:', denPorBairro);
+        } else if (errDen) {
+            console.error('Erro ao buscar denúncias para gestão:', errDen);
         }
 
         globalAreas = areasData || [];
@@ -4010,7 +4057,7 @@ function abrirModalRotacaoBairros() {
                 </div>
                 <div class="modal-body" style="padding-top: 10px; display: flex; flex-direction: column; gap: 12px;">
                     <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 10px;">
-                        Gerencie a distribuição inteligente de bairros nas áreas de atuação existentes com base no peso processual dos últimos 30 dias.
+                        Gerencie a distribuição inteligente de bairros nas áreas de atuação existentes com base no peso processual.
                     </p>
                     
                     <button onclick="baixarRotacaoAtual()" style="background: white; border: 1px solid #cbd5e1; color: #334155; padding: 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 500; font-size: 14px;">
@@ -4123,7 +4170,7 @@ function baixarRotacaoAtual() {
 }
 
 async function atualizarRotacaoInteligente() {
-    if (!confirm("Atenção: Isso redistribuirá todos os bairros baseando-se no número de processos ativos dos últimos 30 dias. A distribuição atual será substituída. Deseja continuar?")) return;
+    if (!confirm("Atenção: Isso redistribuirá todos os bairros baseando-se no número de processos ativos. A distribuição atual será substituída. Deseja continuar?")) return;
 
     // 1. Snapshot do estado atual p/ localStorage (Backup)
     const backupAnterior = globalBairros.map(b => ({ id: b.id, area_id: b.area_id }));

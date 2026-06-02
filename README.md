@@ -235,6 +235,7 @@ Módulo com 6 sub-abas independentes para acompanhamento de demandas externas:
 - **CRUD completo**: Formulário modal para criar/editar/excluir registros por tipo.
 - **Campos por tipo**: Protocolo usa `protocolo` + `solicitante`; os demais usam `tarefa` + `origem`.
 - **Área de Preservação Permanente (APP)**: Coluna e campo em **todos os tipos de denúncia**. No formulário de criação/edição, exibe select **Sim/Não** (default: **Não**). Na tabela, exibe badge "Sim" (verde) ou "Não" (cinza).
+- **Campo Bairro (Multi-seleção)**: No formulário de denúncias, o campo Bairro permite selecionar **um ou mais bairros** via checkboxes com busca/filtro. Os bairros são salvos como string separada por vírgula e cada um é contabilizado individualmente no peso dos gráficos de bairros.
 - **Botão "Área de Preservação Permanente"**: Botão exclusivo acima das sub-abas que abre modal com todos os registros (de todos os tipos) marcados como `app_preservacao = true`.
   - **Modal com filtros completos**: Popup "Filtro" com Origem, Responsável, Tipo, Status, Prazo, Data Início/Fim + busca textual global + datalists dinâmicos.
   - **Download CSV**: Exportação `.csv` diretamente do modal, com colunas completas e BOM UTF-8.

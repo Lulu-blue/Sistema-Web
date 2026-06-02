@@ -2120,19 +2120,8 @@ async function uploadAvatarLocal(event) {
         var extensao = file.name.split('.').pop();
         var filePath = user.id + '/' + Date.now() + '_avatar.' + extensao;
 
-        var uploadResult = await supabaseClient
-            .storage
-            .from('avatars')
-            .upload(filePath, file, { upsert: true });
-
-        if (uploadResult.error) throw uploadResult.error;
-
-        var publicUrlData = supabaseClient
-            .storage
-            .from('avatars')
-            .getPublicUrl(filePath);
-
-        var urlAvatar = publicUrlData.data.publicUrl;
+        var uploadResult = await cloudinaryUploadComPath(file, 'avatars/' + filePath);
+        var urlAvatar = uploadResult.url;
 
         var updateResult = await supabaseClient
             .from('profiles')

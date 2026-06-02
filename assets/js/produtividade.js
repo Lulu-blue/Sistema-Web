@@ -2090,22 +2090,17 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 const caminho = `${user.id}/${nomeArquivo}`;
                 const tabela = categoriaAtual.destaque ? 'controle_processual' : 'registros_produtividade';
 
-                const { error: uploadError } = await supabaseClient.storage
-                    .from('anexos')
-                    .upload(caminho, arquivoAnexo.file, { upsert: true });
-
-                if (uploadError) {
-                    console.error('Erro no upload:', uploadError);
-                    alert('Registro salvo, mas erro ao anexar PDF: ' + uploadError.message);
-                } else {
-                    // Salvar caminho do arquivo no registro
-                    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-                    const camposAtualizados = { ...campos, [arquivoAnexo.nome]: urlData.publicUrl };
+                try {
+                    const uploadResult = await cloudinaryUploadComPath(arquivoAnexo.file, 'anexos/' + caminho);
+                    const camposAtualizados = { ...campos, [arquivoAnexo.nome]: uploadResult.url };
 
                     await supabaseClient
                         .from(tabela)
                         .update({ campos: camposAtualizados })
                         .eq('id', registroId);
+                } catch (uploadError) {
+                    console.error('Erro no upload:', uploadError);
+                    alert('Registro salvo, mas erro ao anexar PDF: ' + uploadError.message);
                 }
             }
 
@@ -3894,11 +3889,10 @@ async function salvarDetalhesHist(id) {
         const nomeArquivo = `AR_${id}_${nomeAnexoLimpo}`;
         const caminho = `${user.id}/${nomeArquivo}`;
 
-        const { error: uploadError } = await supabaseClient.storage
-            .from('anexos')
-            .upload(caminho, arquivoAR, { upsert: true });
-
-        if (uploadError) {
+        try {
+            const uploadResult = await cloudinaryUploadComPath(arquivoAR, 'anexos/' + caminho);
+            novosCampos.anexo_ar = uploadResult.url;
+        } catch (uploadError) {
             console.error('Erro no upload AR:', uploadError);
             alert('Erro ao anexar arquivo AR: ' + uploadError.message);
             if (btnSalvar) {
@@ -3906,9 +3900,6 @@ async function salvarDetalhesHist(id) {
                 btnSalvar.disabled = false;
             }
             return;
-        } else {
-            const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-            novosCampos.anexo_ar = urlData.publicUrl;
         }
     }
 
@@ -3940,11 +3931,10 @@ async function salvarDetalhesHist(id) {
         if (filePrinc) {
             let nomeAnexoLimpo = filePrinc.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-\.]/g, '');
             const caminho = `${user.id}/DOC_${id}_${Date.now()}_${nomeAnexoLimpo}`;
-            const { error: uploadError } = await supabaseClient.storage.from('anexos').upload(caminho, filePrinc, { upsert: true });
-            if (!uploadError) {
-                const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-                novosCampos.anexo_pdf = urlData.publicUrl;
-            } else {
+            try {
+                const uploadResult = await cloudinaryUploadComPath(filePrinc, 'anexos/' + caminho);
+                novosCampos.anexo_pdf = uploadResult.url;
+            } catch (uploadError) {
                 alert('Erro ao salvar documento principal: ' + uploadError.message);
             }
         }
@@ -3967,10 +3957,11 @@ async function salvarDetalhesHist(id) {
                 const fileExt = inputExtras.files[i];
                 let nomeAnexoLimpo = fileExt.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-\.]/g, '');
                 const caminho = `${user.id}/EXTRA_${id}_${Date.now()}_${i}_${nomeAnexoLimpo}`;
-                const { error: upErr } = await supabaseClient.storage.from('anexos').upload(caminho, fileExt, { upsert: true });
-                if (!upErr) {
-                    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-                    anexosExtrasAtual.push(urlData.publicUrl);
+                try {
+                    const uploadResult = await cloudinaryUploadComPath(fileExt, 'anexos/' + caminho);
+                    anexosExtrasAtual.push(uploadResult.url);
+                } catch (upErr) {
+                    console.error('Erro upload anexo extra:', upErr);
                 }
             }
         }
@@ -4768,21 +4759,17 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
     const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
     const caminho = `${user.id}/${nomeArquivo}`;
 
-    const { error: uploadError } = await supabaseClient.storage
-        .from('anexos')
-        .upload(caminho, blobPdf, { upsert: true });
-
-    if (uploadError) {
+    try {
+        const uploadResult = await cloudinaryUploadComPath(blobPdf, 'anexos/' + caminho);
+        const camposAtualizados = {
+            ...rascunhoDocumento.campos,
+            anexo_pdf: uploadResult.url
+        };
+    } catch (uploadError) {
         console.error('Erro no upload:', uploadError);
         alert('Documento baixado, mas erro ao anexar PDF: ' + uploadError.message);
         throw uploadError;
     }
-
-    const { data: urlData } = supabaseClient.storage.from('anexos').getPublicUrl(caminho);
-    const camposAtualizados = {
-        ...rascunhoDocumento.campos,
-        anexo_pdf: urlData.publicUrl
-    };
 
     // Atualizar registro com pontuação e anexo
     const { error: updateError } = await supabaseClient

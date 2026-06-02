@@ -813,7 +813,6 @@
                                     </svg>
                                     Eventos e Projetos
                                 </h3>
-                                <span style="font-size: 12px; color: #64748b;">Próximos 30 dias</span>
                             </div>
                             <div id="home-especial-calendario">
                                 <div
@@ -1080,7 +1079,7 @@
                                         <line x1="16" y1="17" x2="8" y2="17" />
                                         <polyline points="10 9 9 9 8 9" />
                                     </svg>
-                                    Controle Processual (30 dias)
+                                    Controle Processual
                                 </h3>
                             </div>
                             <div id="secretario-grafico-documentos" style="position: relative; height: 180px;">
@@ -2943,10 +2942,10 @@
                 <div id="wrap-denuncia-bairro">
                     <label
                         style="display:block; font-weight:600; margin-bottom:5px; font-size:13px; color:#475569;">Bairro</label>
-                    <input type="text" id="denuncia-bairro" list="datalist-bairros-denuncia"
-                        placeholder="Selecione ou digite o bairro..."
-                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
-                    <datalist id="datalist-bairros-denuncia"></datalist>
+                    <select id="denuncia-bairro"
+                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none; background:white;">
+                        <option value="">Selecione o bairro...</option>
+                    </select>
                 </div>
 
                 <div id="wrap-denuncia-solicitante" style="display:none;">
@@ -3164,6 +3163,7 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="assets/js/protecao.js"></script>
     <script src="assets/js/cabecalho_img.js"></script>
+    <script src="assets/js/cloudinary-storage.js"></script>
     <script src="assets/js/produtividade.js"></script>
     <!-- GeoJSON dos bairros e município (carregado como JS para evitar CORS em file://) -->
     <script src="assets/geojson/bairros_divinopolis_geojson.js"></script>

@@ -1785,9 +1785,10 @@ async function salvarTarefa() {
                     var file = arquivos[i];
                     var filePath = _tarefaEditandoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
                     uploadPromises.push((async function (f, fPath) {
-                        var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(fPath, f);
-                        if (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
-                        var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(fPath).data.publicUrl;
+                        try {
+                            var uploadResult = await cloudinaryUploadComPath(f, 'tarefa_anexos/' + fPath);
+                            var publicUrl = uploadResult.url;
+                        } catch (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
                         return { tarefa_id: _tarefaEditandoId, nome_arquivo: f.name, url: publicUrl };
                     })(file, filePath));
                 }
@@ -1839,9 +1840,10 @@ async function salvarTarefa() {
                 var file = arquivos[i];
                 var filePath = novaTarefa.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
                 uploadPromises.push((async function (f, fPath) {
-                    var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(fPath, f);
-                    if (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
-                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(fPath).data.publicUrl;
+                    try {
+                        var uploadResult = await cloudinaryUploadComPath(f, 'tarefa_anexos/' + fPath);
+                        var publicUrl = uploadResult.url;
+                    } catch (uploadErr) { console.error('Erro upload anexo:', uploadErr); return null; }
                     return { tarefa_id: novaTarefa.id, nome_arquivo: f.name, url: publicUrl };
                 })(file, filePath));
             }
@@ -2219,9 +2221,8 @@ async function uploadAnexoSubModal(subId, tarefaPaiId, inputEl) {
     var nomeSanitizado = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '_');
     var caminho = userIdGlobal + '/' + Date.now() + '_' + nomeSanitizado;
     try {
-        var { error: upErr } = await supabaseClient.storage.from('tarefa_anexos').upload(caminho, file, { cacheControl: '3600', upsert: false });
-        if (upErr) throw upErr;
-        var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(caminho);
+        var uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + caminho);
+        var urlData = { publicUrl: uploadResult.url };
         var { error: insErr } = await supabaseClient.from('tarefa_anexos').insert({ tarefa_id: subId, nome_arquivo: file.name, url: urlData.publicUrl, uploaded_by: userIdGlobal });
         if (insErr) throw insErr;
         // Se estava pendente, muda para em_progresso
@@ -3307,10 +3308,9 @@ async function excluirTarefa(id) {
         var { data: comentariosDel } = await supabaseClient.from('tarefa_comentarios').select('id').eq('tarefa_id', id);
         var { data: anexosComDel } = await supabaseClient.from('tarefa_comentario_anexos').select('url').in('comentario_id', (comentariosDel || []).map(function(c){ return c.id; }));
 
-        var todosAnexos = (anexosDel || []).concat(anexosComDel || []);
-        var paths = [];
-        todosAnexos.forEach(function(a) { if (a.url) { var p = a.url.split('/tarefa_anexos/'); if (p.length > 1) paths.push(p[1]); } });
-        if (paths.length > 0) await supabaseClient.storage.from('tarefa_anexos').remove(paths);
+        // Nota: os arquivos permanecem no Cloudinary. A limpeza de storage
+        // será feita no final do ano conforme processo existente.
+        // (Remover do banco é suficiente para "excluir" o anexo do SEMAC)
 
         await supabaseClient.from('tarefas').delete().eq('id', id);
         fecharModal('modal-detalhe-tarefa');
@@ -3678,15 +3678,17 @@ async function confirmarSubtarefa(tarefaPaiId) {
             // Upload de novo anexo se houver
             if (anexoFile) {
                 var filePath = _subtarefaEditandoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(anexoFile.name);
-                var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, anexoFile);
-                if (!uploadErr) {
-                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+                try {
+                    var uploadResult = await cloudinaryUploadComPath(anexoFile, 'tarefa_anexos/' + filePath);
+                    var publicUrl = uploadResult.url;
                     await supabaseClient.from('tarefa_anexos').insert({
                         tarefa_id: _subtarefaEditandoId,
                         nome_arquivo: anexoFile.name,
                         url: publicUrl,
                         uploaded_by: userIdGlobal
                     });
+                } catch (upErr) {
+                    console.error('Erro upload anexo subtarefa:', upErr);
                 }
             }
 
@@ -3720,15 +3722,17 @@ async function confirmarSubtarefa(tarefaPaiId) {
 
             if (anexoFile) {
                 var filePath = nova.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(anexoFile.name);
-                var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, anexoFile);
-                if (!uploadErr) {
-                    var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+                try {
+                    var uploadResult = await cloudinaryUploadComPath(anexoFile, 'tarefa_anexos/' + filePath);
+                    var publicUrl = uploadResult.url;
                     await supabaseClient.from('tarefa_anexos').insert({
                         tarefa_id: nova.id,
                         nome_arquivo: anexoFile.name,
                         url: publicUrl,
                         uploaded_by: userIdGlobal
                     });
+                } catch (upErr) {
+                    console.error('Erro upload anexo subtarefa (criacao):', upErr);
                 }
             }
         }
@@ -3891,18 +3895,14 @@ async function uploadAnexo(tarefaId, inputEl) {
         }
         
         var filePath = tarefaId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
-        var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
-        if (uploadErr) {
+        try {
+            var uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + filePath);
+            var publicUrl = uploadResult.url;
+        } catch (uploadErr) {
             console.error('Erro no upload do storage:', uploadErr);
-            if (uploadErr.message && uploadErr.message.toLowerCase().includes('policy')) {
-                Swal.fire('Erro de Permissão', 'Falha ao enviar arquivo para o Storage. Verifique se as políticas do bucket "tarefa_anexos" permitem upload para usuários autenticados.', 'error');
-            } else {
-                Swal.fire('Erro no Upload', 'Falha ao enviar arquivo para o Storage: ' + uploadErr.message, 'error');
-            }
+            Swal.fire('Erro no Upload', 'Falha ao enviar arquivo para o Storage: ' + uploadErr.message, 'error');
             return;
         }
-
-        var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
 
         var { error: insertErr } = await supabaseClient.from('tarefa_anexos').insert({
             tarefa_id: tarefaId,
@@ -4970,15 +4970,18 @@ async function salvarEventoAvancado() {
                 // Por simplicidade, vamos usar o mesmo bucket
                 for (var f of t.arquivos) {
                     var path = 'tarefas/' + tData.id + '/' + Date.now() + '_' + sanitizarNomeArquivo(f.name);
-                    var { error: upErr } = await supabaseClient.storage.from('tarefa_anexos').upload(path, f);
-                    if (upErr) continue;
-                    var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(path);
-                    await supabaseClient.from('tarefa_anexos').insert({
-                        tarefa_id: tData.id,
-                        nome_arquivo: f.name,
-                        url: urlData.publicUrl,
-                        uploaded_by: userIdGlobal
-                    });
+                    try {
+                        var uploadResult = await cloudinaryUploadComPath(f, 'tarefa_anexos/' + path);
+                        await supabaseClient.from('tarefa_anexos').insert({
+                            tarefa_id: tData.id,
+                            nome_arquivo: f.name,
+                            url: uploadResult.url,
+                            uploaded_by: userIdGlobal
+                        });
+                    } catch (upErr) {
+                        console.error('Erro upload anexo tarefa:', upErr);
+                        continue;
+                    }
                 }
             }
         }
@@ -5004,16 +5007,17 @@ async function uploadArquivosEvento(eventoId, files) {
     for (var i = 0; i < files.length; i++) {
         var file = files[i];
         var path = eventoId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
-        var { data, error } = await supabaseClient.storage.from('tarefa_anexos').upload(path, file);
-        if (error) continue;
-
-        var { data: urlData } = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(path);
-
-        await supabaseClient.from('evento_anexos').insert({
-            evento_id: eventoId,
-            nome_arquivo: file.name,
-            url: urlData.publicUrl
-        });
+        try {
+            var uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + path);
+            await supabaseClient.from('evento_anexos').insert({
+                evento_id: eventoId,
+                nome_arquivo: file.name,
+                url: uploadResult.url
+            });
+        } catch (error) {
+            console.error('Erro upload evento:', error);
+            continue;
+        }
     }
 }
 async function abrirModalEditarEvento(id) {
@@ -5179,10 +5183,8 @@ async function salvarEdicaoEvento(id) {
                 const fileName = `${Math.random()}.${fileExt}`;
                 const filePath = `eventos/${id}/${fileName}`;
 
-                const { error: uploadError } = await supabaseClient.storage.from('tarefa-anexos').upload(filePath, file);
-                if (uploadError) throw uploadError;
-
-                const { data: { publicUrl } } = supabaseClient.storage.from('tarefa-anexos').getPublicUrl(filePath);
+                const uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + filePath);
+                const publicUrl = uploadResult.url;
 
                 await supabaseClient.from('evento_anexos').insert({
                     evento_id: id,
@@ -5222,9 +5224,8 @@ async function enviarComentarioTarefa(tarefaId) {
         for (var i = 0; i < arquivos.length; i++) {
             var file = arquivos[i];
             var filePath = 'comentarios/' + tarefaId + '/' + Date.now() + '_' + i + '_' + sanitizarNomeArquivo(file.name);
-            var { error: uploadErr } = await supabaseClient.storage.from('tarefa_anexos').upload(filePath, file);
-            if (uploadErr) throw uploadErr;
-            var publicUrl = supabaseClient.storage.from('tarefa_anexos').getPublicUrl(filePath).data.publicUrl;
+            var uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + filePath);
+            var publicUrl = uploadResult.url;
             anexosEnviados.push({ nome: file.name, url: publicUrl });
         }
 
