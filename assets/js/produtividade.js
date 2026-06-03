@@ -4759,12 +4759,10 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
     const nomeArquivo = `${registroId}_${nomeAnexoLimpo}`;
     const caminho = `${user.id}/${nomeArquivo}`;
 
+    let camposAtualizados = { ...rascunhoDocumento.campos };
     try {
         const uploadResult = await cloudinaryUploadComPath(blobPdf, 'anexos/' + caminho);
-        const camposAtualizados = {
-            ...rascunhoDocumento.campos,
-            anexo_pdf: uploadResult.url
-        };
+        camposAtualizados.anexo_pdf = uploadResult.url;
     } catch (uploadError) {
         console.error('Erro no upload:', uploadError);
         alert('Documento baixado, mas erro ao anexar PDF: ' + uploadError.message);
