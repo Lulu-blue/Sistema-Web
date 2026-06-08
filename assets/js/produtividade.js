@@ -97,7 +97,7 @@ const CATEGORIAS = [
         campos: [
             { nome: 'n_notificacao', label: 'N° da Notificação', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome do Contribuinte', tipo: 'text', obrigatorio: true },
-            { nome: 'n_inscricao', label: 'N° de Inscrição', tipo: 'text', obrigatorio: true },
+            { nome: 'n_inscricao', label: 'N° de Inscrição/CNPJ', tipo: 'text', obrigatorio: true },
             { nome: 'bairro', label: 'Bairro', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'motivo', label: 'Motivo', tipo: 'select_custom', obrigatorio: true, opcoes: ['Limpeza', 'Construção de Muro', 'Construção de Passeio', 'Reconstrução de Muro ou Passeio'] },
             { nome: 'anexo_pdf', label: 'Anexo (PDF/Docx)', tipo: 'file', obrigatorio: true, aceitar: '.pdf,.doc,.docx' }
@@ -762,13 +762,50 @@ function abrirFormulario(categoria) {
                 labelAgrupada.style.display = 'block';
                 labelAgrupada.style.marginBottom = '5px';
 
+                if (campo.agrupar === 'inscricao') {
+                    labelAgrupada.textContent = 'Identificação do Local';
+                    const toggleDiv = document.createElement('div');
+                    toggleDiv.style.marginBottom = '10px';
+                    toggleDiv.innerHTML = `
+                        <label style="margin-right: 15px; font-weight: normal; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="tipo_inscricao" value="imobiliaria" checked onchange="document.getElementById('grupo-inscricao').style.display='flex'; document.getElementById('grupo-cnpj-empresa').style.display='none';"> Inscrição Imobiliária Municipal
+                        </label>
+                        <label style="font-weight: normal; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="tipo_inscricao" value="empresa" onchange="
+                                document.getElementById('grupo-inscricao').style.display='none'; 
+                                document.getElementById('grupo-cnpj-empresa').style.display='block';
+                                const docInput = document.getElementById('campo-cpf_contribuinte') || document.getElementById('campo-n_inscricao');
+                                const cnpjInput = document.getElementById('campo-cnpj_empresa');
+                                if (docInput && cnpjInput && !cnpjInput.value) {
+                                    const val = docInput.value.replace(/\\D/g, '');
+                                    if (val.length === 14) {
+                                        cnpjInput.value = val.replace(/^(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})/, '$1.$2.$3/$4-$5');
+                                    }
+                                }
+                            "> Empresa (CNPJ)
+                        </label>
+                    `;
+                    wrapper.appendChild(labelAgrupada);
+                    wrapper.appendChild(toggleDiv);
+
+                    const cnpjDiv = document.createElement('div');
+                    cnpjDiv.id = 'grupo-cnpj-empresa';
+                    cnpjDiv.style.display = 'none';
+                    cnpjDiv.style.marginBottom = '10px';
+                    cnpjDiv.innerHTML = `
+                        <input type="text" id="campo-cnpj_empresa" class="form-control" maxlength="18" placeholder="Digite o CNPJ da Empresa" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" oninput="let v=this.value.replace(/\\D/g,''); v=v.replace(/^(\\d{2})(\\d)/,'$1.$2'); v=v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/,'$1.$2.$3'); v=v.replace(/\\.(\\d{3})(\\d)/,'.$1/$2'); v=v.replace(/(\\d{4})(\\d)/,'$1-$2'); this.value=v;">
+                    `;
+                    wrapper.appendChild(cnpjDiv);
+                } else {
+                    wrapper.appendChild(labelAgrupada);
+                }
+
                 containerAgrupador = document.createElement('div');
                 containerAgrupador.id = `grupo-${campo.agrupar}`;
                 containerAgrupador.style.display = 'flex';
                 containerAgrupador.style.gap = '10px';
                 containerAgrupador.style.width = '100%';
 
-                wrapper.appendChild(labelAgrupada);
                 wrapper.appendChild(containerAgrupador);
                 corpo.appendChild(wrapper);
             }
@@ -2211,14 +2248,17 @@ function adicionarCampoDataRegistrada(container, dataExistenteISO, isEdicao) {
     grupo.id = 'grupo-data-registrada-manual';
 
     const agora = new Date();
-    const agoraISO = agora.toISOString().slice(0, 16);
+    const tzOffsetAgora = agora.getTimezoneOffset() * 60000;
+    const agoraLocal = new Date(agora.getTime() - tzOffsetAgora).toISOString().slice(0, 16);
 
-    let valorInicial = agoraISO;
-    let maxValor = agoraISO;
+    let valorInicial = agoraLocal;
+    let maxValor = agoraLocal;
 
     if (isEdicao && dataExistenteISO) {
         const dt = new Date(dataExistenteISO);
-        valorInicial = dt.toISOString().slice(0, 16);
+        const tzOffsetDt = dt.getTimezoneOffset() * 60000;
+        const dtLocal = new Date(dt.getTime() - tzOffsetDt).toISOString().slice(0, 16);
+        valorInicial = dtLocal;
         maxValor = valorInicial;
     }
 
@@ -2465,6 +2505,8 @@ function abrirDetalhes(id) {
             if (campoDef) {
                 label = campoDef.label;
                 ignorarExibicao = campoDef.ignorarNoBanco;
+            } else if (chave === 'cnpj_empresa' || chave === 'tipo_inscricao') {
+                ignorarExibicao = true;
             }
         }
 
@@ -2616,12 +2658,44 @@ function editarRegistro() {
                 labelAgrupada.style.color = '#475569';
                 labelAgrupada.style.display = 'block';
                 labelAgrupada.style.marginBottom = '5px';
+
+                if (campo.agrupar === 'inscricao') {
+                    labelAgrupada.textContent = 'Identificação do Local';
+                    const tipoInscricao = reg.campos.tipo_inscricao || 'imobiliaria';
+                    const isEmpresa = tipoInscricao === 'empresa';
+                    const cnpjVal = reg.campos.cnpj_empresa || '';
+
+                    const toggleDiv = document.createElement('div');
+                    toggleDiv.style.marginBottom = '10px';
+                    toggleDiv.innerHTML = `
+                        <label style="margin-right: 15px; font-weight: normal; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="tipo_inscricao_edit" value="imobiliaria" ${!isEmpresa ? 'checked' : ''} onchange="document.getElementById('grupo-inscricao').style.display='flex'; document.getElementById('grupo-cnpj-empresa').style.display='none';"> Inscrição Imobiliária Municipal
+                        </label>
+                        <label style="font-weight: normal; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="tipo_inscricao_edit" value="empresa" ${isEmpresa ? 'checked' : ''} onchange="document.getElementById('grupo-inscricao').style.display='none'; document.getElementById('grupo-cnpj-empresa').style.display='block';"> Empresa (CNPJ)
+                        </label>
+                    `;
+                    wrapper.appendChild(labelAgrupada);
+                    wrapper.appendChild(toggleDiv);
+
+                    const cnpjDiv = document.createElement('div');
+                    cnpjDiv.id = 'grupo-cnpj-empresa';
+                    cnpjDiv.style.display = isEmpresa ? 'block' : 'none';
+                    cnpjDiv.style.marginBottom = '10px';
+                    cnpjDiv.innerHTML = `
+                        <input type="text" id="campo-cnpj_empresa" class="form-control" maxlength="18" placeholder="Digite o CNPJ da Empresa" value="${cnpjVal}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" oninput="let v=this.value.replace(/\\D/g,''); v=v.replace(/^(\\d{2})(\\d)/,'$1.$2'); v=v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/,'$1.$2.$3'); v=v.replace(/\\.(\\d{3})(\\d)/,'.$1/$2'); v=v.replace(/(\\d{4})(\\d)/,'$1-$2'); this.value=v;">
+                    `;
+                    wrapper.appendChild(cnpjDiv);
+                } else {
+                    wrapper.appendChild(labelAgrupada);
+                }
+
                 containerAgrupador = document.createElement('div');
                 containerAgrupador.id = `grupo-${campo.agrupar}`;
-                containerAgrupador.style.display = 'flex';
+                containerAgrupador.style.display = (campo.agrupar === 'inscricao' && reg.campos.tipo_inscricao === 'empresa') ? 'none' : 'flex';
                 containerAgrupador.style.gap = '10px';
                 containerAgrupador.style.width = '100%';
-                wrapper.appendChild(labelAgrupada);
+
                 wrapper.appendChild(containerAgrupador);
                 corpo.appendChild(wrapper);
             }
@@ -3000,7 +3074,7 @@ async function carregarHistoricoGeral(categoriaId) {
     if (bairroNormalizado) {
         todosOsRegistros = todosOsRegistros.filter(reg => {
             const bairroReg = normalizarBairro(reg.campos && reg.campos.bairro ? reg.campos.bairro : '');
-            return bairroReg === bairroNormalizado;
+            return bairroReg.includes(bairroNormalizado);
         });
     }
 
@@ -3019,11 +3093,11 @@ async function carregarHistoricoGeral(categoriaId) {
 
 // Extrai bairros únicos e preenche o dropdown
 function popularFiltroBairros(registros) {
-    const select = document.getElementById('filtro-bairro-historico');
-    if (!select) return;
+    const datalist = document.getElementById('datalist-bairros-historico');
+    if (!datalist) return;
 
-    // Guardar a opção "Todos os Bairros"
-    select.innerHTML = '<option value="">Todos os Bairros</option>';
+    // Limpar opções
+    datalist.innerHTML = '';
 
     // Extrair os bairros que existem dentro do campo JSON "campos"
     const bairros = new Set();
@@ -3038,8 +3112,7 @@ function popularFiltroBairros(registros) {
     Array.from(bairros).sort().forEach(bairro => {
         const option = document.createElement('option');
         option.value = bairro;
-        option.textContent = bairro;
-        select.appendChild(option);
+        datalist.appendChild(option);
     });
 }
 
@@ -3496,7 +3569,7 @@ function sincronizarScrollHistorico(wrapperId) {
     });
 }
 
-window.sincronizarScrollsModais = function() {
+window.sincronizarScrollsModais = function () {
     const wrappers = document.querySelectorAll('.scroll-sync-wrapper');
     wrappers.forEach(wrapper => {
         if (wrapper.dataset.synced === 'true') return;
@@ -3506,7 +3579,7 @@ window.sincronizarScrollsModais = function() {
         var bot = wrapper.querySelector('.historico-scroll-bottom');
         var dummy = wrapper.querySelector('.historico-scroll-dummy');
         var table = wrapper.querySelector('table');
-        
+
         if (!top || !bot || !dummy || !table) return;
 
         dummy.style.width = table.scrollWidth + 'px';
@@ -4906,13 +4979,37 @@ async function abrirEditorAutoInfracao() {
     const campos = {};
     let todosPreenchidos = true;
 
+    const tipoInscricaoInput = document.querySelector('input[name="tipo_inscricao"]:checked');
+    const tipoInscricao = tipoInscricaoInput ? tipoInscricaoInput.value : 'imobiliaria';
+    campos.tipo_inscricao = tipoInscricao;
+
+    if (tipoInscricao === 'empresa') {
+        const cnpjInput = document.getElementById('campo-cnpj_empresa');
+        if (cnpjInput) {
+            campos.cnpj_empresa = cnpjInput.value.trim();
+            if (!campos.cnpj_empresa) {
+                todosPreenchidos = false;
+                cnpjInput.style.borderColor = '#ef4444';
+            } else {
+                cnpjInput.style.borderColor = '#e2e8f0';
+            }
+        }
+    }
+
     categoriaAtual.campos.forEach(campo => {
         if (campo.tipo === 'file') return;
         const input = document.getElementById(`campo-${campo.nome}`);
         let valor = input ? input.value.trim() : '';
 
+        // Se for empresa, ignorar a obrigatoriedade dos campos de inscrição municipal
+        let isObrigatorio = campo.obrigatorio;
+        if (tipoInscricao === 'empresa' && campo.agrupar === 'inscricao') {
+            isObrigatorio = false;
+            valor = ''; // zera o valor para não ir lixo
+        }
+
         // n_notificacao não é obrigatorio no Auto
-        if (campo.obrigatorio && !valor && campo.nome !== 'n_notificacao') {
+        if (isObrigatorio && !valor && campo.nome !== 'n_notificacao') {
             todosPreenchidos = false;
             if (input) input.style.borderColor = '#ef4444';
         } else if (input) {
@@ -4952,7 +5049,14 @@ async function abrirEditorAutoInfracao() {
         // 2. Prepara HTML do Documento
         const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
         const dataFormatada = campos.data ? `${dataPartes[2]}/${dataPartes[1]}/${dataPartes[0]}` : '';
-        const descInscricao = campos.inscricao_zona ? `Zona: ${campos.inscricao_zona}, Quadra: ${campos.inscricao_quadra}, Lote: ${campos.inscricao_lote}, com área de ${campos.inscricao_area} m²` : '---';
+
+        let labelIdentificacao = "Inscrição Imobiliária Municipal:";
+        let descInscricao = campos.inscricao_zona ? `Zona: ${campos.inscricao_zona}, Quadra: ${campos.inscricao_quadra}, Lote: ${campos.inscricao_lote}, com área de ${campos.inscricao_area} m²` : '---';
+
+        if (campos.tipo_inscricao === 'empresa') {
+            labelIdentificacao = "Empresa (CNPJ):";
+            descInscricao = campos.cnpj_empresa || '---';
+        }
         const numNotificacao = campos.n_notificacao ? campos.n_notificacao : '_____';
         const prazoDefesa = campos.prazo_defesa ? campos.prazo_defesa : '_____';
 
@@ -5002,7 +5106,7 @@ async function abrirEditorAutoInfracao() {
         </p>
 
         <p style="text-indent: 30px; margin-top: 20px; line-height: 1.5;">
-            Foi fiscalizado da data <strong>${dataFormatada}</strong> pelo motivo descrito: o imóvel situado na <strong>${campos.endereco_imovel || '______________________'}</strong>, Bairro <strong>${campos.bairro}</strong>; Inscrição Imobiliária Municipal: <strong>${descInscricao}</strong>, necessitava de <strong>${campos.motivo || '...'}</strong>.
+            Foi fiscalizado da data <strong>${dataFormatada}</strong> pelo motivo descrito: o imóvel situado na <strong>${campos.endereco_imovel || '______________________'}</strong>, Bairro <strong>${campos.bairro}</strong>; ${labelIdentificacao} <strong>${descInscricao}</strong>, necessitava de <strong>${campos.motivo || '...'}</strong>.
         </p>
 
         <p style="text-indent: 30px; margin-top: 10px;">
@@ -6524,14 +6628,14 @@ function renderizarModalPendentes(lista) {
         let html = '';
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
-        
+
         registros.forEach((reg, idx) => {
             const nome = (reg.campos && reg.campos.nome) || '-';
             const fiscal = reg.fiscal_nome || '-';
             const numSeq = reg.campos && reg.campos.n_notificacao ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
             const dataRegistrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
             const ar = (reg.campos && reg.campos.ar) ? reg.campos.ar : '-';
-            
+
             let periodoTexto = '-';
             let periodoColor = '#64748b';
             let periodoFontWeight = 'normal';
@@ -6675,7 +6779,7 @@ function renderizarModalPendentes(lista) {
     }
 }
 
-window.reordenarModalPendentes = function(criterio) {
+window.reordenarModalPendentes = function (criterio) {
     if (!criterio) return;
     window.criterioAtual = criterio;
     // O select é atualizado dentro da função renderizar
@@ -6846,7 +6950,7 @@ function renderizarModalNaoEfetivados(lista) {
     const montarTabelaNaoEfetivados = (subLista, idSecao, titulo, corBadge, bgSecao, tipoSecao) => {
         if (subLista.length === 0) return '';
         const headerHTML = obterHeaderNaoEfetivados(tipoSecao);
-        
+
         let minW = '700px';
         if (tipoSecao === 'com_prosseguimento') minW = '1050px';
         else if (tipoSecao === 'com_resposta') minW = '900px';
@@ -7775,7 +7879,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 const numSeq = (reg.campos && reg.campos.n_notificacao) ? reg.campos.n_notificacao : (reg.numero_sequencial || '-');
                 const dataRegistrada = reg.created_at ? new Date(reg.created_at).toLocaleDateString('pt-BR') : '-';
                 const ar = (reg.campos && reg.campos.ar) ? reg.campos.ar : '-';
-                
+
                 let periodoTexto = '-';
                 let periodoColor = '#1e293b';
                 let periodoFontWeight = 'normal';
@@ -7918,7 +8022,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; min-width: 95px;">N°</th>
                 <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Nome / Identificador</th>
                 <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Fiscal</th>`;
-            
+
             if (tipo === 'sem_prosseguimento') {
                 theadHtml += `<th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th>`;
             } else if (tipo === 'com_prosseguimento') {

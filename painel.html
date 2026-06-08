@@ -1443,11 +1443,12 @@
                                 <label
                                     style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Filtrar
                                     por Bairro</label>
-                                <select id="filtro-bairro-historico" class="sub-aba-btn"
-                                    onchange="filtrarHistoricoGeral()"
+                                <input type="text" id="filtro-bairro-historico" class="sub-aba-btn"
+                                    list="datalist-bairros-historico"
+                                    placeholder="Todos os Bairros"
+                                    oninput="filtrarHistoricoGeral()"
                                     style="outline:none; width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; background:white;">
-                                    <option value="">Todos os Bairros</option>
-                                </select>
+                                <datalist id="datalist-bairros-historico"></datalist>
                             </div>
                             <button onclick="limparFiltrosHistorico()"
                                 style="width:100%; padding:8px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; transition:0.2s;"
