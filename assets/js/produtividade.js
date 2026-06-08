@@ -6460,6 +6460,10 @@ function usuarioDeveVerApenasSeusRegistros() {
 }
 
 function pertenceAoFiscalLogado(reg) {
+    if (reg.user_id && window.userIdGlobal) {
+        return reg.user_id === window.userIdGlobal;
+    }
+    // Fallback para registros ou instâncias muito antigas
     const nomeFiscal = (reg.fiscal_nome || '').trim();
     const nomeUsuario = (window.userNameGlobal || '').trim();
     return nomeFiscal === nomeUsuario;
