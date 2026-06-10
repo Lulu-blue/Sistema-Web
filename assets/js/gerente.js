@@ -1254,6 +1254,7 @@ function renderizarTabelaDenuncias(registros, tipo) {
     colunas.push({ chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' });
     colunas.push({ chave: 'obs', label: 'Obs' });
     colunas.push({ chave: 'app_preservacao', label: 'APP', tipo: 'boolean' });
+    colunas.push({ chave: 'area_municipio', label: 'Município', tipo: 'boolean' });
     colunas.push({ chave: 'concluido', label: 'Concluído', tipo: 'boolean' });
     colunas.push({ chave: 'acoes', label: 'Ações', tipo: 'acoes' });
 
@@ -1673,6 +1674,7 @@ function abrirModalNovaDenuncia() {
     document.getElementById('denuncia-obs').value = '';
     document.getElementById('denuncia-concluido').value = 'false';
     document.getElementById('denuncia-app-preservacao').value = 'false';
+    document.getElementById('denuncia-area-municipio').value = 'false';
     document.getElementById('titulo-modal-denuncia').innerText = 'Nova Linha';
 
     ajustarCamposFormDenuncia();
@@ -1782,7 +1784,8 @@ async function salvarDenuncia() {
             solicitante: solicitante,
             obs: obs,
             concluido: concluido,
-            app_preservacao: appPreservacao
+            app_preservacao: appPreservacao,
+            area_municipio: document.getElementById('denuncia-area-municipio').value === 'true'
         };
 
         var result;
@@ -1836,6 +1839,7 @@ async function editarDenuncia(id) {
         document.getElementById('denuncia-obs').value = reg.obs || '';
         document.getElementById('denuncia-concluido').value = reg.concluido ? 'true' : 'false';
         document.getElementById('denuncia-app-preservacao').value = reg.app_preservacao ? 'true' : 'false';
+        document.getElementById('denuncia-area-municipio').value = reg.area_municipio ? 'true' : 'false';
         document.getElementById('titulo-modal-denuncia').innerText = 'Editar Linha';
 
         ajustarCamposFormDenuncia();
@@ -2275,6 +2279,285 @@ function baixarCSVAreaPreservacao() {
     gerarCSVControleDenuncias(registrosAreaPreservacaoAtual);
 }
 
+// ============ MODAL ÁREAS DO MUNICÍPIO ============
+
+function togglePainelFiltroAreaMunicipio() {
+    var p = document.getElementById('painel-filtro-area-municipio-popup');
+    if (!p) return;
+    p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+}
+
+var registrosAreaMunicipioAtual = [];
+
+async function abrirModalAreaMunicipio() {
+    try {
+        if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
+
+        var modal = document.getElementById('modal-area-municipio');
+        var container = document.getElementById('area-municipio-tabela-container');
+        if (!modal || !container) return;
+
+        // Limpar filtros ao abrir
+        var elBusca = document.getElementById('busca-area-municipio');
+        if (elBusca) elBusca.value = '';
+        var elTipo = document.getElementById('filtro-area-municipio-tipo');
+        if (elTipo) elTipo.value = '';
+        var elOrigem = document.getElementById('filtro-area-municipio-origem');
+        if (elOrigem) elOrigem.value = '';
+        var elEnc = document.getElementById('filtro-area-municipio-encaminhado');
+        if (elEnc) elEnc.value = '';
+        var elConcl = document.getElementById('filtro-area-municipio-concluido');
+        if (elConcl) elConcl.value = '';
+        var elVenc = document.getElementById('filtro-area-municipio-vencido');
+        if (elVenc) elVenc.value = '';
+        var elDtIni = document.getElementById('filtro-area-municipio-data-inicio');
+        if (elDtIni) elDtIni.value = '';
+        var elDtFim = document.getElementById('filtro-area-municipio-data-fim');
+        if (elDtFim) elDtFim.value = '';
+
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:#64748b;">Carregando...</div>';
+        modal.style.display = 'flex';
+        modal.classList.add('ativo');
+
+        var { data, error } = await supabaseClient
+            .from('controle_denuncias')
+            .select('*')
+            .eq('area_municipio', true)
+            .order('data', { ascending: false });
+
+        if (error) throw error;
+
+        registrosAreaMunicipioAtual = data || [];
+        if (registrosAreaMunicipioAtual.length === 0) {
+            container.innerHTML = '<div style="padding:40px; text-align:center; color:#64748b;">Nenhum registro com Área do Município encontrado.</div>';
+            return;
+        }
+
+        popularDatalistsAreaMunicipio();
+        renderizarTabelaAreaMunicipio(registrosAreaMunicipioAtual);
+    } catch (err) {
+        console.error('Erro ao carregar Área do Município:', err);
+        Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível carregar os dados.', confirmButtonColor: '#0f172a' });
+    }
+}
+
+function fecharModalAreaMunicipio() {
+    var modal = document.getElementById('modal-area-municipio');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('ativo');
+}
+
+function popularDatalistsAreaMunicipio() {
+    var dlOrigem = document.getElementById('datalist-area-municipio-origem');
+    var dlEnc = document.getElementById('datalist-area-municipio-encaminhado');
+    if (!dlOrigem || !dlEnc || !registrosAreaMunicipioAtual) return;
+
+    var origens = new Set();
+    var encs = new Set();
+
+    registrosAreaMunicipioAtual.forEach(function (r) {
+        if (r.origem) origens.add(r.origem);
+        if (r.encaminhado_para_nome) encs.add(r.encaminhado_para_nome);
+    });
+
+    dlOrigem.innerHTML = Array.from(origens).sort().map(function (x) { return '<option value="' + x + '">'; }).join('');
+    dlEnc.innerHTML = Array.from(encs).sort().map(function (x) { return '<option value="' + x + '">'; }).join('');
+}
+
+function aplicarFiltrosAreaMunicipio() {
+    if (!registrosAreaMunicipioAtual || registrosAreaMunicipioAtual.length === 0) return;
+
+    var busca = (document.getElementById('busca-area-municipio').value || '').toLowerCase();
+    var tipo = document.getElementById('filtro-area-municipio-tipo').value;
+    var origem = (document.getElementById('filtro-area-municipio-origem').value || '').toLowerCase();
+    var enc = (document.getElementById('filtro-area-municipio-encaminhado').value || '').toLowerCase();
+    var concluidoStr = document.getElementById('filtro-area-municipio-concluido').value;
+    var vencido = document.getElementById('filtro-area-municipio-vencido').value;
+    var dtIni = document.getElementById('filtro-area-municipio-data-inicio').value;
+    var dtFim = document.getElementById('filtro-area-municipio-data-fim').value;
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var filtrados = registrosAreaMunicipioAtual.filter(function (reg) {
+        var strValues = Object.values(reg).map(function (v) { return v ? String(v).toLowerCase() : ''; }).join(' ');
+        if (busca && !strValues.includes(busca)) return false;
+        if (tipo && reg.tipo !== tipo) return false;
+        if (origem && (!reg.origem || !reg.origem.toLowerCase().includes(origem))) return false;
+        if (enc && (!reg.encaminhado_para_nome || !reg.encaminhado_para_nome.toLowerCase().includes(enc))) return false;
+
+        if (concluidoStr !== '') {
+            var isConcluido = reg.concluido === true;
+            var querConcluido = concluidoStr === 'true';
+            if (isConcluido !== querConcluido) return false;
+        }
+
+        if (vencido !== '') {
+            if (reg.concluido) {
+                if (vencido === 'vencido') return false;
+            } else {
+                if (!reg.prazo_conclusao) {
+                    if (vencido === 'vencido') return false;
+                } else {
+                    var p = new Date(reg.prazo_conclusao + "T00:00:00");
+                    var isVencido = p < hoje;
+                    if (vencido === 'vencido' && !isVencido) return false;
+                    if (vencido === 'no_prazo' && isVencido) return false;
+                }
+            }
+        }
+
+        if (dtIni || dtFim) {
+            if (!reg.data) return false;
+            var dReg = new Date(reg.data + "T00:00:00");
+            if (dtIni) {
+                var dI = new Date(dtIni + "T00:00:00");
+                if (dReg < dI) return false;
+            }
+            if (dtFim) {
+                var dF = new Date(dtFim + "T23:59:59");
+                if (dReg > dF) return false;
+            }
+        }
+
+        return true;
+    });
+
+    renderizarTabelaAreaMunicipio(filtrados);
+}
+
+function limparFiltrosAreaMunicipio() {
+    document.getElementById('busca-area-municipio').value = '';
+    document.getElementById('filtro-area-municipio-tipo').value = '';
+    document.getElementById('filtro-area-municipio-origem').value = '';
+    document.getElementById('filtro-area-municipio-encaminhado').value = '';
+    document.getElementById('filtro-area-municipio-concluido').value = '';
+    document.getElementById('filtro-area-municipio-vencido').value = '';
+    document.getElementById('filtro-area-municipio-data-inicio').value = '';
+    document.getElementById('filtro-area-municipio-data-fim').value = '';
+    renderizarTabelaAreaMunicipio(registrosAreaMunicipioAtual);
+}
+
+function renderizarTabelaAreaMunicipio(registros) {
+    var container = document.getElementById('area-municipio-tabela-container');
+    if (!container) return;
+
+    var tipoMap = {
+        'comunicacao_interna': 'Comunicação Interna',
+        'vereadores': 'Vereadores',
+        'mp': 'MP',
+        'app': 'APP',
+        'ouvidoria': 'Ouvidoria',
+        'protocolo': 'Protocolo'
+    };
+
+    var colunas = [
+        { chave: 'tipo', label: 'Tipo', tipo: 'tipo' },
+        { chave: 'data', label: 'Data', tipo: 'date' },
+        { chave: 'tarefa', label: 'Tarefa' },
+        { chave: 'origem', label: 'Origem' },
+        { chave: 'endereco', label: 'Endereço' },
+        { chave: 'bairro', label: 'Bairro' },
+        { chave: 'encaminhado_para_nome', label: 'Encaminhado para' },
+        { chave: 'prazo_conclusao', label: 'Prazo', tipo: 'date' },
+        { chave: 'data_entrega', label: 'Data Entrega', tipo: 'date' },
+        { chave: 'concluido', label: 'Concluído', tipo: 'boolean' }
+    ];
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    var wrapperId = 'app-municipio-wrapper-' + Date.now();
+    var html = '<div id="' + wrapperId + '" style="position:relative; height:100%;">';
+    html += '<div class="denuncias-scroll-top" style="position:sticky; top:0; z-index:20; overflow-x:auto; overflow-y:hidden; height:14px; background:#fff; border-bottom:1px solid #e2e8f0; scrollbar-width:thin;">';
+    html += '<div class="denuncias-scroll-dummy" style="height:1px;"></div>';
+    html += '</div>';
+    html += '<div class="denuncias-scroll-bottom" style="overflow-x:auto; overflow-y:auto; height:calc(100% - 14px);">';
+    html += '<table style="width:100%; min-width:1400px; border-collapse:collapse; font-size:13px;"><thead><tr style="background:#f8fafc;">';
+    colunas.forEach(function (c) {
+        html += '<th style="padding:10px 12px; border:1px solid #e2e8f0; text-align:left; font-weight:600; color:#475569; white-space:nowrap; position:sticky; top:14px; background:#f8fafc; z-index:10;">' + c.label + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    if (!registros || registros.length === 0) {
+        html += '<tr><td colspan="' + colunas.length + '" style="padding:40px; text-align:center; color:#64748b; border:1px solid #e2e8f0;">Nenhum registro encontrado.</td></tr>';
+    } else {
+        registros.forEach(function (reg) {
+            var corFundo = '';
+            var corTexto = '';
+            if (reg.concluido) {
+                corFundo = '#dcfce7';
+                corTexto = '#14532d';
+            } else if (reg.prazo_conclusao) {
+                var partes = reg.prazo_conclusao.split('-');
+                if (partes.length === 3) {
+                    var dPrazo = new Date(partes[0], partes[1] - 1, partes[2]);
+                    if (dPrazo < hoje) {
+                        corFundo = '#fee2e2';
+                        corTexto = '#7f1d1d';
+                    }
+                }
+            }
+
+            var styleLinha = '';
+            if (corFundo) styleLinha = 'background:' + corFundo + '; color:' + corTexto + ';';
+
+            html += '<tr style="border-bottom:1px solid #e2e8f0; ' + styleLinha + '" onmouseover="this.style.filter=\'brightness(0.97)\'" onmouseout="this.style.filter=\'none\'">';
+
+            colunas.forEach(function (c) {
+                var val = '-';
+                if (c.tipo === 'tipo') {
+                    val = tipoMap[reg[c.chave]] || reg[c.chave] || '-';
+                } else if (c.tipo === 'boolean') {
+                    val = reg[c.chave] ? '<span style="color:#16a34a; font-weight:600;">Sim</span>' : '<span style="color:#64748b;">Não</span>';
+                } else if (c.tipo === 'date') {
+                    if (reg[c.chave]) {
+                        var p = reg[c.chave].split('-');
+                        val = p[2] + '/' + p[1] + '/' + p[0];
+                    }
+                } else {
+                    val = reg[c.chave] || '-';
+                }
+                html += '<td style="padding:10px 12px; border:1px solid #e2e8f0; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis;">' + val + '</td>';
+            });
+
+            html += '</tr>';
+        });
+    }
+
+    html += '</tbody></table></div></div>';
+    container.innerHTML = html;
+
+    // Sincronizar scrollbars superior e inferior
+    setTimeout(function () {
+        var wrapper = document.getElementById(wrapperId);
+        if (!wrapper) return;
+        var top = wrapper.querySelector('.denuncias-scroll-top');
+        var bottom = wrapper.querySelector('.denuncias-scroll-bottom');
+        var dummy = wrapper.querySelector('.denuncias-scroll-dummy');
+        var table = wrapper.querySelector('table');
+
+        if (top && bottom && dummy && table) {
+            dummy.style.width = table.offsetWidth + 'px';
+            top.addEventListener('scroll', function () {
+                bottom.scrollLeft = top.scrollLeft;
+            });
+            bottom.addEventListener('scroll', function () {
+                top.scrollLeft = bottom.scrollLeft;
+            });
+        }
+    }, 100);
+}
+
+function baixarCSVAreaMunicipio() {
+    if (!registrosAreaMunicipioAtual || registrosAreaMunicipioAtual.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Nenhum registro disponível para download.', confirmButtonColor: '#0f172a' });
+        return;
+    }
+    gerarCSVControleDenuncias(registrosAreaMunicipioAtual);
+}
+
 // ============ GESTÃO DE ÁREAS E BAIRROS ============
 
 var globalAreas = [];
@@ -2617,6 +2900,32 @@ async function excluirBairro(id, nome) {
 
 async function vincularBairroArea(bairroId, novaAreaId) {
     var area_id = novaAreaId === "" ? null : novaAreaId;
+    
+    // Atualização otimista (UI instantânea)
+    var bairroIdx = globalBairros.findIndex(function(b) { return b.id === bairroId; });
+    var oldAreaId = null;
+    
+    if (bairroIdx !== -1) {
+        oldAreaId = globalBairros[bairroIdx].area_id;
+        globalBairros[bairroIdx].area_id = area_id;
+        
+        // Re-ordenar e renderizar instantaneamente
+        globalBairros.sort(function(a, b) {
+            var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
+            var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+
+            var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+            var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+
+            if (numA !== numB) return numA - numB;
+            return String(a.nome).localeCompare(String(b.nome));
+        });
+        
+        renderizarListaBairros();
+        renderizarAreasDemanda();
+        inicializarMapaLeaflet();
+    }
+
     try {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
 
@@ -2624,11 +2933,33 @@ async function vincularBairroArea(bairroId, novaAreaId) {
             .from('bairros')
             .update({ area_id: area_id })
             .eq('id', bairroId);
+            
         if (error) throw error;
-        carregarGestaoBairrosAreas();
+        
+        // Após salvar, buscar silenciosamente para garantir sincronia (sem piscar tela)
+        var { data } = await supabaseClient.from('bairros').select('*').order('nome', { ascending: true });
+        if (data) {
+            data.sort(function(a, b) {
+                var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
+                var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+
+                var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+                var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
+
+                if (numA !== numB) return numA - numB;
+                return String(a.nome).localeCompare(String(b.nome));
+            });
+            globalBairros = data;
+        }
     } catch (err) {
         alert("Erro ao vincular bairro: " + err.message);
-        carregarGestaoBairrosAreas(); // reverter visualmente
+        // Reverter visualmente em caso de erro
+        if (bairroIdx !== -1) {
+            globalBairros[bairroIdx].area_id = oldAreaId;
+            renderizarListaBairros();
+            renderizarAreasDemanda();
+            inicializarMapaLeaflet();
+        }
     }
 }
 
@@ -4239,60 +4570,213 @@ function baixarRotacaoAtual() {
 }
 
 async function atualizarRotacaoInteligente() {
-    if (!confirm("Atenção: Isso redistribuirá todos os bairros baseando-se no número de processos ativos. A distribuição atual será substituída. Deseja continuar?")) return;
+    const result = await Swal.fire({
+        title: 'Atenção',
+        text: "Isso redistribuirá todos os bairros baseando-se no peso processual E proximidade geográfica. A distribuição atual será substituída. Deseja continuar?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#ef4444',
+        confirmButtonText: 'Sim, continuar',
+        cancelButtonText: 'Cancelar'
+    });
+    
+    if (!result.isConfirmed) return;
 
     // 1. Snapshot do estado atual p/ localStorage (Backup)
     const backupAnterior = globalBairros.map(b => ({ id: b.id, area_id: b.area_id }));
     localStorage.setItem('backup_rotacao_bairros', JSON.stringify(backupAnterior));
 
-    // 2. Calcular pesos (inclui denúncias na distribuição de bairros para áreas)
-    let bairrosComPeso = globalBairros.map(b => {
+    // Função auxiliar para calcular distância (Haversine) em km
+    function calcDist(p1, p2) {
+        if (!p1 || !p2) return Infinity;
+        var R = 6371; 
+        var dLat = (p2.lat - p1.lat) * Math.PI / 180;
+        var dLon = (p2.lng - p1.lng) * Math.PI / 180;
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    // 2. Calcular pesos e obter coordenadas espaciais
+    let bairrosComGeo = globalBairros.map(b => {
         let cont = processarContagemBairro(b.nome);
         let pesoDenuncias = 0;
         if (cont.denuncias) {
-            Object.keys(cont.denuncias).forEach(function (t) {
-                pesoDenuncias += cont.denuncias[t];
-            });
+            Object.keys(cont.denuncias).forEach(t => pesoDenuncias += cont.denuncias[t]);
         }
+        let pesoTotal = cont.np + cont.ai + pesoDenuncias;
+        
+        let coord = null;
+        if (b.latitude && b.longitude) {
+            coord = { lat: parseFloat(b.latitude), lng: parseFloat(b.longitude) };
+        } else if (typeof geojsonBairrosCache !== 'undefined' && geojsonBairrosCache && geojsonBairrosCache.features) {
+            let nomeNorm = typeof normalizarNomeBairroGeo === 'function' ? normalizarNomeBairroGeo(b.nome) : b.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^\s*bairro\s+/i, '').replace(/[^a-z0-9]/g, '');
+            let feature = geojsonBairrosCache.features.find(f => {
+                let pName = f.properties && f.properties.name ? f.properties.name : '';
+                let normP = typeof normalizarNomeBairroGeo === 'function' ? normalizarNomeBairroGeo(pName) : pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^\s*bairro\s+/i, '').replace(/[^a-z0-9]/g, '');
+                return normP === nomeNorm;
+            });
+            if (feature && feature.geometry) {
+                let pts = [];
+                function extractPoints(arr) {
+                    if (!Array.isArray(arr)) return;
+                    if (arr.length === 2 && typeof arr[0] === 'number') { pts.push(arr); return; }
+                    for (let i = 0; i < arr.length; i++) extractPoints(arr[i]);
+                }
+                extractPoints(feature.geometry.coordinates);
+                if (pts.length > 0) {
+                    let sumLat = 0, sumLng = 0;
+                    pts.forEach(p => { sumLng += p[0]; sumLat += p[1]; });
+                    // GeoJSON é [lng, lat]
+                    coord = { lat: sumLat / pts.length, lng: sumLng / pts.length };
+                }
+            }
+        }
+        
         return {
             id: b.id,
             nome: b.nome,
-            area_id: b.area_id,
-            peso: cont.np + cont.ai + pesoDenuncias
+            peso: pesoTotal || 1, // Mínimo 1 para balanceamento não quebrar
+            coord: coord
         };
     });
 
-    // Filtro os que tem peso e os que não tem.
-    // Order: Descending weight
-    bairrosComPeso.sort((a, b) => b.peso - a.peso);
-
-    // 3. Montar as áreas disponíveis
     if (globalAreas.length === 0) {
         alert("Não há áreas cadastradas para distribuir os bairros.");
         return;
     }
 
-    let areasBalanca = globalAreas.map(a => ({ id: a.id, pesoTotal: 0, bairrosAtribuidos: [] }));
+    let nAreas = globalAreas.length;
+    let areasBalanca = globalAreas.map(a => ({ id: a.id, pesoTotal: 0, bairrosAtribuidos: [], centro: null }));
+    
+    // Separa bairros com e sem coordenadas
+    let bairrosComCoord = bairrosComGeo.filter(b => b.coord !== null);
+    let bairrosSemCoord = bairrosComGeo.filter(b => b.coord === null);
+    
+    let pesoTotalCoord = bairrosComCoord.reduce((acc, b) => acc + b.peso, 0);
 
-    // 4. Algoritmo Serpente
-    let idxArea = 0;
-    let direcao = 1;
-    let nAreas = areasBalanca.length;
+    // Se houver bairros com coordenadas suficientes, usamos Bissecção Ortogonal Recursiva (K-D Tree adaptada)
+    if (bairrosComCoord.length >= nAreas) {
+        
+        function orthogonalBisection(bairrosSubset, areasSubset) {
+            // Condição de parada
+            if (areasSubset.length === 0) return;
+            
+            if (areasSubset.length === 1) {
+                // Atribui todos os bairros restantes para a única área
+                let a = areasSubset[0];
+                bairrosSubset.forEach(b => {
+                    a.bairrosAtribuidos.push(b.id);
+                    a.pesoTotal += b.peso;
+                });
+                return;
+            }
 
-    bairrosComPeso.forEach(b => {
-        areasBalanca[idxArea].bairrosAtribuidos.push(b.id);
-        areasBalanca[idxArea].pesoTotal += (b.peso || 1); // Mesmo sem doc conta 1 pra n ficar vazio
+            if (bairrosSubset.length === 0) return; // Segurança caso acabe bairros
 
-        // Move zig zag
-        idxArea += direcao;
-        if (idxArea >= nAreas) {
-            idxArea = nAreas - 1;
-            direcao = -1;
-        } else if (idxArea < 0) {
-            idxArea = 0;
-            direcao = 1;
+            // Determinar a "caixa" (bounding box) dos bairros atuais para saber se é mais largo ou mais alto
+            let minLat = Infinity, maxLat = -Infinity;
+            let minLng = Infinity, maxLng = -Infinity;
+            
+            bairrosSubset.forEach(b => {
+                if (b.coord.lat < minLat) minLat = b.coord.lat;
+                if (b.coord.lat > maxLat) maxLat = b.coord.lat;
+                if (b.coord.lng < minLng) minLng = b.coord.lng;
+                if (b.coord.lng > maxLng) maxLng = b.coord.lng;
+            });
+
+            // Considera a variação (Lat é Norte-Sul, Lng é Leste-Oeste)
+            let diffLat = maxLat - minLat;
+            let diffLng = maxLng - minLng;
+            
+            // Vamos cortar pelo eixo que tiver maior espalhamento
+            let cortarPorLat = diffLat > diffLng;
+
+            // Ordena os bairros ao longo do eixo escolhido (como se passasse uma régua varrendo a cidade)
+            bairrosSubset.sort((b1, b2) => {
+                return cortarPorLat ? b1.coord.lat - b2.coord.lat : b1.coord.lng - b2.coord.lng;
+            });
+
+            // Metade das áreas vai para o lado A, metade para o lado B
+            let n1 = Math.floor(areasSubset.length / 2);
+            let n2 = areasSubset.length - n1;
+
+            // Meta de peso que o corte precisa atingir
+            let totalWeightSubset = bairrosSubset.reduce((acc, b) => acc + b.peso, 0);
+            let targetWeight1 = totalWeightSubset * (n1 / areasSubset.length);
+
+            // Desliza a régua até atingir a meta de peso
+            let splitIndex = 0;
+            let accWeight = 0;
+            
+            for (let i = 0; i < bairrosSubset.length; i++) {
+                let b = bairrosSubset[i];
+                
+                let erroSemBairro = Math.abs(accWeight - targetWeight1);
+                let erroComBairro = Math.abs((accWeight + b.peso) - targetWeight1);
+                
+                // Se adicionar esse bairro nos afasta mais da meta do que se parar agora, então cortamos
+                if (accWeight > 0 && erroComBairro > erroSemBairro) {
+                    splitIndex = i;
+                    break;
+                }
+                
+                accWeight += b.peso;
+                splitIndex = i + 1;
+            }
+
+            // Proteção para não deixar uma metade vazia de bairros se ainda existem áreas
+            if (splitIndex === 0 && bairrosSubset.length > 1) splitIndex = 1;
+            if (splitIndex === bairrosSubset.length && bairrosSubset.length > 1) splitIndex = bairrosSubset.length - 1;
+
+            // Corta os arrays
+            let subset1 = bairrosSubset.slice(0, splitIndex);
+            let subset2 = bairrosSubset.slice(splitIndex);
+
+            let areas1 = areasSubset.slice(0, n1);
+            let areas2 = areasSubset.slice(n1);
+
+            // Passa para a próxima iteração
+            orthogonalBisection(subset1, areas1);
+            orthogonalBisection(subset2, areas2);
         }
-    });
+
+        // Dispara o algoritmo recursivo
+        orthogonalBisection(bairrosComCoord, areasBalanca);
+        
+    } else {
+        // Fallback: Se não tem coordenadas suficientes, joga tudo pro ZigZag
+        bairrosSemCoord = bairrosComGeo;
+    }
+
+    // Alocar os Bairros SEM Coordenadas usando ZigZag nas áreas atuais (balanceando os pesos)
+    if (bairrosSemCoord.length > 0) {
+        bairrosSemCoord.sort((a, b) => b.peso - a.peso);
+        
+        // Ordena as áreas pela que tem MENOS peso atualmente para priorizá-las
+        areasBalanca.sort((a, b) => a.pesoTotal - b.pesoTotal);
+        
+        let idxArea = 0;
+        let direcao = 1;
+        
+        for (let b of bairrosSemCoord) {
+            areasBalanca[idxArea].bairrosAtribuidos.push(b.id);
+            areasBalanca[idxArea].pesoTotal += b.peso;
+            
+            idxArea += direcao;
+            if (idxArea >= nAreas) {
+                idxArea = nAreas - 1;
+                direcao = -1;
+                // Reordena dinamicamente para manter o zig-zag justo na volta? 
+                // O zig-zag tradicional não reordena, só bate e volta.
+            } else if (idxArea < 0) {
+                idxArea = 0;
+                direcao = 1;
+            }
+        }
+    }
 
     // 5. Preparar Updates async pro Supabase 
     let updates = [];
@@ -4314,22 +4798,32 @@ async function atualizarRotacaoInteligente() {
         const { error } = await supabaseClient.from('bairros').upsert(updates, { onConflict: 'id' });
         if (error) throw error;
 
-        alert("Distribuição concluída com sucesso! Os bairros foram realocados.");
+        Swal.fire('Sucesso!', 'Distribuição inteligente concluída! Os bairros foram realocados considerando proximidade geográfica e peso processual.', 'success');
         fecharModalRotacao();
         carregarGestaoBairrosAreas(); // re-render
     } catch (err) {
-        alert("Erro ao salvar nova distribuição: " + err.message);
+        Swal.fire('Erro', 'Erro ao salvar nova distribuição: ' + err.message, 'error');
     }
 }
 
 async function reverterRotacaoAntiga() {
     let backupString = localStorage.getItem('backup_rotacao_bairros');
     if (!backupString) {
-        alert("Não há registros de uma rotação anterior salva neste computador.");
+        Swal.fire('Aviso', 'Não há registros de uma rotação anterior salva neste computador.', 'info');
         return;
     }
 
-    if (!confirm("Isso apagará a distribuição atual e restaurará a versão anterior exata. Confirma?")) return;
+    const result = await Swal.fire({
+        title: 'Confirmação',
+        text: 'Isso apagará a distribuição atual e restaurará a versão anterior exata. Confirma?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Sim, restaurar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
 
     try {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
@@ -4346,11 +4840,11 @@ async function reverterRotacaoAntiga() {
         const { error } = await supabaseClient.from('bairros').upsert(updates, { onConflict: 'id' });
         if (error) throw error;
 
-        alert("Rotação antiga restaurada com sucesso!");
+        Swal.fire('Sucesso!', 'Rotação antiga restaurada com sucesso!', 'success');
         fecharModalRotacao();
         carregarGestaoBairrosAreas();
     } catch (err) {
-        alert("Erro ao restaurar backup: " + err.message);
+        Swal.fire('Erro', "Erro ao restaurar backup: " + err.message, 'error');
     }
 }
 
@@ -4470,16 +4964,26 @@ async function executarRotacaoAreas() {
     checkboxes.forEach(function (cb) { fiscaisSelecionados.push(cb.value); });
 
     if (fiscaisSelecionados.length === 0) {
-        alert('Selecione pelo menos um fiscal para a rotação.');
+        Swal.fire('Aviso', 'Selecione pelo menos um fiscal para a rotação.', 'warning');
         return;
     }
 
     if (globalAreas.length === 0) {
-        alert('Não há áreas cadastradas para distribuir.');
+        Swal.fire('Aviso', 'Não há áreas cadastradas para distribuir.', 'warning');
         return;
     }
 
-    if (!confirm('Isso redistribuirá os fiscais nas ' + globalAreas.length + ' áreas existentes usando ' + fiscaisSelecionados.length + ' fiscais selecionados. Confirma?')) return;
+    const result = await Swal.fire({
+        title: 'Confirmação',
+        text: 'Isso redistribuirá os fiscais nas ' + globalAreas.length + ' áreas existentes usando ' + fiscaisSelecionados.length + ' fiscais selecionados. Confirma?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#ef4444',
+        confirmButtonText: 'Sim, distribuir',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
 
     // 1. Backup do estado atual
     var backupAreas = globalAreas.map(function (a) { return { id: a.id, fiscal_nome: a.fiscal_nome }; });
@@ -4510,22 +5014,32 @@ async function executarRotacaoAreas() {
         var { error } = await supabaseClient.from('areas').upsert(updates, { onConflict: 'id' });
         if (error) throw error;
 
-        alert('Rotação concluída! Rodada Nº ' + nRotacao + '. Os fiscais foram redistribuídos nas áreas.');
+        Swal.fire('Sucesso!', 'Rotação concluída! Rodada Nº ' + nRotacao + '. Os fiscais foram redistribuídos nas áreas.', 'success');
         fecharModalRotacaoAreas();
         carregarGestaoBairrosAreas();
     } catch (err) {
-        alert('Erro ao salvar rotação: ' + err.message);
+        Swal.fire('Erro', 'Erro ao salvar rotação: ' + err.message, 'error');
     }
 }
 
 async function reverterRotacaoAreas() {
     var backupString = localStorage.getItem('backup_rotacao_areas');
     if (!backupString) {
-        alert('Não há registros de uma rotação anterior de áreas salva neste computador.');
+        Swal.fire('Aviso', 'Não há registros de uma rotação anterior de áreas salva neste computador.', 'info');
         return;
     }
 
-    if (!confirm('Isso restaurará a atribuição anterior dos fiscais nas áreas. Confirma?')) return;
+    const result = await Swal.fire({
+        title: 'Confirmação',
+        text: 'Isso restaurará a atribuição anterior dos fiscais nas áreas. Confirma?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Sim, restaurar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
 
     try {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
@@ -4546,11 +5060,11 @@ async function reverterRotacaoAreas() {
         var nRotacao = parseInt(localStorage.getItem('rotacao_areas_contador') || '1', 10);
         if (nRotacao > 0) localStorage.setItem('rotacao_areas_contador', String(nRotacao - 1));
 
-        alert('Rotação anterior restaurada com sucesso!');
+        Swal.fire('Sucesso!', 'Rotação anterior restaurada com sucesso!', 'success');
         fecharModalRotacaoAreas();
         carregarGestaoBairrosAreas();
     } catch (err) {
-        alert('Erro ao restaurar backup: ' + err.message);
+        Swal.fire('Erro', 'Erro ao restaurar backup: ' + err.message, 'error');
     }
 }
 
