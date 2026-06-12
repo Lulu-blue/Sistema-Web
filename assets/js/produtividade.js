@@ -4025,10 +4025,13 @@ async function salvarDetalhesHist(id) {
                     const file = inputAnexoAR.files[i];
                     if (!file.type.startsWith('image/')) continue;
 
+                    // Comprimir a imagem para evitar estouro de memória no html2canvas/navegador (celulares)
+                    const compressedFile = await comprimirImagem(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
+
                     const imgData = await new Promise((resolve) => {
                         const reader = new FileReader();
                         reader.onload = (e) => resolve(e.target.result);
-                        reader.readAsDataURL(file);
+                        reader.readAsDataURL(compressedFile);
                     });
 
                     const imgWrapper = document.createElement('div');
@@ -4063,7 +4066,7 @@ async function salvarDetalhesHist(id) {
                     margin: 0,
                     filename: 'AR_Agrupado.pdf',
                     image: { type: 'jpeg', quality: 0.95 },
-                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    html2canvas: { scale: 1, useCORS: true, logging: false }, // Scale 1 para evitar crashes de memória
                     jsPDF: { unit: 'px', format: [794, 1122], orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
