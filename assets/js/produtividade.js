@@ -4013,20 +4013,28 @@ async function salvarDetalhesHist(id) {
         
         if (inputAnexoAR.files.length > 1) {
             try {
-                // Usando html2pdf que já é garantido existir no projeto
-                const container = document.createElement('div');
-                container.style.width = '794px'; // Largura aproximada A4
-                container.style.position = 'absolute';
-                container.style.left = '-9999px';
-                container.style.top = '0';
-                document.body.appendChild(container);
+                // Carregar jsPDF dinamicamente caso o html2pdf.bundle não exponha a variável global
+                if (!window.jspdf) {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
 
                 for (let i = 0; i < inputAnexoAR.files.length; i++) {
                     const file = inputAnexoAR.files[i];
                     if (!file.type.startsWith('image/')) continue;
 
-                    // Comprimir a imagem para evitar estouro de memória no html2canvas/navegador (celulares)
-                    const compressedFile = await comprimirImagem(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
+                    // Comprimir para um tamanho menor garantindo que caberá na memória do celular
+                    const compressedFile = await comprimirImagem(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.8 });
 
                     const imgData = await new Promise((resolve) => {
                         const reader = new FileReader();
@@ -4034,49 +4042,37 @@ async function salvarDetalhesHist(id) {
                         reader.readAsDataURL(compressedFile);
                     });
 
-                    const imgWrapper = document.createElement('div');
-                    imgWrapper.style.width = '100%';
-                    imgWrapper.style.height = '1120px'; // Altura aproximada A4
-                    imgWrapper.style.display = 'flex';
-                    imgWrapper.style.justifyContent = 'center';
-                    imgWrapper.style.alignItems = 'center';
-                    imgWrapper.style.overflow = 'hidden';
-                    imgWrapper.style.backgroundColor = '#ffffff';
-
-                    const img = document.createElement('img');
+                    const img = new Image();
                     await new Promise((resolve) => {
                         img.onload = resolve;
-                        img.onerror = resolve; // Continue mesmo se falhar
+                        img.onerror = resolve;
                         img.src = imgData;
                     });
 
-                    img.style.maxWidth = '100%';
-                    img.style.maxHeight = '100%';
-                    img.style.objectFit = 'contain';
+                    if (i > 0) doc.addPage();
 
-                    imgWrapper.appendChild(img);
-                    container.appendChild(imgWrapper);
+                    const imgRatio = img.width / img.height;
+                    const pageRatio = pageWidth / pageHeight;
+
+                    let drawWidth = pageWidth;
+                    let drawHeight = pageHeight;
+
+                    if (imgRatio > pageRatio) {
+                        drawHeight = pageWidth / imgRatio;
+                    } else {
+                        drawWidth = pageHeight * imgRatio;
+                    }
+
+                    const x = (pageWidth - drawWidth) / 2;
+                    const y = (pageHeight - drawHeight) / 2;
+
+                    doc.addImage(imgData, 'JPEG', x, y, drawWidth, drawHeight);
                 }
 
-                // Aguarda um pequeno momento para o navegador renderizar as imagens invisíveis no DOM
-                await new Promise(r => setTimeout(r, 500));
-
-                // Opções para garantir quebra de página por elemento
-                const opt = {
-                    margin: 0,
-                    filename: 'AR_Agrupado.pdf',
-                    image: { type: 'jpeg', quality: 0.95 },
-                    html2canvas: { scale: 1, useCORS: true, logging: false }, // Scale 1 para evitar crashes de memória
-                    jsPDF: { unit: 'px', format: [794, 1122], orientation: 'portrait' },
-                    pagebreak: { mode: ['css', 'legacy'] }
-                };
-
-                const pdfBlob = await html2pdf().set(opt).from(container).output('blob');
+                const pdfBlob = doc.output('blob');
                 finalFile = new File([pdfBlob], 'AR_Agrupado.pdf', { type: 'application/pdf' });
-
-                document.body.removeChild(container);
             } catch(e) {
-                console.error("Erro ao gerar PDF das imagens com html2pdf:", e);
+                console.error("Erro ao gerar PDF das imagens via jsPDF:", e);
                 alert("Erro ao tentar agrupar as imagens num PDF. O primeiro arquivo será enviado sozinho.");
             }
         }
