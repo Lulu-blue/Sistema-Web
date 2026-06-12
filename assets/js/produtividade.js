@@ -3363,7 +3363,15 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             bodyHTML += renderizarTd(reg.fiscal_nome, 'col-curta') + renderizarTd(dataFormatada, 'col-curta') + renderizarTd(reg.pontuacao, 'col-curta');
 
             if (podeVerAnexos) {
-                const temAnexoAR = reg.campos && reg.campos.anexo_ar;
+                let primeiroArUrl = '';
+                if (reg.campos && reg.campos.anexo_ar) {
+                    if (Array.isArray(reg.campos.anexo_ar) && reg.campos.anexo_ar.length > 0) {
+                        primeiroArUrl = typeof reg.campos.anexo_ar[0] === 'string' ? reg.campos.anexo_ar[0] : reg.campos.anexo_ar[0].url;
+                    } else if (typeof reg.campos.anexo_ar === 'string') {
+                        primeiroArUrl = reg.campos.anexo_ar;
+                    }
+                }
+                const temAnexoAR = !!primeiroArUrl;
                 let anexoHTML = '';
 
                 const pertenceLogado = pertenceAoFiscalLogado(reg);
@@ -3374,7 +3382,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                         anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
                     }
                     if (temAnexoAR) {
-                        anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                        anexoHTML += `<button onclick="abrirAnexoGerente('${primeiroArUrl}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
                     }
                 } else {
                     if (temAnexo || temAnexoAR) {
@@ -3494,7 +3502,15 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
         bodyHTML += renderizarTd(reg.fiscal_nome, 'col-curta') + renderizarTd(dataFormatada, 'col-curta') + renderizarTd(reg.pontuacao, 'col-curta');
 
         if (podeVerAnexos) {
-            const temAnexoAR = reg.campos && reg.campos.anexo_ar;
+            let primeiroArUrl = '';
+            if (reg.campos && reg.campos.anexo_ar) {
+                if (Array.isArray(reg.campos.anexo_ar) && reg.campos.anexo_ar.length > 0) {
+                    primeiroArUrl = typeof reg.campos.anexo_ar[0] === 'string' ? reg.campos.anexo_ar[0] : reg.campos.anexo_ar[0].url;
+                } else if (typeof reg.campos.anexo_ar === 'string') {
+                    primeiroArUrl = reg.campos.anexo_ar;
+                }
+            }
+            const temAnexoAR = !!primeiroArUrl;
             let anexoHTML = '';
 
             const pertenceLogado = pertenceAoFiscalLogado(reg);
@@ -3505,7 +3521,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                     anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_pdf}')" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;display:block;margin:0 auto;">📄 Ver</button>`;
                 }
                 if (temAnexoAR) {
-                    anexoHTML += `<button onclick="abrirAnexoGerente('${reg.campos.anexo_ar}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
+                    anexoHTML += `<button onclick="abrirAnexoGerente('${primeiroArUrl}')" style="background:#3b82f6;color:white;border:none;padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;display:block;margin:${temAnexo ? '6px' : '0'} auto 0 auto;width:90%;">📄 AR</button>`;
                 }
             } else {
                 if (temAnexo || temAnexoAR) {
@@ -3720,15 +3736,32 @@ async function abrirDetalhesAdminHist(id) {
                 <input type="text" id="admin-ar" value="${vAR}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none;">
             </div>`;
             if (campos.anexo_ar) {
-                htmlCampos += `<div id="container-anexo-ar-atual" style="margin-bottom:12px; font-size:14px; display:flex; align-items:center; gap:8px;">
-                    <a href="${campos.anexo_ar}" target="_blank" style="color:#0ea5e9; text-decoration:underline; font-weight:600;">Ver anexo do AR atual</a>
-                    <button onclick="document.getElementById('container-anexo-ar-atual').style.display='none'; document.getElementById('admin-remover-anexo-ar').checked = true;" title="Remover anexo" style="background:#ef4444; color:white; border:none; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; font-size:12px; line-height:1; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">✕</button>
-                    <input type="checkbox" id="admin-remover-anexo-ar" style="display:none;">
-                </div>`;
+                let listaAR = Array.isArray(campos.anexo_ar) ? campos.anexo_ar : [{ url: campos.anexo_ar, data: null }];
+                if (listaAR.length > 0) {
+                    htmlCampos += `<div style="margin-bottom:12px;">
+                        <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Anexos do AR Atuais</label>`;
+                    listaAR.forEach((ar, idx) => {
+                        const valUrl = typeof ar === 'string' ? ar : ar.url;
+                        const valData = (typeof ar === 'object' && ar.data) ? ` (${ar.data.split('-').reverse().join('/')})` : '';
+                        htmlCampos += `<div id="container-anexo-ar-${idx}" style="margin-bottom:8px; font-size:13px; display:flex; align-items:center; gap:8px; background:#f8fafc; padding:6px; border-radius:4px; border:1px solid #e2e8f0;">
+                            <a href="${valUrl}" target="_blank" style="color:#0ea5e9; text-decoration:underline; font-weight:600;">Ver anexo do AR ${idx + 1}${valData}</a>
+                            <button onclick="document.getElementById('container-anexo-ar-${idx}').style.display='none'; document.getElementById('admin-remover-anexo-ar-${idx}').checked = true;" title="Remover anexo" style="background:#ef4444; color:white; border:none; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; font-size:12px; line-height:1; transition:0.2s;">✕</button>
+                            <input type="checkbox" id="admin-remover-anexo-ar-${idx}" class="remover-ar-checkbox" value="${idx}" style="display:none;">
+                        </div>`;
+                    });
+                    htmlCampos += `</div>`;
+                }
             }
-            htmlCampos += `<div style="margin-bottom:12px;">
-                <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Anexar Arquivo do AR</label>
-                <input type="file" id="admin-anexo-ar" accept=".png,.jpg,.jpeg,.doc,.docx,.pdf" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; background:white;">
+            htmlCampos += `<div style="margin-bottom:12px; padding:10px; border:1px dashed #cbd5e1; border-radius:6px; background:#f8fafc;">
+                <label style="display:block; font-weight:600; margin-bottom:8px; font-size:14px; color:#3b82f6;">Adicionar Novo Anexo do AR</label>
+                <div style="display:flex; gap:10px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:12px; color:#64748b; margin-bottom:4px; display:block;">Data do AR</label>
+                        <input type="date" id="admin-novo-ar-data" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
+                    </div>
+                </div>
+                <input type="file" id="admin-anexo-ar" accept=".png,.jpg,.jpeg,.doc,.docx,.pdf" multiple capture="environment" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; outline:none; background:white;">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Pode selecionar mais de uma imagem para gerar PDF.</div>
             </div>`;
             htmlCampos += `<div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:4px; font-size:14px; color:#3b82f6;">Histórico (Admin)</label>
@@ -3753,7 +3786,16 @@ async function abrirDetalhesAdminHist(id) {
 
             htmlCampos += `<div style="margin-bottom:8px;"><strong>AR:</strong> ${vAR || '—'}</div>`;
             if (campos.anexo_ar) {
-                htmlCampos += `<div style="margin-bottom:8px;"><strong>Anexo AR:</strong> <a href="${campos.anexo_ar}" target="_blank" style="color:#0ea5e9; text-decoration:underline;">Visualizar Arquivo</a></div>`;
+                let listaAR = Array.isArray(campos.anexo_ar) ? campos.anexo_ar : [{ url: campos.anexo_ar, data: null }];
+                if (listaAR.length > 0) {
+                    htmlCampos += `<div style="margin-bottom:8px;"><strong>Anexos AR:</strong><br>`;
+                    listaAR.forEach((ar, idx) => {
+                        const valUrl = typeof ar === 'string' ? ar : ar.url;
+                        const valData = (typeof ar === 'object' && ar.data) ? ` (${ar.data.split('-').reverse().join('/')})` : '';
+                        htmlCampos += `<a href="${valUrl}" target="_blank" style="color:#0ea5e9; text-decoration:underline; display:block; margin-top:4px; padding-left:8px;">↳ Visualizar Arquivo AR ${idx + 1}${valData}</a>`;
+                    });
+                    htmlCampos += `</div>`;
+                }
             }
             htmlCampos += `<div style="margin-bottom:8px; white-space:pre-wrap;"><strong>Histórico Administrativo:</strong> ${vHistorico || '—'}</div>`;
         }
@@ -3946,25 +3988,101 @@ async function salvarDetalhesHist(id) {
     if (inputAR) novosCampos.ar = inputAR.value;
     if (inputHistorico) novosCampos.historico_admin = inputHistorico.value;
 
-    if (checkboxRemoverAR && checkboxRemoverAR.checked) {
-        delete novosCampos.anexo_ar;
+    let listaARAtual = [];
+    if (reg.campos && reg.campos.anexo_ar) {
+        listaARAtual = Array.isArray(reg.campos.anexo_ar) ? [...reg.campos.anexo_ar] : [{ url: reg.campos.anexo_ar, data: null }];
+    }
+
+    const removerCheckboxes = document.querySelectorAll('.remover-ar-checkbox');
+    const indicesRemover = Array.from(removerCheckboxes).filter(cb => cb.checked).map(cb => parseInt(cb.value));
+    if (indicesRemover.length > 0) {
+        listaARAtual = listaARAtual.filter((_, idx) => !indicesRemover.includes(idx));
     }
 
     if (inputAnexoAR && inputAnexoAR.files.length > 0) {
-        const arquivoAR = inputAnexoAR.files[0];
-        let nomeAnexoLimpo = arquivoAR.name
+        if (btnSalvar) {
+            btnSalvar.innerText = 'Processando Anexo AR...';
+            btnSalvar.disabled = true;
+        }
+
+        const dataARInput = document.getElementById('admin-novo-ar-data');
+        const dataAR = dataARInput && dataARInput.value ? dataARInput.value : '';
+
+        // Se houver múltiplas imagens selecionadas, criar um PDF
+        let finalFile = inputAnexoAR.files[0];
+        
+        if (inputAnexoAR.files.length > 1) {
+            try {
+                // Instanciar jsPDF (que está dentro do html2pdf.bundle.js ou nativo se disponível)
+                const jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+                if (jsPDF) {
+                    const doc = new jsPDF('p', 'mm', 'a4');
+                    const width = doc.internal.pageSize.getWidth();
+                    const height = doc.internal.pageSize.getHeight();
+
+                    for (let i = 0; i < inputAnexoAR.files.length; i++) {
+                        const file = inputAnexoAR.files[i];
+                        if (!file.type.startsWith('image/')) continue;
+
+                        const imgData = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => resolve(e.target.result);
+                            reader.readAsDataURL(file);
+                        });
+
+                        if (i > 0) doc.addPage();
+                        
+                        // Desenhar a imagem centralizada e com proporções
+                        const img = new Image();
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.src = imgData;
+                        });
+                        
+                        const imgRatio = img.width / img.height;
+                        const pageRatio = width / height;
+                        
+                        let drawWidth = width;
+                        let drawHeight = height;
+                        
+                        if (imgRatio > pageRatio) {
+                            drawHeight = width / imgRatio;
+                        } else {
+                            drawWidth = height * imgRatio;
+                        }
+                        
+                        const x = (width - drawWidth) / 2;
+                        const y = (height - drawHeight) / 2;
+
+                        doc.addImage(imgData, 'JPEG', x, y, drawWidth, drawHeight);
+                    }
+                    
+                    const pdfBlob = doc.output('blob');
+                    finalFile = new File([pdfBlob], 'AR_Agrupado.pdf', { type: 'application/pdf' });
+                }
+            } catch(e) {
+                console.error("Erro ao gerar PDF das imagens:", e);
+                alert("Erro ao tentar agrupar as imagens num PDF. O primeiro arquivo será enviado sozinho.");
+            }
+        }
+
+        let nomeAnexoLimpo = finalFile.name
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/\s+/g, '_')
             .replace(/[^a-zA-Z0-9_\-\.]/g, '');
 
         const { data: { user } } = await getAuthUser();
-        const nomeArquivo = `AR_${id}_${nomeAnexoLimpo}`;
+        const nomeArquivo = `AR_${id}_${Date.now()}_${nomeAnexoLimpo}`;
         const caminho = `${user.id}/${nomeArquivo}`;
 
         try {
-            const uploadResult = await cloudinaryUploadComPath(arquivoAR, 'anexos/' + caminho);
-            novosCampos.anexo_ar = uploadResult.url;
+            const uploadResult = await cloudinaryUploadComPath(finalFile, 'anexos/' + caminho);
+            listaARAtual.push({
+                url: uploadResult.url,
+                data: dataAR,
+                name: finalFile.name
+            });
         } catch (uploadError) {
             console.error('Erro no upload AR:', uploadError);
             alert('Erro ao anexar arquivo AR: ' + uploadError.message);
@@ -3974,6 +4092,12 @@ async function salvarDetalhesHist(id) {
             }
             return;
         }
+    }
+
+    if (listaARAtual.length > 0) {
+        novosCampos.anexo_ar = listaARAtual;
+    } else {
+        delete novosCampos.anexo_ar;
     }
 
     // Salvar 'Resposta' lendo o select ou o campo de texto
@@ -7373,7 +7497,16 @@ function coletarTodosAnexos(reg) {
     const anexos = [];
     if (reg.campos) {
         if (reg.campos.anexo_pdf) anexos.push(reg.campos.anexo_pdf);
-        if (reg.campos.anexo_ar) anexos.push(reg.campos.anexo_ar);
+        if (reg.campos.anexo_ar) {
+            if (Array.isArray(reg.campos.anexo_ar)) {
+                reg.campos.anexo_ar.forEach(ar => {
+                    if (ar && typeof ar === 'object' && ar.url) anexos.push(ar.url);
+                    else if (typeof ar === 'string') anexos.push(ar);
+                });
+            } else {
+                anexos.push(reg.campos.anexo_ar);
+            }
+        }
         if (Array.isArray(reg.campos.anexos_extras)) {
             reg.campos.anexos_extras.forEach(url => {
                 if (url && typeof url === 'string') anexos.push(url);
