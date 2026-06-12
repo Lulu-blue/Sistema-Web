@@ -4041,7 +4041,12 @@ async function salvarDetalhesHist(id) {
                     imgWrapper.style.backgroundColor = '#ffffff';
 
                     const img = document.createElement('img');
-                    img.src = imgData;
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = resolve; // Continue mesmo se falhar
+                        img.src = imgData;
+                    });
+
                     img.style.maxWidth = '100%';
                     img.style.maxHeight = '100%';
                     img.style.objectFit = 'contain';
@@ -4049,6 +4054,9 @@ async function salvarDetalhesHist(id) {
                     imgWrapper.appendChild(img);
                     container.appendChild(imgWrapper);
                 }
+
+                // Aguarda um pequeno momento para o navegador renderizar as imagens invisíveis no DOM
+                await new Promise(r => setTimeout(r, 500));
 
                 // Opções para garantir quebra de página por elemento
                 const opt = {
