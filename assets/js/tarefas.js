@@ -903,6 +903,19 @@ async function carregarTarefas() {
             s._ehMinha = ehCriador || ehResp;
         });
 
+        // Buscar a data da última resposta de cada tarefa
+        var taskResps = [];
+        if (ids.length > 0) {
+            var resResps = await supabaseClient.from('tarefa_respostas').select('tarefa_id, created_at').in('tarefa_id', ids);
+            taskResps = resResps.data || [];
+        }
+        var lastRespDateMap = {};
+        taskResps.forEach(function(r) {
+            if (!lastRespDateMap[r.tarefa_id] || r.created_at > lastRespDateMap[r.tarefa_id]) {
+                lastRespDateMap[r.tarefa_id] = r.created_at;
+            }
+        });
+
         var hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
 
@@ -964,9 +977,8 @@ async function carregarTarefas() {
 
             if (!tarefaVisivelParaUsuario(t)) return;
 
-            // Filtrar do Kanban tarefas concluídas há mais de 30 dias
             if (t.status === 'concluida') {
-                var dataConclusao = new Date(t.updated_at || t.created_at);
+                var dataConclusao = new Date(lastRespDateMap[t.id] || t.created_at);
                 var diffTempo = hoje - dataConclusao;
                 var diasPassados = Math.floor(diffTempo / (1000 * 60 * 60 * 24));
 
@@ -1908,6 +1920,12 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
             var todasConcluidas = (todasSubs || []).every(function (s) { return s.status === 'concluida'; });
             if (todasConcluidas && todasSubs && todasSubs.length > 0) {
                 await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', tarefaPaiId);
+                await supabaseClient.from('tarefa_respostas').insert({
+                    tarefa_id: tarefaPaiId,
+                    user_id: userIdGlobal,
+                    user_name: 'Sistema',
+                    texto: 'Tarefa principal concluída automaticamente (todas as subtarefas finalizadas).'
+                });
             } else {
                 await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaPaiId);
             }
@@ -3236,10 +3254,11 @@ async function alterarStatusTarefa(id, novoStatus) {
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
+        var { data: tarefaBasica } = await supabaseClient.from('tarefas').select('criado_por, tarefa_responsaveis(user_id)').eq('id', id).maybeSingle();
+        var ehCriador = tarefaBasica && tarefaBasica.criado_por === userIdGlobal;
+
         if (!ehDiretor && !ehSecretario) {
-            var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, tarefa_responsaveis(user_id)').eq('id', id).maybeSingle();
-            var ehCriador = tarefa && tarefa.criado_por === userIdGlobal;
-            var responsaveis = tarefa && tarefa.tarefa_responsaveis ? tarefa.tarefa_responsaveis : [];
+            var responsaveis = tarefaBasica && tarefaBasica.tarefa_responsaveis ? tarefaBasica.tarefa_responsaveis : [];
             var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
             if (!ehCriador && !ehResponsavel) {
                 Swal.fire('Acesso Negado', 'Apenas o criador, um responsável, Diretor ou Secretário(a) podem alterar o status.', 'error');
@@ -3247,7 +3266,7 @@ async function alterarStatusTarefa(id, novoStatus) {
             }
         }
         
-        if (novoStatus === 'concluida') {
+        if (novoStatus === 'concluida' && !ehCriador) {
             // Verificar se há subtarefas pendentes
             var { data: subtarefas } = await supabaseClient
                 .from('tarefas')
@@ -3273,6 +3292,15 @@ async function alterarStatusTarefa(id, novoStatus) {
         }
 
         await supabaseClient.from('tarefas').update({ status: novoStatus }).eq('id', id);
+        if (novoStatus === 'concluida') {
+            var { data: perf } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+            await supabaseClient.from('tarefa_respostas').insert({
+                tarefa_id: id,
+                user_id: userIdGlobal,
+                user_name: perf ? perf.full_name : 'Usuário',
+                texto: 'Tarefa marcada como concluída manualmente.'
+            });
+        }
         fecharModal('modal-detalhe-tarefa');
         carregarTarefas();
     } catch (err) { alert('Erro: ' + err.message); }
@@ -3771,12 +3799,13 @@ async function toggleSubtarefa(subId, checked) {
         // Buscar informações da subtarefa e seus responsáveis
         var { data: subInfo } = await supabaseClient
             .from('tarefas')
-            .select('tarefa_pai_id, tarefa_responsaveis(user_id)')
+            .select('tarefa_pai_id, criado_por, tarefa_responsaveis(user_id)')
             .eq('id', subId)
             .maybeSingle();
         
         if (!subInfo) return;
         
+        var ehCriador = subInfo.criado_por === userIdGlobal;
         // Verificar se o usuário é responsável pela subtarefa
         var responsaveis = subInfo.tarefa_responsaveis || [];
         var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
@@ -3784,14 +3813,14 @@ async function toggleSubtarefa(subId, checked) {
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
         
-        // Só permite concluir se for responsável ou Diretor/Secretário
-        if (!ehResponsavel && !ehDiretor && !ehSecretario) {
-            Swal.fire('Acesso Negado', 'Apenas o responsável pela subtarefa pode concluí-la.', 'error');
+        // Só permite concluir se for criador, responsável ou Diretor/Secretário
+        if (!ehCriador && !ehResponsavel && !ehDiretor && !ehSecretario) {
+            Swal.fire('Acesso Negado', 'Apenas o criador ou o responsável pela subtarefa podem concluí-la.', 'error');
             return;
         }
         
-        // Se marcando como concluída, verificar se tem anexo OU resposta
-        if (checked) {
+        // Se marcando como concluída, verificar se tem anexo OU resposta (Criador ignora isso)
+        if (checked && !ehCriador) {
             var { data: anexos } = await supabaseClient
                 .from('tarefa_anexos')
                 .select('id')
@@ -3813,6 +3842,15 @@ async function toggleSubtarefa(subId, checked) {
             }
         }
         await supabaseClient.from('tarefas').update({ status: novoStatus }).eq('id', subId);
+        if (novoStatus === 'concluida') {
+            var { data: perfSub } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+            await supabaseClient.from('tarefa_respostas').insert({
+                tarefa_id: subId,
+                user_id: userIdGlobal,
+                user_name: perfSub ? perfSub.full_name : 'Usuário',
+                texto: 'Subtarefa marcada como concluída manualmente.'
+            });
+        }
         var { data: sub } = await supabaseClient.from('tarefas').select('tarefa_pai_id').eq('id', subId).maybeSingle();
         if (sub && sub.tarefa_pai_id) {
             // Atualizar status da tarefa pai automaticamente
@@ -3824,6 +3862,12 @@ async function toggleSubtarefa(subId, checked) {
                 var todasConcluidas = (todasSubs || []).every(function (s) { return s.status === 'concluida'; });
                 if (todasConcluidas && todasSubs && todasSubs.length > 0) {
                     await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', sub.tarefa_pai_id);
+                    await supabaseClient.from('tarefa_respostas').insert({
+                        tarefa_id: sub.tarefa_pai_id,
+                        user_id: userIdGlobal,
+                        user_name: 'Sistema',
+                        texto: 'Tarefa principal concluída automaticamente (todas as subtarefas finalizadas).'
+                    });
                 } else {
                     await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', sub.tarefa_pai_id);
                 }
