@@ -3293,7 +3293,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;">
                                 <button onclick="renderizarListaTarefasStatusFiscal(0, 'Concluídas', '#10b981')" style="padding:8px;border:1px solid #10b981;background:#f0fdf4;color:#166534;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Concluídas</button>
                                 <button onclick="renderizarListaTarefasStatusFiscal(1, 'Em Progresso', '#3b82f6')" style="padding:8px;border:1px solid #3b82f6;background:#dbeafe;color:#1e40af;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Em Progresso</button>
-                                <button onclick="renderizarListaTarefasStatusFiscal(2, 'Pendentes', '#f59e0b')" style="padding:8px;border:1px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Pendentes</button>
+                                <button onclick="renderizarListaTarefasStatusFiscal(2, 'Sem Movimentação', '#f59e0b')" style="padding:8px;border:1px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Sem Movimentação</button>
                                 <button onclick="renderizarListaTarefasStatusFiscal(3, 'Atrasadas', '#ef4444')" style="padding:8px;border:1px solid #ef4444;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Atrasadas</button>
                             </div>
                             <div id="lista-tarefas-status-fiscal" style="margin-top:16px;display:none;"></div>
@@ -3454,7 +3454,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         canvasColunas.chartInstance = new Chart(canvasColunas, {
             type: 'bar',
             data: {
-                labels: ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'],
+                labels: ['Concluídas', 'Em Progresso', 'Sem Movimentação', 'Atrasadas'],
                 datasets: [{
                     label: 'Quantidade',
                     data: [statusTarefas.concluidas, statusTarefas.emProgresso, statusTarefas.pendentes, statusTarefas.atrasadas],
@@ -3500,7 +3500,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
                 console.log('[Relatório Fiscal] points:', points);
                 if (points && points.length > 0) {
                     var index = points[0].index;
-                    var labels = ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'];
+                    var labels = ['Concluídas', 'Em Progresso', 'Sem Movimentação', 'Atrasadas'];
                     var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
                     console.log('[Relatório Fiscal] Clicou em:', labels[index]);
                     renderizarListaTarefasStatusFiscal(index, labels[index], cores[index]);
@@ -6417,7 +6417,7 @@ async function carregarResumoTarefasSecretario() {
         var atrasadas = tarefas.filter(t => t.prazo && new Date(t.prazo) < new Date()).length;
 
         var html = '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">';
-        html += '<div style="text-align: center; padding: 16px; background: #fef3c7; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #d97706;">' + pendentes + '</div><div style="font-size: 12px; color: #92400e;">Pendentes</div></div>';
+        html += '<div style="text-align: center; padding: 16px; background: #fef3c7; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #d97706;">' + pendentes + '</div><div style="font-size: 12px; color: #92400e;">Sem Movimentação</div></div>';
         html += '<div style="text-align: center; padding: 16px; background: #dbeafe; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #2563eb;">' + emProgresso + '</div><div style="font-size: 12px; color: #1e40af;">Em Progresso</div></div>';
         html += '<div style="text-align: center; padding: 16px; background: #fee2e2; border-radius: 10px;"><div style="font-size: 24px; font-weight: 700; color: #dc2626;">' + atrasadas + '</div><div style="font-size: 12px; color: #991b1b;">Atrasadas</div></div>';
         html += '</div>';
@@ -6451,7 +6451,7 @@ async function carregarResumoTarefasSecretario() {
 
         tarefas.slice(0, 5).forEach(function (t) {
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b';
-            var statusLabel = t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente';
+            var statusLabel = t.status === 'em_progresso' ? 'Em Progresso' : 'Sem Movimentação';
             var atrasada = t.prazo && new Date(t.prazo) < new Date();
 
             var criadorNome = (t.criador && t.criador.full_name) ? t.criador.full_name : 'Desconhecido';
@@ -6529,7 +6529,7 @@ async function carregarGraficoDocumentosSecretario() {
         }
 
         if (elTotal) {
-            elTotal.innerHTML = '<span style="color: #64748b; font-size: 13px;">Total: <strong style="color: #1e293b;">' + totalDocs + '</strong> registros</span>';
+            elTotal.innerHTML = '<a href="javascript:void(0)" onclick="mudarAba(\'historico-geral\')" title="Ver Histórico Geral" style="color: #64748b; font-size: 13px; text-decoration: none; display: inline-block; padding: 4px 8px; border-radius: 6px; transition: background 0.2s, color 0.2s;" onmouseover="this.style.background=\'#e2e8f0\';this.style.color=\'#1e293b\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#64748b\'">Total: <strong style="color: inherit;">' + totalDocs + '</strong> registros</a>';
         }
 
         var labels = Object.keys(contagem);
@@ -6833,7 +6833,7 @@ async function renderizarTarefasSecretario(container, tarefas) {
             var prazo = t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : 'Sem prazo';
             var criador = criadorMap[t.criado_por] || 'Desconhecido';
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : (t.status === 'pendente' ? '#f59e0b' : '#10b981');
-            var statusText = t.status === 'em_progresso' ? 'Em progresso' : (t.status === 'pendente' ? 'Pendente' : 'Concluída');
+            var statusText = t.status === 'em_progresso' ? 'Em progresso' : (t.status === 'pendente' ? 'Sem Movimentação' : 'Concluída');
 
             html += '<div style="padding: 12px; border-bottom: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'" onclick="if(typeof abrirDetalheTarefa===\'function\')abrirDetalheTarefa(' + t.id + ')">';
             html += '<div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">' + (t.titulo || 'Sem título') + '</div>';
@@ -7689,12 +7689,12 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
         html += '</div>';
 
-        // Barra Pendentes
+        // Barra Sem Movimentação
         var alturaPend = totalTarefas > 0 ? (stats.tarefas.pendentes / totalTarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
         html += '<div style="font-size:14px;font-weight:700;color:' + cores.pendentes + ';margin-bottom:8px;">' + stats.tarefas.pendentes + '</div>';
         html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPend + 'px;"></div>';
-        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Sem Movimentação</div>';
         html += '</div>';
 
         html += '</div>';
@@ -7734,12 +7734,12 @@ function renderizarDashboardFuncionario(stats, nomeFunc, cor) {
         html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Atrasadas</div>';
         html += '</div>';
 
-        // Barra Pendentes
+        // Barra Sem Movimentação
         var alturaPendSub = totalSubtarefas > 0 ? (stats.subtarefas.pendentes / totalSubtarefas) * 180 : 0;
         html += '<div style="display:flex;flex-direction:column;align-items:center;">';
         html += '<div style="font-size:14px;font-weight:700;color:' + cores.pendentes + ';margin-bottom:8px;">' + stats.subtarefas.pendentes + '</div>';
         html += '<div style="width:60px;background:' + cores.pendentes + ';border-radius:8px 8px 0 0;height:' + alturaPendSub + 'px;"></div>';
-        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Pendentes</div>';
+        html += '<div style="font-size:12px;color:#64748b;margin-top:8px;">Sem Movimentação</div>';
         html += '</div>';
 
         html += '</div>';
@@ -7921,7 +7921,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
             + '<div class="stats-card" style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.atrasadas + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Atrasadas</div></div>'
             + '<div class="stats-card" style="background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.concluidas + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Concluídas</div></div>'
             + '<div class="stats-card" style="background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.emProgresso + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Em Progresso</div></div>'
-            + '<div class="stats-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.pendentes + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Pendentes</div></div>'
+            + '<div class="stats-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:16px;text-align:center;color:white;"><div class="stats-numero" style="font-size:28px;font-weight:700;">' + stats.pendentes + '</div><div class="stats-label" style="font-size:12px;opacity:0.9;">Sem Movimentação</div></div>'
             + '</div>';
     }
 
@@ -7954,7 +7954,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
             var chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'],
+                    labels: ['Atrasadas', 'Concluídas', 'Em Progresso', 'Sem Movimentação'],
                     datasets: [{
                         data: [stats.atrasadas, stats.concluidas, stats.emProgresso, stats.pendentes],
                         backgroundColor: ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'],
@@ -7985,7 +7985,7 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
                 if (points && points.length > 0) {
                     var index = points[0].index;
                     var statusMap = ['atrasadas', 'concluidas', 'em_progresso', 'pendentes'];
-                    var statusNomes = ['Atrasadas', 'Concluídas', 'Em Progresso', 'Pendentes'];
+                    var statusNomes = ['Atrasadas', 'Concluídas', 'Em Progresso', 'Sem Movimentação'];
                     var statusCores = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'];
                     var statusFiltro = statusMap[index];
                     var nomeStatus = statusNomes[index];
@@ -9007,7 +9007,7 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
                 var chart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'],
+                        labels: ['Concluídas', 'Em Progresso', 'Sem Movimentação', 'Atrasadas'],
                         datasets: [{
                             data: [stats.concluidas, stats.emProgresso, stats.pendentes, stats.atrasadas],
                             backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
@@ -9029,7 +9029,7 @@ async function carregarEstatisticasTarefasParaFiscal(fiscalId) {
                     console.log('[Canvas Click] points:', points);
                     if (points && points.length > 0) {
                         var index = points[0].index;
-                        var labels = ['Concluídas', 'Em Progresso', 'Pendentes', 'Atrasadas'];
+                        var labels = ['Concluídas', 'Em Progresso', 'Sem Movimentação', 'Atrasadas'];
                         var cores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
                         console.log('[Canvas Click] index:', index, 'label:', labels[index]);
                         renderizarListaTarefasPorStatus(index, labels[index], cores[index]);

@@ -1731,7 +1731,7 @@ async function mostrarTarefasFuncionario(userId, userName) {
         html += '<div style="display:flex; gap:16px; margin-bottom:16px;">';
         html += '<div style="flex:1; text-align:center; padding:12px; background:#e0f2fe; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#0284c7;">' + lista.length + '</div><div style="font-size:12px; color:#0369a1;">Total</div></div>';
         html += '<div style="flex:1; text-align:center; padding:12px; background:#dcfce7; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#16a34a;">' + concluidas.length + '</div><div style="font-size:12px; color:#166534;">Concluídas</div></div>';
-        html += '<div style="flex:1; text-align:center; padding:12px; background:#fef3c7; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#d97706;">' + pendentes.length + '</div><div style="font-size:12px; color:#92400e;">Pendentes</div></div>';
+        html += '<div style="flex:1; text-align:center; padding:12px; background:#fef3c7; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#d97706;">' + pendentes.length + '</div><div style="font-size:12px; color:#92400e;">Sem Movimentação</div></div>';
         html += '<div style="flex:1; text-align:center; padding:12px; background:#fee2e2; border-radius:8px;"><div style="font-size:20px; font-weight:700; color:#dc2626;">' + atrasadas.length + '</div><div style="font-size:12px; color:#991b1b;">Atrasadas</div></div>';
         html += '</div>';
 
@@ -1741,7 +1741,7 @@ async function mostrarTarefasFuncionario(userId, userName) {
             html += '<div style="display:flex; flex-direction:column; gap:8px;">';
             lista.forEach(function (t) {
                 var statusColor = t.status === 'concluida' ? '#10b981' : (t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
-                var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+                var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Sem Movimentação');
                 var atrasada = t.prazo && new Date(t.prazo) < new Date() && t.status !== 'concluida';
 
                 html += '<div style="padding:12px; background:#f8fafc; border-radius:8px; border-left:4px solid ' + statusColor + ';">';
