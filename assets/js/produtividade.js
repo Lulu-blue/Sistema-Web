@@ -871,8 +871,178 @@ window.adicionarCampoLicenca = function () {
         <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">×</button>
     `;
     container.appendChild(div);
+    container.appendChild(div);
     div.querySelector('input').focus();
 };
+
+// =========================================================
+// SALVAR EDIÇÃO DE REGISTRO (ESPECÍFICO PARA NÃO AFETAR ANEXOS E PONTOS)
+// =========================================================
+async function salvarEdicaoRegistro() {
+    console.log("Iniciando salvarEdicaoRegistro...");
+    if (!modoEdicao || !registroSelecionado || !idEditando) {
+        alert("Erro no estado da edição! modoEdicao: " + modoEdicao + " idEditando: " + idEditando);
+        return;
+    }
+
+    // Verificar conexão antes de salvar
+    const conexaoOK = await verificarConexaoAntesDeSalvar();
+    if (!conexaoOK) return;
+
+    if (salvando) {
+        console.warn("Bloqueado pois 'salvando' já é true.");
+        return;
+    }
+    salvando = true;
+
+    const btnSalvar = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvar ? btnSalvar.textContent : 'Salvar';
+    if (btnSalvar) {
+        btnSalvar.textContent = 'Salvando Edição...';
+        btnSalvar.disabled = true;
+    }
+
+    try {
+        // 1. Clona perfeitamente o campos original para NÃO PERDER NENHUM ANEXO OU CAMPO EXTRA
+        const novosCampos = { ...registroSelecionado.campos };
+        let todosPreenchidos = true;
+
+        // 2. Atualiza apenas os campos que estão na tela
+        categoriaAtual.campos.forEach(campo => {
+            const input = document.getElementById(`campo-${campo.nome}`);
+
+            if (campo.tipo === 'file' || campo.ignorarNoBanco) return;
+
+            if (categoriaAtual.id === '19' && campo.nome === 'n_licenca') {
+                const inputsMulti = document.querySelectorAll('.campo-licenca-multi');
+                const lista = [];
+                inputsMulti.forEach(inp => {
+                    const val = inp.value.trim();
+                    if (val) {
+                        lista.push(val);
+                        inp.style.borderColor = '#e2e8f0';
+                    } else if (campo.obrigatorio && lista.length === 0) {
+                        inp.style.borderColor = '#ef4444';
+                    }
+                });
+
+                if (lista.length === 0 && campo.obrigatorio) {
+                    todosPreenchidos = false;
+                } else {
+                    novosCampos['_lista_licencas'] = lista;
+                }
+                return;
+            }
+
+            if (!input) return;
+
+            let valor = input.value.trim();
+
+            if (campo.obrigatorio && !valor) {
+                todosPreenchidos = false;
+                if (campo.tipo === 'select_custom' || campo.tipo === 'select_bairro') {
+                    const trigger = document.querySelector(`#dropdown-${campo.nome} .dropdown-trigger`);
+                    if (trigger) trigger.style.borderColor = '#ef4444';
+                } else {
+                    input.style.borderColor = '#ef4444';
+                }
+            } else {
+                if (campo.tipo === 'select_custom' || campo.tipo === 'select_bairro') {
+                    const trigger = document.querySelector(`#dropdown-${campo.nome} .dropdown-trigger`);
+                    if (trigger) trigger.style.borderColor = '#e2e8f0';
+                } else {
+                    input.style.borderColor = '#e2e8f0';
+                }
+                novosCampos[campo.nome] = valor;
+            }
+        });
+
+        if (!todosPreenchidos) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Campos Obrigatórios',
+                text: 'Por favor, preencha todos os campos obrigatórios marcados em vermelho.',
+                confirmButtonColor: '#3b82f6'
+            });
+            return;
+        }
+
+        // 3. Define a pontuação
+        // Nunca ganhar pontuação se já tinha sido zerado
+        let pontos = registroSelecionado.pontuacao || 0;
+
+        // Apenas recalcula se era uma categoria baseada em horas E se o registro NÃO estava zerado
+        if (categoriaAtual.por_hora && categoriaAtual.campo_horas && pontos !== 0) {
+            let pontosPorUnidade = categoriaAtual.pontos;
+            if (categoriaAtual.pontos_por_tipo && novosCampos.tipo) {
+                pontosPorUnidade = categoriaAtual.pontos_por_tipo[novosCampos.tipo] || categoriaAtual.pontos;
+            }
+            const horas = parseFloat(novosCampos[categoriaAtual.campo_horas]) || 0;
+            pontos = pontosPorUnidade * horas;
+        }
+
+        let dataRegistradaManual = null;
+        if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
+            const inputDataManual = document.getElementById('campo-data_registrada_manual');
+            if (inputDataManual && inputDataManual.value) {
+                dataRegistradaManual = new Date(inputDataManual.value).toISOString();
+            }
+        }
+
+        const isCP = categoriaAtual.destaque === true;
+        const tabela = isCP ? 'controle_processual' : 'registros_produtividade';
+
+        const updateData = {
+            campos: novosCampos,
+            pontuacao: pontos
+        };
+        if (dataRegistradaManual) {
+            updateData.created_at = dataRegistradaManual;
+        }
+
+        const { error: updateError } = await supabaseClient
+            .from(tabela)
+            .update(updateData)
+            .eq('id', idEditando);
+
+        if (updateError) throw updateError;
+
+        fecharModalProdutividade();
+        Swal.fire({
+            icon: 'success',
+            title: 'Alteração salva',
+            text: 'O registro foi atualizado com sucesso.',
+            timer: 2500,
+            timerProgressBar: true,
+            showConfirmButton: false,
+            toast: true,
+            position: 'top-end'
+        });
+
+        try {
+            await new Promise(r => setTimeout(r, 300));
+            await carregarHistorico();
+            if (typeof window.filtrarHistoricoGeral === 'function') {
+                window.filtrarHistoricoGeral();
+            }
+        } catch (e) {
+            console.warn('Erro ao recarregar histórico:', e);
+        }
+
+        const secaoHistorico = document.getElementById('aba-historico');
+        if (secaoHistorico) secaoHistorico.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+        console.error("Erro na edição:", err);
+        alert('Ocorreu um erro ao salvar a edição no banco de dados: ' + (err?.message || JSON.stringify(err)));
+    } finally {
+        if (btnSalvar) {
+            btnSalvar.textContent = oldTexto;
+            btnSalvar.disabled = false;
+        }
+        salvando = false;
+    }
+}
 
 // --- SALVAR REGISTRO ---
 let salvando = false;
@@ -1892,6 +2062,11 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         pontos = pontosPorUnidade * horas;
     }
 
+    // Se estiver em modo edição e a pontuação anterior for 0 (ex: zerado por fechamento/limpeza), mantém 0
+    if (modoEdicao && registroSelecionado && registroSelecionado.pontuacao === 0) {
+        pontos = 0;
+    }
+
     // 5. Salvar no Supabase
     let numeroSeqRollback = null;
     try {
@@ -1936,6 +2111,9 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
             try {
                 await new Promise(r => setTimeout(r, 300));
                 await carregarHistorico();
+                if (typeof filtrarHistoricoGeral === 'function') {
+                    filtrarHistoricoGeral();
+                }
                 console.log('[Salvar] Histórico recarregado.');
             } catch (e) {
                 console.warn('[Salvar] Erro ao recarregar histórico:', e);
@@ -2540,6 +2718,7 @@ let idEditando = null;
 
 function editarRegistro() {
     if (!registroSelecionado) return;
+    salvando = false; // Garante que a flag global de salvamento seja redefinida ao abrir o modal
 
     const reg = registroSelecionado;
 
@@ -2553,7 +2732,10 @@ function editarRegistro() {
 
     // Fechar detalhes
     fecharDetalhes();
-
+    
+    // RESTAURA A VARIÁVEL GLOBAL POIS fecharDetalhes() A ZEROU!
+    // (Esse era o bug raiz que apagava os anexos e perdia a pontuação original)
+    registroSelecionado = reg;
     // Abrir formulário em modo edição
     modoEdicao = true;
     idEditando = reg.id;
@@ -2720,8 +2902,10 @@ function editarRegistro() {
     // Redefine o botão salvar para evitar que fique com 'Gerar Documento' de outra categoria
     const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
     if (btnSalvarForm) {
-        btnSalvarForm.textContent = 'Salvar';
-        btnSalvarForm.onclick = () => salvarRegistro();
+        btnSalvarForm.textContent = 'Salvar Edição';
+        // Força remover o listener anterior e setar no HTML
+        btnSalvarForm.onclick = null;
+        btnSalvarForm.setAttribute('onclick', 'salvarEdicaoRegistro()');
     }
 
     overlay.classList.add('ativo');
@@ -4010,7 +4194,7 @@ async function salvarDetalhesHist(id) {
 
         // Se houver múltiplas imagens selecionadas, criar um PDF
         let finalFile = inputAnexoAR.files[0];
-        
+
         if (inputAnexoAR.files.length > 1) {
             try {
                 // Carregar jsPDF dinamicamente caso o html2pdf.bundle não exponha a variável global
@@ -4071,7 +4255,7 @@ async function salvarDetalhesHist(id) {
 
                 const pdfBlob = doc.output('blob');
                 finalFile = new File([pdfBlob], 'AR_Agrupado.pdf', { type: 'application/pdf' });
-            } catch(e) {
+            } catch (e) {
                 console.error("Erro ao gerar PDF das imagens via jsPDF:", e);
                 alert("Erro ao tentar agrupar as imagens num PDF. O primeiro arquivo será enviado sozinho.");
             }
