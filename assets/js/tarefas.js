@@ -59,11 +59,11 @@ async function carregarModuloTarefas() {
                 var isFiscal = roleLowerRaw.includes('fiscal');
                 var isAdminPostura = (roleLowerRaw.includes('administrativo') || roleLowerRaw.includes('administrador')) && roleLowerRaw.includes('postura');
                 // Novos cargos que não podem criar/editar tarefas
-                var isEquipeAmbiental = roleLowerRaw.includes('engenheiro') ||
-                    roleLowerRaw.includes('agrônomo') ||
-                    roleLowerRaw.includes('agronomo') ||
-                    roleLowerRaw.includes('analista ambiental') ||
-                    roleLowerRaw.includes('auxiliar de serviços');
+                var isEquipeAmbiental = roleLowerRaw.includes('engenheiro') || 
+                                        roleLowerRaw.includes('agrônomo') || 
+                                        roleLowerRaw.includes('agronomo') ||
+                                        roleLowerRaw.includes('analista ambiental') ||
+                                        roleLowerRaw.includes('auxiliar de serviços');
                 var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 var isAnalistaConsorcio = roleLowerRawNorm.includes('analista') && roleLowerRawNorm.includes('consorcio');
                 if (isFiscal || isAdminPostura || isEquipeAmbiental || isAnalistaConsorcio) {
@@ -97,7 +97,7 @@ async function carregarModuloTarefas() {
             try {
                 var { data: profiles } = await supabaseClient.from('profiles').select('id, role');
                 if (profiles) {
-                    var normalizeStr = function (str) {
+                    var normalizeStr = function(str) {
                         return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     };
 
@@ -115,11 +115,11 @@ async function carregarModuloTarefas() {
                     // Equipe Ambiental (RA)
                     idsEquipeAmbientalGlobal = profiles.filter(p => {
                         var n = normalizeStr(p.role);
-                        return n.includes('regularizacao') || n.includes('regularização') ||
-                            n.includes('engenheiro') || n.includes('agronomo') ||
-                            n.includes('analista ambiental') || n.includes('auxiliar de servicos');
+                        return n.includes('regularizacao') || n.includes('regularização') || 
+                               n.includes('engenheiro') || n.includes('agronomo') || 
+                               n.includes('analista ambiental') || n.includes('auxiliar de servicos');
                     }).map(p => p.id);
-
+                    
                     idsGerentesAmbientalGlobal = profiles.filter(p => {
                         var n = normalizeStr(p.role);
                         return n.includes('gerente') && (n.includes('regularizacao') || n.includes('regularização'));
@@ -140,7 +140,7 @@ async function carregarModuloTarefas() {
                     // Outros
                     idsJuridicoGlobal = profiles.filter(p => normalizeStr(p.role).includes('juridica')).map(p => p.id);
                     idsRHGlobal = profiles.filter(p => normalizeStr(p.role).includes('administracao')).map(p => p.id);
-
+                    
                     idsDiretoresGlobal = profiles.filter(p => {
                         var n = normalizeStr(p.role);
                         return n.includes('diretor') && !n.includes('cuidado animal');
@@ -220,17 +220,17 @@ async function carregarEventos() {
         // Filtrar eventos baseado no perfil do usuário
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
-        var ehFiscal = (userRoleGlobal === 'Fiscal' || userRoleGlobal === 'fiscal' ||
-            roleLower.includes('fiscal') && roleLower.includes('postura'));
+        var ehFiscal = (userRoleGlobal === 'Fiscal' || userRoleGlobal === 'fiscal' || 
+                        roleLower.includes('fiscal') && roleLower.includes('postura'));
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
         var roleLowerNormFilter = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) ||
-            (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
+        var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) || 
+                              (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
 
-        var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw === 'administrativo' ||
-            roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
-            roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
-            isCargoEspecial);
+        var ehGerente = (roleLowerRaw.includes('gerente') || roleLowerRaw === 'administrativo' || 
+                         roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
+                         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
+                         isCargoEspecial);
         var roleLowerRawNorm = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
 
@@ -290,7 +290,7 @@ async function carregarEventos() {
             // Comportamento padrão: vê tudo
             eventosMesCache = todosEventos;
         }
-
+        
         // --- FILTRO POR TIPO (Evento/Projeto) ---
         var selectFiltro = document.getElementById('filtro-tipo-evento');
         var filtroTipo = selectFiltro ? selectFiltro.value : 'todos';
@@ -327,16 +327,16 @@ async function carregarEventos() {
             var msg = window.dataFiltroSelecionada ? 'Nenhum evento/projeto neste dia.' : 'Nenhum evento/projeto futuro cadastrado.';
             var emptyHtml = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">' + msg + '</div>';
             if (containerCards) containerCards.innerHTML = emptyHtml;
-
+            
             var containerProjetos = document.getElementById('lista-projetos-container');
             if (containerProjetos) containerProjetos.innerHTML = emptyHtml;
-
+            
             var homeContainerCards = document.getElementById('home-lista-eventos-container');
             if (homeContainerCards) homeContainerCards.innerHTML = emptyHtml;
         } else {
             var htmlCardsEventos = '';
             var htmlCardsProjetos = '';
-
+            
             eventosParaExibir.forEach(function (ev) {
                 var htmlCard = '';
                 var dataObj = new Date(ev.data_inicio);
@@ -374,7 +374,7 @@ async function carregarEventos() {
                 htmlCard += '<div style="margin-bottom: 20px;">';
 
                 // Card Principal
-                htmlCard += '<div onclick="toggleDetalheEventoCard(\'' + ev.id + '\')" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
+                htmlCard += '<div onclick="toggleDetalheEventoCard(this)" style="background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 15px rgba(0,0,0,0.06); overflow: hidden; position: relative; border: 1px solid #f1f5f9; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.transform=\'translateY(-2px)\'; this.style.borderColor=\'' + corBase + '44\'" onmouseout="this.style.transform=\'none\'; this.style.borderColor=\'#f1f5f9\'">';
 
                 // Lado Esquerdo: Data Colorida
                 htmlCard += '<div style="background:' + corBase + '; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; flex-shrink: 0;">';
@@ -417,15 +417,15 @@ async function carregarEventos() {
                     htmlCardsEventos += htmlCard;
                 }
             });
-
+            
             var emptyEv = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">Nenhum evento encontrado.</div>';
             var emptyProj = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:1rem;">Nenhum projeto encontrado.</div>';
 
             if (containerCards) containerCards.innerHTML = htmlCardsEventos || emptyEv;
-
+            
             var containerProjetos = document.getElementById('lista-projetos-container');
             if (containerProjetos) containerProjetos.innerHTML = htmlCardsProjetos || emptyProj;
-
+            
             var homeContainerCards = document.getElementById('home-lista-eventos-container');
             if (homeContainerCards) homeContainerCards.innerHTML = htmlCardsEventos || emptyEv;
         }
@@ -448,7 +448,7 @@ function setFiltroTipoEvento(valor) {
         'projeto': 'btn-filtro-projeto'
     };
 
-    ids.forEach(function (id) {
+    ids.forEach(function(id) {
         var btn = document.getElementById(id);
         if (!btn) return;
         if (id === mapping[valor]) {
@@ -486,9 +486,10 @@ function calcularStatusEvento(ev) {
     return { text: 'Pendente', badge: '<span style="background:#f1f5f9; color:#64748b; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:8px;">Pendente</span>' };
 }
 
-function toggleDetalheEventoCard(id) {
-    var el = document.getElementById('detalhe-evento-card-' + id);
-    var seta = document.getElementById('seta-card-' + id);
+function toggleDetalheEventoCard(elemento) {
+    if (!elemento) return;
+    var el = elemento.nextElementSibling;
+    var seta = elemento.querySelector('svg[id^="seta-card-"]');
     if (!el) return;
 
     var estaVisivel = el.style.display === 'block';
@@ -499,36 +500,10 @@ function toggleDetalheEventoCard(id) {
     } else {
         el.style.display = 'block';
         if (seta) seta.style.transform = 'rotate(180deg)';
-        // Rola o container scrollável mais próximo para o detalhe ficar visível
-        setTimeout(function() {
-            var scrollContainer = el.parentElement;
-            while (scrollContainer && scrollContainer !== document.body) {
-                var style = window.getComputedStyle(scrollContainer);
-                if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-                    break;
-                }
-                scrollContainer = scrollContainer.parentElement;
-            }
-            if (scrollContainer && scrollContainer !== document.body) {
-                var cardWrapper = el.parentElement;
-                var wrapperRect = cardWrapper.getBoundingClientRect();
-                var containerRect = scrollContainer.getBoundingClientRect();
-                var novoScrollTop = wrapperRect.top - containerRect.top + scrollContainer.scrollTop - 20;
-                scrollContainer.scrollTo({ top: novoScrollTop, behavior: 'smooth' });
-            } else {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
     }
 }
 
 function renderizarConteudoExpandidoEvento(ev) {
-    // Normalizar arrays para evitar erros silenciosos com JSONB
-    var parcerias = Array.isArray(ev.parcerias) ? ev.parcerias : [];
-    var orcamentos = Array.isArray(ev.orcamentos) ? ev.orcamentos : [];
-    var patrocinios = Array.isArray(ev.patrocinios) ? ev.patrocinios : [];
-    var tarefas = Array.isArray(ev.tarefas) ? ev.tarefas : [];
-
     var html = '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:30px;">';
 
     // Lado 1: Detalhes do Evento
@@ -545,19 +520,19 @@ function renderizarConteudoExpandidoEvento(ev) {
     }
 
     // Parcerias
-    if (parcerias.length > 0) {
+    if (ev.parcerias && ev.parcerias.length > 0) {
         html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">🤝 Parcerias</h4>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
-        parcerias.forEach(function (p) {
+        ev.parcerias.forEach(function(p) {
             html += '<span style="background:#ecfdf5; color:#065f46; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #a7f3d0;">' + p + '</span>';
         });
         html += '</div>';
     }
 
     // Orçamento
-    if (orcamentos.length > 0) {
+    if (ev.orcamentos && ev.orcamentos.length > 0) {
         html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">💰 Orçamento</h4>';
-        orcamentos.forEach(function (o) {
+        ev.orcamentos.forEach(function(o) {
             html += '<div style="display:flex; justify-content:space-between; padding:6px 10px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; margin-bottom:4px; font-size:0.8rem;">';
             html += '<span style="color:#92400e;">' + (o.descricao || 'Item') + '</span>';
             html += '<span style="font-weight:700; color:#b45309;">' + (o.valor || '-') + '</span>';
@@ -566,10 +541,10 @@ function renderizarConteudoExpandidoEvento(ev) {
     }
 
     // Patrocínios
-    if (patrocinios.length > 0) {
+    if (ev.patrocinios && ev.patrocinios.length > 0) {
         html += '<h4 style="margin:14px 0 6px 0; color:#1e293b; font-size:0.85rem;">⭐ Patrocínios</h4>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
-        patrocinios.forEach(function (p) {
+        ev.patrocinios.forEach(function(p) {
             if (typeof p === 'object' && p !== null) {
                 var valTxt = p.valor ? (' - <span style="font-weight:700;">' + p.valor + '</span>') : '';
                 html += '<span style="background:#f5f3ff; color:#5b21b6; padding:4px 10px; border-radius:8px; font-size:0.8rem; border:1px solid #c4b5fd;">' + (p.descricao || 'Patrocinador') + valTxt + '</span>';
@@ -590,6 +565,7 @@ function renderizarConteudoExpandidoEvento(ev) {
     html += '<div>';
     html += '<h4 style="margin:0 0 10px 0; color:#1e293b; font-size:0.95rem;">Tarefas e Acompanhamento</h4>';
 
+    var tarefas = ev.tarefas || [];
     if (tarefas.length > 0) {
         tarefas.forEach(function (tarefa) {
             html += '<div style="background:white; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">';
@@ -619,7 +595,7 @@ function renderizarConteudoExpandidoEvento(ev) {
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     // Apenas Diretor e Secretário podem editar/excluir eventos e inserir tarefas em projetos
     var podeEditarEvento = ehDiretor || ehSecretario;
-
+    
     if (podeEditarEvento) {
         html += '<div style="grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9;">';
         html += '<button onclick="abrirModalNovaTarefa(false, \'' + ev.id + '\')" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#f8fafc\'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Inserir Tarefa</button>';
@@ -664,7 +640,7 @@ function abrirModalNovoEvento() {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
     }
-
+    
     var html = '<div class="modal-overlay ativo" id="modal-novo-evento" onclick="if(event.target===this)fecharModal(\'modal-novo-evento\')">';
     html += '<div class="modal-container" style="max-width:460px;">';
     html += '<div class="modal-header"><h2>Novo Evento</h2>';
@@ -691,7 +667,7 @@ async function salvarEvento() {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
     }
-
+    
     var titulo = document.getElementById('evento-titulo').value.trim();
     var descricao = document.getElementById('evento-descricao').value.trim();
     var data = document.getElementById('evento-data').value;
@@ -719,11 +695,11 @@ async function excluirEvento(id) {
     var roleLower = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLower.includes('diretor');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+    
     // Apenas Diretor e Secretário podem excluir eventos
     if (!ehDiretor && !ehSecretario) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem excluir eventos.', 'error');
-        return;
+        Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem excluir eventos.', 'error'); 
+        return; 
     }
 
     if (!confirm('Excluir este evento e todas as tarefas vinculadas?')) return;
@@ -745,11 +721,11 @@ function tarefaVisivelParaUsuario(t) {
     var isDiretor = roleFiltro.includes('diretor');
     var isSecretario = userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)';
 
-    var vinculadaAoGrupo = function (task, idSet) {
+    var vinculadaAoGrupo = function(task, idSet) {
         if (!idSet || idSet.length === 0) return false;
         if (idSet.indexOf(task.criado_por) !== -1) return true;
         if (!task._respUserIds) return false;
-        return task._respUserIds.some(function (uid) { return idSet.indexOf(uid) !== -1; });
+        return task._respUserIds.some(function(uid) { return idSet.indexOf(uid) !== -1; });
     };
 
     if (isSecretario) {
@@ -759,19 +735,19 @@ function tarefaVisivelParaUsuario(t) {
         } else if (secMode === 'direcao') {
             if (window.secretarioModoGerencia) {
                 var idsPosturasSec = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-                return vinculadaAoGrupo(t, idsPosturasSec) || (ehCriador && t._respUserIds.some(function (uid) { return idsPosturasSec.indexOf(uid) !== -1; }));
+                return vinculadaAoGrupo(t, idsPosturasSec) || (ehCriador && t._respUserIds.some(function(uid) { return idsPosturasSec.indexOf(uid) !== -1; }));
             } else {
-                return vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(function (uid) { return idsDiretoresGlobal.indexOf(uid) !== -1; }));
+                return vinculadaAoGrupo(t, idsDiretoresGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsDiretoresGlobal.indexOf(uid) !== -1; }));
             }
         } else if (secMode === 'gerencia_ambiental') {
             var idsAmbientalCompleto = idsEquipeAmbientalGlobal.concat(idsConsorcioGlobal).concat(idsAnalistasConsorcioGlobal);
-            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function (uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function(uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
         } else if (secMode === 'cuidado_animal') {
-            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function (uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
         } else if (secMode === 'juridico') {
-            return vinculadaAoGrupo(t, idsJuridicoGlobal) || (ehCriador && t._respUserIds.some(function (uid) { return idsJuridicoGlobal.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsJuridicoGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsJuridicoGlobal.indexOf(uid) !== -1; }));
         } else if (secMode === 'recursos_humanos') {
-            return vinculadaAoGrupo(t, idsRHGlobal) || (ehCriador && t._respUserIds.some(function (uid) { return idsRHGlobal.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsRHGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsRHGlobal.indexOf(uid) !== -1; }));
         }
         return false;
     }
@@ -780,12 +756,12 @@ function tarefaVisivelParaUsuario(t) {
             return ehCriador || ehResponsavel;
         } else if (diretorModoVisualizacao === 'gerencia_ambiental') {
             var idsAmbientalCompleto = idsEquipeAmbientalGlobal.concat(idsConsorcioGlobal).concat(idsAnalistasConsorcioGlobal);
-            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function (uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsAmbientalCompleto) || (ehCriador && t._respUserIds.some(function(uid) { return idsAmbientalCompleto.indexOf(uid) !== -1; }));
         } else if (diretorModoVisualizacao === 'cuidado_animal') {
-            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function (uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsEquipeCAGlobal) || (ehCriador && t._respUserIds.some(function(uid) { return idsEquipeCAGlobal.indexOf(uid) !== -1; }));
         } else {
             var idsPosturas = idsGerentesGlobal.concat(idsFiscaisPosturasGlobal);
-            return vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(function (uid) { return idsPosturas.indexOf(uid) !== -1; }));
+            return vinculadaAoGrupo(t, idsPosturas) || (ehCriador && t._respUserIds.some(function(uid) { return idsPosturas.indexOf(uid) !== -1; }));
         }
     }
     else if (roleFiltroNorm.includes('consorcio') && !roleFiltroNorm.includes('analista')) {
@@ -931,7 +907,7 @@ async function carregarTarefas() {
             taskResps = resResps.data || [];
         }
         var lastRespDateMap = {};
-        taskResps.forEach(function (r) {
+        taskResps.forEach(function(r) {
             if (!lastRespDateMap[r.tarefa_id] || r.created_at > lastRespDateMap[r.tarefa_id]) {
                 lastRespDateMap[r.tarefa_id] = r.created_at;
             }
@@ -964,11 +940,11 @@ async function carregarTarefas() {
         var ehGerenteAmbiental = roleLowerRaw.includes('regularizacao') || roleLowerRaw.includes('regularização');
         var isJuridico = roleLowerNorm.includes('gerente') && roleLowerNorm.includes('interface') && roleLowerNorm.includes('juridica');
         var isAgenteAdmin = roleLowerNorm.includes('agente') && roleLowerNorm.includes('administracao');
-
+        
         ehGerenteKanban = (roleLowerRaw.includes('gerente') && !ehGerenteAmbiental) || isJuridico || isAgenteAdmin;
 
         // Se for diretor no modo 'gerencia' ou 'gerencia_posturas', ele atua como gerente (vê tudo dos gerentes de posturas)
-        if ((roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente') &&
+        if ((roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente') && 
             (diretorModoVisualizacao === 'gerencia' || diretorModoVisualizacao === 'gerencia_posturas')) {
             ehGerenteKanban = true;
         }
@@ -982,10 +958,10 @@ async function carregarTarefas() {
         console.log('[Tarefas] role:', userRoleGlobal, '| modo:', diretorModoVisualizacao, '| ehGerente:', ehGerenteKanban, '| total tarefas:', tarefasCache.length);
 
         // Função helper interna para verificar se a tarefa pertence a um conjunto de IDs (criador ou responsável)
-        var vinculadaAoGrupo = function (task, idSet) {
+        var vinculadaAoGrupo = function(task, idSet) {
             if (!idSet || idSet.length === 0) return false;
             if (idSet.indexOf(task.criado_por) !== -1) return true;
-            return task._respUserIds.some(function (uid) { return idSet.indexOf(uid) !== -1; });
+            return task._respUserIds.some(function(uid) { return idSet.indexOf(uid) !== -1; });
         };
 
         tarefasCache.forEach(function (t) {
@@ -1016,7 +992,7 @@ async function carregarTarefas() {
         });
 
         renderizarColunaTarefas('coluna-atrasadas', atrasadas, '#ef4444', 'Atrasadas');
-        renderizarColunaTarefas('coluna-pendentes', pendentes, '#f59e0b', 'Pendentes');
+        renderizarColunaTarefas('coluna-pendentes', pendentes, '#f59e0b', 'Sem Movimentação');
         renderizarColunaTarefas('coluna-em-progresso', emProgresso, '#3b82f6', 'Em Progresso');
         renderizarColunaTarefas('coluna-concluidas', concluidas, '#10b981', 'Concluídas');
 
@@ -1081,7 +1057,7 @@ function renderizarCalendarioTarefas() {
         diaCell.style.flexDirection = 'column';
         diaCell.style.cursor = 'pointer';
         diaCell.style.transition = 'all 0.2s';
-        diaCell.onclick = (function (d) { return function () { selecionarDataCalendarioTarefas(d); }; })(dataStr);
+        diaCell.onclick = (function(d) { return function() { selecionarDataCalendarioTarefas(d); }; })(dataStr);
 
         var numeroSpan = document.createElement('span');
         numeroSpan.textContent = dia;
@@ -1115,19 +1091,19 @@ function renderizarCalendarioTarefas() {
 
         // Coletar todas as tarefas e subtarefas visíveis não concluídas
         var todasTarefasVisiveis = [];
-        tarefasCache.forEach(function (t) {
+        tarefasCache.forEach(function(t) {
             if (t.status === 'concluida') return;
             if (tarefaVisivelParaUsuario(t)) todasTarefasVisiveis.push(t);
         });
-        Object.keys(subtarefasCache).forEach(function (paiId) {
-            (subtarefasCache[paiId] || []).forEach(function (s) {
+        Object.keys(subtarefasCache).forEach(function(paiId) {
+            (subtarefasCache[paiId] || []).forEach(function(s) {
                 if (s.status === 'concluida') return;
                 if (s._ehMinha) todasTarefasVisiveis.push(s);
             });
         });
 
         var tarefasNoDia = [];
-        todasTarefasVisiveis.forEach(function (t) {
+        todasTarefasVisiveis.forEach(function(t) {
             if (!t.created_at) return;
             var criacao = t.created_at.substring(0, 10);
             var prazo = t.prazo ? t.prazo.substring(0, 10) : criacao;
@@ -1142,7 +1118,7 @@ function renderizarCalendarioTarefas() {
             diaCell.style.borderColor = corBase + '40';
         }
 
-        tarefasNoDia.forEach(function (t) {
+        tarefasNoDia.forEach(function(t) {
             var bar = document.createElement('div');
             bar.style.width = '100%';
             bar.style.height = '6px';
@@ -1184,19 +1160,19 @@ function renderizarTarefasDoDia(dataStr) {
 
     // Coletar todas as tarefas e subtarefas visíveis não concluídas
     var todasTarefasVisiveis = [];
-    tarefasCache.forEach(function (t) {
+    tarefasCache.forEach(function(t) {
         if (t.status === 'concluida') return;
         if (tarefaVisivelParaUsuario(t)) todasTarefasVisiveis.push(t);
     });
-    Object.keys(subtarefasCache).forEach(function (paiId) {
-        (subtarefasCache[paiId] || []).forEach(function (s) {
+    Object.keys(subtarefasCache).forEach(function(paiId) {
+        (subtarefasCache[paiId] || []).forEach(function(s) {
             if (s.status === 'concluida') return;
             if (s._ehMinha) todasTarefasVisiveis.push(s);
         });
     });
 
     var tarefasDoDia = [];
-    todasTarefasVisiveis.forEach(function (t) {
+    todasTarefasVisiveis.forEach(function(t) {
         if (!t.created_at) return;
         var criacao = t.created_at.substring(0, 10);
         var prazo = t.prazo ? t.prazo.substring(0, 10) : criacao;
@@ -1214,11 +1190,11 @@ function renderizarTarefasDoDia(dataStr) {
     titulo.textContent = 'Tarefas de ' + dataFmt;
 
     var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
-    tarefasDoDia.forEach(function (t) {
+    tarefasDoDia.forEach(function(t) {
         var cor = corArcoIrisTarefa(t.id);
         var prazoStr = t.prazo ? formatarDataBRTarefa(t.prazo) : '-';
         var statusColor = t.status === 'concluida' ? '#10b981' : (t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
-        var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+        var statusLabel = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em Progresso' : 'Sem Movimentação');
         html += '<div style="background:white; border-radius:8px; padding:10px 12px; border:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; border-left:3px solid ' + cor + ';">';
         html += '<div>';
         html += '<div style="font-weight:600; font-size:0.85rem; color:#1e293b;">' + escapeHtmlTarefa(t.titulo || 'Sem título') + '</div>';
@@ -1380,17 +1356,17 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null, editarTare
     // Verificação de segurança: Diretor, Gerente e Secretario podem criar tarefas
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
-
+    
     var roleLowerNormFilter = roleLowerRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) ||
-        (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
+    var isCargoEspecial = (roleLowerNormFilter.includes('agente') && roleLowerNormFilter.includes('administracao')) || 
+                          (roleLowerNormFilter.includes('gerente') && roleLowerNormFilter.includes('interface') && roleLowerNormFilter.includes('juridica'));
 
-    var ehGerente = (roleLowerRaw.includes('gerente') ||
-        roleLowerRaw === 'administrativo' ||
-        roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
-        roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
-        isCargoEspecial);
-
+    var ehGerente = (roleLowerRaw.includes('gerente') || 
+                     roleLowerRaw === 'administrativo' || 
+                     roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
+                     roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura') ||
+                     isCargoEspecial);
+                     
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehConsorcio = roleLowerNormFilter.includes('consorcio') && !roleLowerNormFilter.includes('analista');
     console.log('[Tarefas] abrirModalNovaTarefa - role:', userRoleGlobal, 'ehDiretor:', ehDiretor, 'ehGerente:', ehGerente, 'ehSecretario:', ehSecretario, 'ehConsorcio:', ehConsorcio);
@@ -1398,7 +1374,7 @@ function abrirModalNovaTarefa(isSub = false, vincularEventoId = null, editarTare
         Swal.fire('Acesso Negado', 'Apenas Diretores, Gerentes e Cargos Especiais podem criar tarefas.', 'error');
         return;
     }
-
+    
     // Gerentes não podem criar tarefas dentro de projetos (apenas tarefas avulsas)
     if (ehGerente && vincularEventoId && !editarTarefaId) {
         Swal.fire('Acesso Negado', 'Gerentes não podem inserir tarefas em projetos. Apenas Diretor e Secretário podem.', 'error');
@@ -1449,7 +1425,7 @@ var _responsaveisCache = [];
 async function carregarListaResponsaveis(responsaveisPreSelecionados) {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
-
+    
     console.log('[Tarefas] carregarListaResponsaveis - userIdGlobal:', userIdGlobal, 'userRoleGlobal:', userRoleGlobal);
 
     try {
@@ -1459,7 +1435,7 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
             .order('full_name', { ascending: true });
 
         if (error) throw error;
-
+        
         console.log('[Tarefas] Total de usuários carregados:', users ? users.length : 0);
         console.log('[Tarefas] Usuários:', users ? users.map(u => ({ id: u.id, name: u.full_name, role: u.role })) : []);
 
@@ -1476,7 +1452,7 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
         var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
         _responsaveisCache = [];
-
+        
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
             var roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -1508,11 +1484,11 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
                 var isEleMesmo = u.id === userIdGlobal;
                 // Verifica se é da equipe ambiental
                 var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
-                    roleLower.includes('engenheiro') ||
-                    roleLower.includes('agrônomo') ||
-                    roleLower.includes('agronomo') ||
-                    roleLower.includes('analista ambiental') ||
-                    roleLower.includes('auxiliar de serviços');
+                                        roleLower.includes('engenheiro') || 
+                                        roleLower.includes('agrônomo') || 
+                                        roleLower.includes('agronomo') ||
+                                        roleLower.includes('analista ambiental') ||
+                                        roleLower.includes('auxiliar de serviços');
                 // Verifica se é Consórcio (cargo de gestão, não analista)
                 var isConsorcioCargo = roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista');
                 var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
@@ -1532,23 +1508,23 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
             }
 
             // Verifica se é um cargo válido (comparação case-insensitive)
-            var isValidRole = validRoles.some(function (r) { return r.toLowerCase() === roleLower; }) ||
-                roleLower.includes('gerente') ||
-                roleLower.includes('fiscal') ||
-                roleLower.includes('administrativo') ||
-                roleLower.includes('diretor') ||
-                roleLower.includes('secretário') ||
-                roleLower.includes('secretario') ||
-                roleLower.includes('coordenador') ||
-                roleLower.includes('agente') ||
-                roleLowerNorm.includes('consorcio');
+            var isValidRole = validRoles.some(function(r) { return r.toLowerCase() === roleLower; }) ||
+                              roleLower.includes('gerente') ||
+                              roleLower.includes('fiscal') ||
+                              roleLower.includes('administrativo') ||
+                              roleLower.includes('diretor') ||
+                              roleLower.includes('secretário') ||
+                              roleLower.includes('secretario') ||
+                              roleLower.includes('coordenador') ||
+                              roleLower.includes('agente') ||
+                              roleLowerNorm.includes('consorcio');
             // Verifica se é da equipe do Gerente de Regularização Ambiental
             var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
-                roleLower.includes('engenheiro') ||
-                roleLower.includes('agrônomo') ||
-                roleLower.includes('agronomo') ||
-                roleLower.includes('analista ambiental') ||
-                roleLower.includes('auxiliar de serviços');
+                                    roleLower.includes('engenheiro') || 
+                                    roleLower.includes('agrônomo') || 
+                                    roleLower.includes('agronomo') ||
+                                    roleLower.includes('analista ambiental') ||
+                                    roleLower.includes('auxiliar de serviços');
             // Verifica se é o próprio usuário logado (para Gerente R.A. se incluir na lista)
             var isProprioUsuario = String(u.id) === String(userIdGlobal);
 
@@ -1564,7 +1540,7 @@ async function carregarListaResponsaveis(responsaveisPreSelecionados) {
 
         // Renderizar com campo de pesquisa
         renderizarListaResponsaveisComPesquisa('', responsaveisPreSelecionados);
-
+        
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
     }
@@ -1577,11 +1553,26 @@ var _pesquisaResponsavelValor = '';
 function renderizarListaResponsaveisComPesquisa(filtro, preSelecionados) {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
+    
+    // PRESERVAR ESTADO ANTES DE RENDERIZAR
+    var listaContainer = document.getElementById('responsaveis-items');
+    if (listaContainer) {
+        if (!_responsaveisEditandoIds) _responsaveisEditandoIds = [];
+        var allCheckboxes = listaContainer.querySelectorAll('.cb-responsavel');
+        allCheckboxes.forEach(function(cb) {
+            var idx = _responsaveisEditandoIds.indexOf(cb.value);
+            if (cb.checked && idx === -1) {
+                _responsaveisEditandoIds.push(cb.value);
+            } else if (!cb.checked && idx !== -1) {
+                _responsaveisEditandoIds.splice(idx, 1);
+            }
+        });
+    }
 
     _pesquisaResponsavelValor = filtro || '';
     var filtroLower = _pesquisaResponsavelValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var preSelSet = preSelecionados || _responsaveisEditandoIds || [];
-
+    
     // Na primeira renderização, cria a estrutura completa
     if (!document.getElementById('pesquisa-responsavel')) {
         // Campo de pesquisa fixo
@@ -1591,65 +1582,65 @@ function renderizarListaResponsaveisComPesquisa(filtro, preSelecionados) {
         html += '<input type="text" id="pesquisa-responsavel" placeholder="Pesquisar nome ou cargo..." ';
         html += 'style="width:100%; padding:8px 12px 8px 36px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; box-sizing:border-box;">';
         html += '</div></div>';
-
+        
         // Lista de responsáveis (será preenchida dinamicamente)
         html += '<div id="responsaveis-items" style="max-height:140px; overflow-y:auto;"></div>';
-
+        
         // Contador
         html += '<div style="padding-top:8px; border-top:1px solid #e2e8f0; margin-top:8px; font-size:12px; color:#64748b; text-align:center;">';
         html += 'Selecionados: <span id="contador-selecionados">0</span> | ';
         html += 'Mostrando: <span id="mostrando-responsaveis">0</span> de ' + _responsaveisCache.length;
         html += '</div>';
-
+        
         container.innerHTML = html;
-
+        
         // Adicionar event listener no input
-        document.getElementById('pesquisa-responsavel').addEventListener('input', function (e) {
+        document.getElementById('pesquisa-responsavel').addEventListener('input', function(e) {
             filtrarResponsaveis(e.target.value);
         });
     }
-
+    
     // Atualizar valor do input
     var inputPesquisa = document.getElementById('pesquisa-responsavel');
     if (inputPesquisa && filtro !== undefined) {
         inputPesquisa.value = filtro;
     }
-
+    
     // Renderizar apenas a lista de itens
     var listaContainer = document.getElementById('responsaveis-items');
     if (!listaContainer) return;
-
-    var usuariosFiltrados = _responsaveisCache.filter(function (u) {
+    
+    var usuariosFiltrados = _responsaveisCache.filter(function(u) {
         if (!filtroLower) return true;
         var nomeNormalizado = u.full_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var cargoNormalizado = (u.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         return nomeNormalizado.includes(filtroLower) || cargoNormalizado.includes(filtroLower);
     });
-
+    
     var html = '';
     if (usuariosFiltrados.length === 0) {
         html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
     } else {
-        usuariosFiltrados.forEach(function (u) {
+        usuariosFiltrados.forEach(function(u) {
             var checked = u.isProprioUsuario || (preSelSet.indexOf(u.id) !== -1) ? ' checked' : '';
             html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
             html += '<input type="checkbox" class="cb-responsavel" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
             html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
         });
     }
-
+    
     listaContainer.innerHTML = html;
-
+    
     // Atualizar contadores
     atualizarContadorSelecionados();
     var mostrandoEl = document.getElementById('mostrando-responsaveis');
     if (mostrandoEl) {
         mostrandoEl.textContent = usuariosFiltrados.length;
     }
-
+    
     // Adicionar listeners nos checkboxes
     var checkboxes = listaContainer.querySelectorAll('.cb-responsavel');
-    checkboxes.forEach(function (cb) {
+    checkboxes.forEach(function(cb) {
         cb.addEventListener('change', atualizarContadorSelecionados);
     });
 }
@@ -1658,7 +1649,7 @@ function renderizarListaResponsaveisComPesquisa(filtro, preSelecionados) {
 function filtrarResponsaveis(valor) {
     renderizarListaResponsaveisComPesquisa(valor);
     // Restaurar foco no input após renderização
-    setTimeout(function () {
+    setTimeout(function() {
         var input = document.getElementById('pesquisa-responsavel');
         if (input) {
             input.focus();
@@ -1694,7 +1685,7 @@ async function carregarDadosTarefaParaEdicao() {
             if (inputPrazo && tarefa.prazo) inputPrazo.value = tarefa.prazo.substring(0, 10);
         }
 
-        _responsaveisEditandoIds = (responsaveis || []).map(function (r) { return r.user_id; });
+        _responsaveisEditandoIds = (responsaveis || []).map(function(r) { return r.user_id; });
         carregarListaResponsaveis(_responsaveisEditandoIds);
     } catch (err) {
         console.error('Erro ao carregar dados para edição:', err);
@@ -1706,10 +1697,25 @@ async function carregarDadosTarefaParaEdicao() {
 function atualizarContadorSelecionados() {
     var container = document.getElementById('tarefa-responsaveis-list');
     if (!container) return;
-    var checkboxes = container.querySelectorAll('.cb-responsavel:checked');
+    
+    var idsInDom = [];
+    var count = 0;
+    
+    var allCbs = container.querySelectorAll('.cb-responsavel');
+    allCbs.forEach(function(cb) {
+        idsInDom.push(cb.value);
+        if (cb.checked) count++;
+    });
+    
+    if (typeof _responsaveisEditandoIds !== 'undefined' && _responsaveisEditandoIds) {
+        _responsaveisEditandoIds.forEach(function(id) {
+            if (idsInDom.indexOf(id) === -1) count++;
+        });
+    }
+    
     var contador = document.getElementById('contador-selecionados');
     if (contador) {
-        contador.textContent = checkboxes.length;
+        contador.textContent = count;
     }
 }
 
@@ -1762,11 +1768,27 @@ async function salvarTarefa() {
         btnSalvar.style.opacity = '0.7';
     }
 
-    var responsaveisCBs = document.querySelectorAll('.cb-responsavel:checked');
     var responsaveis = [];
-    responsaveisCBs.forEach(function (cb) {
-        responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
+    var idsInDom = [];
+    var allCbs = document.querySelectorAll('.cb-responsavel');
+    allCbs.forEach(function (cb) {
+        idsInDom.push(cb.value);
+        if (cb.checked) {
+            responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
+        }
     });
+    
+    // Mesclar com seleções em memória ocultas pela pesquisa
+    if (typeof _responsaveisEditandoIds !== 'undefined' && _responsaveisEditandoIds && _responsaveisEditandoIds.length > 0) {
+        _responsaveisEditandoIds.forEach(function(id) {
+            if (idsInDom.indexOf(id) === -1) {
+                var user = _responsaveisCache.find(function(u) { return u.id === id; });
+                if (user) {
+                    responsaveis.push({ user_id: user.id, user_name: user.full_name });
+                }
+            }
+        });
+    }
 
     // Capturar arquivos selecionados antes de fechar o modal
     // Usar array em memória
@@ -1830,7 +1852,7 @@ async function salvarTarefa() {
                 var anexosValidos = resultadosUploads.filter(function (r) { return r !== null; });
 
                 if (anexosValidos.length > 0) {
-                    anexosValidos.forEach(function (a) { a.uploaded_by = userIdGlobal; });
+                    anexosValidos.forEach(function(a) { a.uploaded_by = userIdGlobal; });
                     await supabaseClient.from('tarefa_anexos').insert(anexosValidos);
                 }
             }
@@ -1885,7 +1907,7 @@ async function salvarTarefa() {
             var anexosValidos = resultadosUploads.filter(function (r) { return r !== null; });
 
             if (anexosValidos.length > 0) {
-                anexosValidos.forEach(function (a) { a.uploaded_by = userIdGlobal; });
+                anexosValidos.forEach(function(a) { a.uploaded_by = userIdGlobal; });
                 await supabaseClient.from('tarefa_anexos').insert(anexosValidos);
             }
         }
@@ -1912,7 +1934,7 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
         Swal.fire('Campo Vazio', 'Por favor, digite uma resposta antes de salvar.', 'warning');
         return;
     }
-
+    
     try {
         // Buscar nome do usuário atual
         var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
@@ -1928,7 +1950,7 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
 
         var { error } = await supabaseClient.from('tarefa_respostas').insert(payload);
         if (error) throw error;
-
+        
         // Concluir automaticamente a subtarefa ao enviar uma resposta
         await supabaseClient.from('tarefas').update({ status: 'concluida' }).eq('id', subId);
 
@@ -1960,11 +1982,11 @@ async function salvarRespostaSubtarefa(subId, tarefaPaiId, viaModalSub) {
             timer: 2000,
             showConfirmButton: false
         });
-
+        
         if (viaModalSub) {
             // Fechar modal da subtarefa e reabri-lo com dados atualizados
             fecharModal('modal-detalhe-subtarefa');
-            setTimeout(function () { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+            setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
         } else {
             // Recarregar o modal da tarefa pai
             abrirDetalheTarefa(tarefaPaiId);
@@ -2005,11 +2027,11 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         resps = resps || [];
 
         // Buscar avatares dos responsáveis
-        var respIds = resps.map(function (r) { return r.user_id; });
+        var respIds = resps.map(function(r) { return r.user_id; });
         var avMap = {};
         if (respIds.length > 0) {
             var { data: perfisR } = await supabaseClient.from('profiles').select('id, avatar_url').in('id', respIds);
-            (perfisR || []).forEach(function (p) { avMap[p.id] = p.avatar_url || ''; });
+            (perfisR || []).forEach(function(p) { avMap[p.id] = p.avatar_url || ''; });
         }
 
         // Buscar anexos
@@ -2017,11 +2039,11 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         anexos = anexos || [];
 
         // Buscar nomes dos uploaders
-        var uploaderIds = anexos.map(function (a) { return a.uploaded_by; }).filter(Boolean);
+        var uploaderIds = anexos.map(function(a) { return a.uploaded_by; }).filter(Boolean);
         var uploaderMap = {};
         if (uploaderIds.length > 0) {
             var { data: perfisUp } = await supabaseClient.from('profiles').select('id, full_name').in('id', uploaderIds);
-            (perfisUp || []).forEach(function (p) { uploaderMap[p.id] = p.full_name || ''; });
+            (perfisUp || []).forEach(function(p) { uploaderMap[p.id] = p.full_name || ''; });
         }
 
         // Buscar visualizações
@@ -2029,11 +2051,11 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         vizs = vizs || [];
 
         // Registrar visualização se for responsável
-        var ehRespSub = resps.some(function (r) { return r.user_id === userIdGlobal; });
+        var ehRespSub = resps.some(function(r) { return r.user_id === userIdGlobal; });
         if (ehRespSub && sub.criado_por !== userIdGlobal) {
             await supabaseClient.from('tarefa_visualizacoes').upsert({ tarefa_id: subId, user_id: userIdGlobal }, { onConflict: 'tarefa_id, user_id' });
             var agora2 = new Date().toISOString();
-            if (!vizs.some(function (v) { return v.user_id === userIdGlobal; })) {
+            if (!vizs.some(function(v) { return v.user_id === userIdGlobal; })) {
                 vizs.push({ tarefa_id: subId, user_id: userIdGlobal, visualizado_at: agora2 });
             }
         }
@@ -2052,7 +2074,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
             .eq('tarefa_id', subId)
             .order('created_at', { ascending: false })
             .limit(1);
-
+            
         var dadosResp = null;
         if (respsSub && respsSub.length > 0) {
             dadosResp = { texto: respsSub[0].texto, user_name: respsSub[0].user_name, at: respsSub[0].created_at };
@@ -2061,7 +2083,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         var subTemAnexo = anexos.length > 0;
         var subJaConcluida = sub.status === 'concluida';
         var statusCor = subJaConcluida ? '#10b981' : (sub.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
-        var statusLabel = subJaConcluida ? 'Concluída' : (sub.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+        var statusLabel = subJaConcluida ? 'Concluída' : (sub.status === 'em_progresso' ? 'Em Progresso' : 'Sem Movimentação');
 
         // --- Montar HTML do modal ---
         var h = '<div class="modal-overlay ativo" id="modal-detalhe-subtarefa" onclick="if(event.target===this)fecharModal(\'modal-detalhe-subtarefa\')" style="z-index:99998;">';
@@ -2086,10 +2108,10 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         if (podeConcluir) {
             h += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
             [
-                { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
+                { val: 'pendente', label: 'Sem Movimentação', cor: '#f59e0b' },
                 { val: 'em_progresso', label: 'Em Progresso', cor: '#3b82f6' },
                 { val: 'concluida', label: 'Concluída', cor: '#10b981' }
-            ].forEach(function (st) {
+            ].forEach(function(st) {
                 var ativo = sub.status === st.val;
                 if (st.val === 'concluida' && !subTemAnexo && !dadosResp) {
                     h += '<button disabled style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; cursor:not-allowed; border:2px solid #cbd5e1; background:#f1f5f9; color:#94a3b8; opacity:0.6;" title="Responda ou anexe um documento primeiro">' + st.label + '</button>';
@@ -2113,9 +2135,9 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         if (resps.length > 0) {
             h += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
             h += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
-            resps.forEach(function (r) {
-                var viz = vizs.find(function (v) { return v.user_id === r.user_id; });
-                var vizData = viz && viz.visualizado_at ? new Date(viz.visualizado_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            resps.forEach(function(r) {
+                var viz = vizs.find(function(v) { return v.user_id === r.user_id; });
+                var vizData = viz && viz.visualizado_at ? new Date(viz.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
                 h += '<div style="display:flex; flex-direction:column; gap:1px;">';
                 h += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
                 var av = avMap[r.user_id] || '';
@@ -2139,9 +2161,9 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
             h += '<div style="font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px;">Prazo</div>';
             if (sub.prazo_anterior) {
                 var arrAntSub = [];
-                try { arrAntSub = typeof sub.prazo_anterior === 'string' && sub.prazo_anterior.startsWith('[') ? JSON.parse(sub.prazo_anterior) : (Array.isArray(sub.prazo_anterior) ? sub.prazo_anterior : [sub.prazo_anterior]); } catch (e) { arrAntSub = [sub.prazo_anterior]; }
+                try { arrAntSub = typeof sub.prazo_anterior === 'string' && sub.prazo_anterior.startsWith('[') ? JSON.parse(sub.prazo_anterior) : (Array.isArray(sub.prazo_anterior) ? sub.prazo_anterior : [sub.prazo_anterior]); } catch(e) { arrAntSub = [sub.prazo_anterior]; }
                 if (arrAntSub && arrAntSub.length > 0) {
-                    var strAntigosSub = arrAntSub.map(function (d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    var strAntigosSub = arrAntSub.map(function(d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
                     h += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigosSub + '</div>';
                 }
             }
@@ -2185,7 +2207,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
             h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">';
             h += '<strong style="font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.05em;">Resposta registrada</strong>';
             if (dadosResp.at) {
-                var drData = new Date(dadosResp.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                var drData = new Date(dadosResp.at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
                 h += '<span style="font-size:10px; color:#166534; opacity:0.7;">' + drData + '</span>';
             }
             h += '</div>';
@@ -2216,7 +2238,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
         if (anexos.length === 0) {
             h += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhum anexo.</div>';
         } else {
-            anexos.forEach(function (a) {
+            anexos.forEach(function(a) {
                 var dataUp = a.uploaded_at ? formatarDataBRTarefa(a.uploaded_at.substring(0, 10)) : '';
                 var infoUp = (uploaderMap[a.uploaded_by] ? 'Por ' + uploaderMap[a.uploaded_by] : '') + (dataUp ? ' em ' + dataUp : '');
                 h += '<div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border-radius:6px; margin-bottom:4px;">';
@@ -2271,7 +2293,7 @@ async function uploadAnexoSubModal(subId, tarefaPaiId, inputEl) {
         }
         Swal.fire({ icon: 'success', title: 'Arquivo enviado!', timer: 1200, showConfirmButton: false });
         fecharModal('modal-detalhe-subtarefa');
-        setTimeout(function () { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+        setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
     } catch (err) {
         Swal.fire('Erro', 'Não foi possível enviar o arquivo: ' + err.message, 'error');
     }
@@ -2291,7 +2313,7 @@ async function excluirAnexoSubModal(anexoId, subId, tarefaPaiId) {
             await supabaseClient.from('tarefas').update({ status: 'pendente' }).eq('id', subId);
         }
         fecharModal('modal-detalhe-subtarefa');
-        setTimeout(function () { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
+        setTimeout(function() { abrirDetalheSubtarefa(subId, tarefaPaiId); }, 100);
     } catch (err) {
         Swal.fire('Erro', 'Não foi possível remover o anexo.', 'error');
     }
@@ -2328,8 +2350,8 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#3b82f6',
         focusConfirm: false,
-        didOpen: function () { var el = document.querySelector('.swal2-container'); if (el) el.style.zIndex = '1000000'; },
-        preConfirm: function () {
+        didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; },
+        preConfirm: function() {
             var data = document.getElementById('swal-nova-data').value;
             if (!data) { Swal.showValidationMessage('Selecione uma data.'); return false; }
             var motivo = document.getElementById('swal-motivo-prazo').value.trim();
@@ -2365,7 +2387,7 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
                 notificarIds.push(tarefa.criado_por);
             }
             var { data: respPai } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaPaiId);
-            (respPai || []).forEach(function (r) {
+            (respPai || []).forEach(function(r) {
                 if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
                     notificarIds.push(r.user_id);
                 }
@@ -2398,10 +2420,10 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         // Recarregar o modal
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
-            setTimeout(function () { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
         } else {
             fecharModal('modal-detalhe-tarefa');
-            setTimeout(function () { abrirDetalheTarefa(tarefaId); }, 150);
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
         }
     } catch (err) {
         console.error('Erro ao solicitar extensão de prazo:', err);
@@ -2420,10 +2442,10 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         var arrayAntigos = [];
         if (tarefa.prazo_anterior) {
             try {
-                arrayAntigos = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[')
-                    ? JSON.parse(tarefa.prazo_anterior)
-                    : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]);
-            } catch (e) { arrayAntigos = [tarefa.prazo_anterior]; }
+                arrayAntigos = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') 
+                                ? JSON.parse(tarefa.prazo_anterior) 
+                                : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]);
+            } catch(e) { arrayAntigos = [tarefa.prazo_anterior]; }
         }
         if (tarefa.prazo) {
             arrayAntigos.push(tarefa.prazo);
@@ -2437,7 +2459,7 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
             confirmButtonText: 'Aprovar',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#10b981',
-            didOpen: function () { var el = document.querySelector('.swal2-container'); if (el) el.style.zIndex = '1000000'; }
+            didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; }
         });
         if (!isConfirmed) return;
 
@@ -2456,7 +2478,7 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         var { data: solicitante } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
         // Buscar quem havia solicitado (salvo antes da limpeza)
         // Notificamos todos os responsáveis da tarefa
-        var notifIds = (solicitante || []).map(function (r) { return r.user_id; });
+        var notifIds = (solicitante || []).map(function(r) { return r.user_id; });
         for (var i = 0; i < notifIds.length; i++) {
             if (notifIds[i] !== userIdGlobal) {
                 await supabaseClient.from('notificacoes').insert({
@@ -2473,10 +2495,10 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         Swal.fire({ icon: 'success', title: 'Prazo aprovado!', timer: 1500, showConfirmButton: false });
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
-            setTimeout(function () { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
         } else {
             fecharModal('modal-detalhe-tarefa');
-            setTimeout(function () { abrirDetalheTarefa(tarefaId); }, 150);
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
         }
     } catch (err) {
         Swal.fire('Erro', 'Não foi possível aprovar: ' + err.message, 'error');
@@ -2494,7 +2516,7 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         confirmButtonText: 'Recusar',
         cancelButtonText: 'Voltar',
         confirmButtonColor: '#ef4444',
-        didOpen: function () { var el = document.querySelector('.swal2-container'); if (el) el.style.zIndex = '1000000'; }
+        didOpen: function() { var el = document.querySelector('.swal2-container'); if(el) el.style.zIndex = '1000000'; }
     });
     if (!isConfirmed) return;
 
@@ -2526,10 +2548,10 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         Swal.fire({ icon: 'info', title: 'Solicitação recusada.', timer: 1500, showConfirmButton: false });
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
-            setTimeout(function () { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
+            setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
         } else {
             fecharModal('modal-detalhe-tarefa');
-            setTimeout(function () { abrirDetalheTarefa(tarefaId); }, 150);
+            setTimeout(function() { abrirDetalheTarefa(tarefaId); }, 150);
         }
     } catch (err) {
         Swal.fire('Erro', 'Não foi possível recusar: ' + err.message, 'error');
@@ -2548,7 +2570,7 @@ async function salvarRespostaTarefa(tarefaId) {
         Swal.fire('Campo Vazio', 'Por favor, digite uma resposta antes de salvar.', 'warning');
         return;
     }
-
+    
     try {
         var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
         var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
@@ -2561,15 +2583,15 @@ async function salvarRespostaTarefa(tarefaId) {
             texto: texto
         });
         if (error) throw error;
-
+        
         // Buscar status e criador para notificação e atualização de status
         var { data: tarefaAtual } = await supabaseClient.from('tarefas').select('status, criado_por, titulo').eq('id', tarefaId).maybeSingle();
-
+        
         // Mudar para em_progresso automaticamente se estiver pendente
         if (tarefaAtual && tarefaAtual.status === 'pendente') {
             await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaId);
         }
-
+        
         // Notificar o criador da tarefa
         if (tarefaAtual && tarefaAtual.criado_por && tarefaAtual.criado_por !== userIdGlobal) {
             await supabaseClient.from('notificacoes').insert({
@@ -2581,7 +2603,7 @@ async function salvarRespostaTarefa(tarefaId) {
             });
             window.dispatchEvent(new CustomEvent('novaNotificacao'));
         }
-
+        
         fecharModal('modal-detalhe-tarefa');
         abrirDetalheTarefa(tarefaId);
         carregarTarefas();
@@ -2599,11 +2621,11 @@ async function comentarRespostaTarefa(respostaId, tarefaId) {
         Swal.fire('Campo Vazio', 'Digite um comentário antes de enviar.', 'warning');
         return;
     }
-
+    
     try {
         var { data: perfil } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
         var nomeUsuario = perfil ? perfil.full_name : 'Usuário';
-
+        
         var { error } = await supabaseClient.from('tarefa_comentarios').insert({
             tarefa_id: tarefaId,
             resposta_id: respostaId,
@@ -2612,13 +2634,13 @@ async function comentarRespostaTarefa(respostaId, tarefaId) {
             texto: texto
         });
         if (error) throw error;
-
+        
         // Mudar tarefa para em_progresso se estiver pendente
         var { data: tarefaAtual } = await supabaseClient.from('tarefas').select('status').eq('id', tarefaId).maybeSingle();
         if (tarefaAtual && tarefaAtual.status === 'pendente') {
             await supabaseClient.from('tarefas').update({ status: 'em_progresso' }).eq('id', tarefaId);
         }
-
+        
         fecharModal('modal-detalhe-tarefa');
         abrirDetalheTarefa(tarefaId);
         carregarTarefas();
@@ -2691,13 +2713,13 @@ async function abrirDetalheTarefa(id) {
 
         // Buscar nomes dos criadores das subtarefas
         var subCriadorIds = [];
-        (subtarefas || []).forEach(function (s) {
+        (subtarefas || []).forEach(function(s) {
             if (s.criado_por && subCriadorIds.indexOf(s.criado_por) === -1) subCriadorIds.push(s.criado_por);
         });
         var subCriadorMap = {};
         if (subCriadorIds.length > 0) {
             var { data: perfisSubCriadores } = await supabaseClient.from('profiles').select('id, full_name').in('id', subCriadorIds);
-            (perfisSubCriadores || []).forEach(function (p) { subCriadorMap[p.id] = p.full_name || ''; });
+            (perfisSubCriadores || []).forEach(function(p) { subCriadorMap[p.id] = p.full_name || ''; });
         }
 
         // Buscar anexos das subtarefas
@@ -2722,19 +2744,19 @@ async function abrirDetalheTarefa(id) {
 
         // Buscar nomes de quem anexou
         var anexosTodos = (anexos || []).concat([]);
-        Object.keys(subAnexoMap).forEach(function (paiId) {
-            (subAnexoMap[paiId] || []).forEach(function (a) { anexosTodos.push(a); });
+        Object.keys(subAnexoMap).forEach(function(paiId) {
+            (subAnexoMap[paiId] || []).forEach(function(a) { anexosTodos.push(a); });
         });
         var uploaderIds = [];
-        anexosTodos.forEach(function (a) {
+        anexosTodos.forEach(function(a) {
             if (a.uploaded_by && uploaderIds.indexOf(a.uploaded_by) === -1) uploaderIds.push(a.uploaded_by);
         });
         var uploaderMap = {};
         if (uploaderIds.length > 0) {
             var { data: perfisUploaders } = await supabaseClient.from('profiles').select('id, full_name').in('id', uploaderIds);
-            (perfisUploaders || []).forEach(function (p) { uploaderMap[p.id] = p.full_name || ''; });
+            (perfisUploaders || []).forEach(function(p) { uploaderMap[p.id] = p.full_name || ''; });
         }
-        anexosTodos.forEach(function (a) { a._nomeUploader = uploaderMap[a.uploaded_by] || ''; });
+        anexosTodos.forEach(function(a) { a._nomeUploader = uploaderMap[a.uploaded_by] || ''; });
 
         // Buscar responsáveis
         var { data: responsaveis } = await supabaseClient
@@ -2756,7 +2778,7 @@ async function abrirDetalheTarefa(id) {
                 .from('tarefa_visualizacoes')
                 .select('*')
                 .in('tarefa_id', subIds);
-            (subVisualizacoes || []).forEach(function (v) {
+            (subVisualizacoes || []).forEach(function(v) {
                 if (!subVisualizacoesMap[v.tarefa_id]) subVisualizacoesMap[v.tarefa_id] = [];
                 subVisualizacoesMap[v.tarefa_id].push(v);
             });
@@ -2764,9 +2786,9 @@ async function abrirDetalheTarefa(id) {
 
         // Registrar visualização do usuário atual se for responsável (e não criador)
         if (tarefa.criado_por !== userIdGlobal) {
-            var ehRespTarefa = resps.some(function (r) { return r.user_id === userIdGlobal; });
+            var ehRespTarefa = resps.some(function(r) { return r.user_id === userIdGlobal; });
             var ehRespSub = false;
-            Object.keys(subRespUserIdMap).forEach(function (sid) {
+            Object.keys(subRespUserIdMap).forEach(function(sid) {
                 if (subRespUserIdMap[sid].indexOf(userIdGlobal) !== -1) ehRespSub = true;
             });
 
@@ -2776,7 +2798,7 @@ async function abrirDetalheTarefa(id) {
                     user_id: userIdGlobal
                 }, { onConflict: 'tarefa_id, user_id' });
                 var agora = new Date().toISOString();
-                var jaExiste = (visualizacoes || []).some(function (v) { return v.user_id === userIdGlobal; });
+                var jaExiste = (visualizacoes || []).some(function(v) { return v.user_id === userIdGlobal; });
                 if (!jaExiste) visualizacoes.push({ tarefa_id: id, user_id: userIdGlobal, visualizado_at: agora });
             }
 
@@ -2788,7 +2810,7 @@ async function abrirDetalheTarefa(id) {
                         user_id: userIdGlobal
                     }, { onConflict: 'tarefa_id, user_id' });
                     var agoraSub = new Date().toISOString();
-                    var jaExisteSub = (subVisualizacoesMap[sid] || []).some(function (v) { return v.user_id === userIdGlobal; });
+                    var jaExisteSub = (subVisualizacoesMap[sid] || []).some(function(v) { return v.user_id === userIdGlobal; });
                     if (!jaExisteSub) {
                         if (!subVisualizacoesMap[sid]) subVisualizacoesMap[sid] = [];
                         subVisualizacoesMap[sid].push({ tarefa_id: sid, user_id: userIdGlobal, visualizado_at: agoraSub });
@@ -2812,14 +2834,14 @@ async function abrirDetalheTarefa(id) {
             .order('created_at', { ascending: true });
 
         // Buscar anexos dos comentários
-        var comentarioIds = (comentarios || []).map(function (c) { return c.id; });
+        var comentarioIds = (comentarios || []).map(function(c) { return c.id; });
         var comentarioAnexosMap = {};
         if (comentarioIds.length > 0) {
             var { data: comentarioAnexos } = await supabaseClient
                 .from('tarefa_comentario_anexos')
                 .select('*')
                 .in('comentario_id', comentarioIds);
-            (comentarioAnexos || []).forEach(function (a) {
+            (comentarioAnexos || []).forEach(function(a) {
                 if (!comentarioAnexosMap[a.comentario_id]) comentarioAnexosMap[a.comentario_id] = [];
                 comentarioAnexosMap[a.comentario_id].push(a);
             });
@@ -2859,7 +2881,7 @@ async function abrirDetalheTarefa(id) {
         if (ehDiretor || ehSecretario || gerenteCriouTarefa || consorcioCriouTarefa || ehResponsavel) {
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap;">';
             var statusOpts = [
-                { val: 'pendente', label: 'Pendente', cor: '#f59e0b' },
+                { val: 'pendente', label: 'Sem Movimentação', cor: '#f59e0b' },
                 { val: 'em_progresso', label: 'Em Progresso', cor: '#3b82f6' },
                 { val: 'concluida', label: 'Concluída', cor: '#10b981' }
             ];
@@ -2878,7 +2900,7 @@ async function abrirDetalheTarefa(id) {
             html += '</div>';
         } else {
             // Só mostra o status atual
-            var statusAtualLabel = tarefa.status === 'em_progresso' ? 'Em Progresso' : (tarefa.status === 'concluida' ? 'Concluída' : 'Pendente');
+            var statusAtualLabel = tarefa.status === 'em_progresso' ? 'Em Progresso' : (tarefa.status === 'concluida' ? 'Concluída' : 'Sem Movimentação');
             var statusAtualCor = tarefa.status === 'em_progresso' ? '#3b82f6' : (tarefa.status === 'concluida' ? '#10b981' : '#f59e0b');
             html += '<div><span style="padding:6px 14px; border-radius:20px; font-size:14px; font-weight:600; background:' + statusAtualCor + '; color:white;">' + statusAtualLabel + '</span></div>';
         }
@@ -2901,8 +2923,8 @@ async function abrirDetalheTarefa(id) {
             html += '<div style="font-size:15px; color:#475569;"><strong>Responsáveis:</strong></div>';
             html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">';
             resps.forEach(function (r) {
-                var visResp = (visualizacoes || []).find(function (v) { return v.user_id === r.user_id; });
-                var visData = visResp && visResp.visualizado_at ? new Date(visResp.visualizado_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                var visResp = (visualizacoes || []).find(function(v) { return v.user_id === r.user_id; });
+                var visData = visResp && visResp.visualizado_at ? new Date(visResp.visualizado_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
                 html += '<div style="display:flex; flex-direction:column; gap:1px;">';
                 html += '<div style="display:flex; align-items:center; gap:5px; background:#f8fafc; padding:4px 10px 4px 4px; border-radius:20px; border:1px solid #e2e8f0;">';
                 var av = avMap[r.user_id] || '';
@@ -2932,9 +2954,9 @@ async function abrirDetalheTarefa(id) {
             // Prazos anteriores (histórico de extensões aprovadas)
             if (tarefa.prazo_anterior) {
                 var arrAnt = [];
-                try { arrAnt = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') ? JSON.parse(tarefa.prazo_anterior) : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]); } catch (e) { arrAnt = [tarefa.prazo_anterior]; }
+                try { arrAnt = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') ? JSON.parse(tarefa.prazo_anterior) : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]); } catch(e) { arrAnt = [tarefa.prazo_anterior]; }
                 if (arrAnt && arrAnt.length > 0) {
-                    var strAntigos = arrAnt.map(function (d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    var strAntigos = arrAnt.map(function(d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
                     html += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigos + '</div>';
                 }
             }
@@ -3007,12 +3029,12 @@ async function abrirDetalheTarefa(id) {
 
                 // Cor e label de status
                 var statusCor = subJaConcluida ? '#10b981' : (s.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
-                var statusLabel = subJaConcluida ? 'Concluída' : (s.status === 'em_progresso' ? 'Em Progresso' : 'Pendente');
+                var statusLabel = subJaConcluida ? 'Concluída' : (s.status === 'em_progresso' ? 'Em Progresso' : 'Sem Movimentação');
 
                 // Nomes dos responsáveis
                 var subRespsNomes = {};
-                (subResps || []).forEach(function (r) { if (r.tarefa_id === s.id) subRespsNomes[r.user_id] = r.user_name; });
-                var nomesResp = subRespUserIds.map(function (uid) { return subRespsNomes[uid] || ''; }).filter(Boolean);
+                (subResps || []).forEach(function(r) { if (r.tarefa_id === s.id) subRespsNomes[r.user_id] = r.user_name; });
+                var nomesResp = subRespUserIds.map(function(uid) { return subRespsNomes[uid] || ''; }).filter(Boolean);
 
                 // Botões de ação fora da área clicável
                 var horasCriacaoSub = s.created_at ? ((new Date() - new Date(s.created_at)) / (1000 * 60 * 60)) : 999;
@@ -3040,7 +3062,7 @@ async function abrirDetalheTarefa(id) {
                 html += '</div>';
 
                 // Área clicável — abre modal da subtarefa
-                html += '<div style="flex:1; cursor:pointer;" onclick="abrirDetalheSubtarefa(\'' + s.id + '\', \'' + id + '\')">';
+                html += '<div style="flex:1; cursor:pointer;" onclick="abrirDetalheSubtarefa(\'' + s.id + '\', \'' + id + '\')">'; 
                 html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
                 html += '<span style="font-size:15px; font-weight:600; color:' + (subJaConcluida ? '#94a3b8' : '#1e293b') + '; ' + (subJaConcluida ? 'text-decoration:line-through;' : '') + '">' + escapeHtmlTarefa(s.titulo) + '</span>';
                 html += '<span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; background:' + statusCor + '20; color:' + statusCor + '; white-space:nowrap;">' + statusLabel + '</span>';
@@ -3058,7 +3080,7 @@ async function abrirDetalheTarefa(id) {
                     html += '<span style="font-size:11px; color:#10b981;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Respondida</span>';
                 }
                 if (!subTemAnexo && !temResposta && !subJaConcluida && podeConcluirSub) {
-                    html += '<span style="font-size:11px; color:#ef4444;">⚠ Pendente resposta/anexo</span>';
+                    html += '<span style="font-size:11px; color:#ef4444;">⚠ Sem Movimentação resposta/anexo</span>';
                 }
                 html += '<span style="font-size:11px; color:#94a3b8; margin-left:auto;">Ver detalhes →</span>';
                 html += '</div>'; // indicadores
@@ -3104,7 +3126,7 @@ async function abrirDetalheTarefa(id) {
         if (ehResponsavel || ehDiretor || ehSecretario || tarefa.criado_por === userIdGlobal) {
             var respostas = respostasData || [];
             var comentariosPorResposta = {};
-            coments.forEach(function (c) {
+            coments.forEach(function(c) {
                 if (c.resposta_id) {
                     if (!comentariosPorResposta[c.resposta_id]) comentariosPorResposta[c.resposta_id] = [];
                     comentariosPorResposta[c.resposta_id].push(c);
@@ -3126,8 +3148,8 @@ async function abrirDetalheTarefa(id) {
             if (respostas.length === 0) {
                 html += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhuma resposta ainda.</div>';
             } else {
-                respostas.forEach(function (r) {
-                    var dataResp = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                respostas.forEach(function(r) {
+                    var dataResp = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
                     html += '<div style="background:#f0fdf4; border:1px solid #dcfce7; border-radius:8px; padding:12px; margin-bottom:12px;">';
                     html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">';
                     html += '<strong style="font-size:13px; color:#166534;">' + escapeHtmlTarefa(r.user_name || 'Usuário') + '</strong>';
@@ -3139,8 +3161,8 @@ async function abrirDetalheTarefa(id) {
                     var comentariosResp = comentariosPorResposta[r.id] || [];
                     if (comentariosResp.length > 0) {
                         html += '<div style="margin-left:12px; padding-left:12px; border-left:2px solid #86efac; margin-bottom:8px;">';
-                        comentariosResp.forEach(function (cr) {
-                            var dataCr = cr.created_at ? new Date(cr.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                        comentariosResp.forEach(function(cr) {
+                            var dataCr = cr.created_at ? new Date(cr.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
                             html += '<div style="background:white; border-radius:6px; padding:8px; margin-bottom:6px;">';
                             html += '<div style="display:flex; justify-content:space-between; margin-bottom:2px;">';
                             html += '<span style="font-size:12px; font-weight:600; color:#1e293b;">' + escapeHtmlTarefa(cr.user_name || 'Usuário') + '</span>';
@@ -3167,15 +3189,15 @@ async function abrirDetalheTarefa(id) {
         }
 
         // Comentários (apenas os que não são de respostas)
-        var comentsTarefa = coments.filter(function (c) { return !c.resposta_id; });
+        var comentsTarefa = coments.filter(function(c) { return !c.resposta_id; });
         html += '<div style="border-top:1px solid #e2e8f0; padding-top:12px; margin-top:8px;">';
         html += '<strong style="font-size:15px; color:#1e293b; display:block; margin-bottom:8px;">Comentários (' + comentsTarefa.length + ')</strong>';
         html += '<div id="tarefa-comentarios-lista" style="display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; margin-bottom:12px;">';
         if (comentsTarefa.length === 0) {
             html += '<div style="font-size:14px; color:#94a3b8; padding:10px; background:#f8fafc; border-radius:6px;">Nenhum comentário ainda.</div>';
         } else {
-            comentsTarefa.forEach(function (c) {
-                var dataHora = c.created_at ? new Date(c.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            comentsTarefa.forEach(function(c) {
+                var dataHora = c.created_at ? new Date(c.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
                 var anexosC = comentarioAnexosMap[c.id] || [];
                 html += '<div style="background:#f8fafc; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">';
                 html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">';
@@ -3185,7 +3207,7 @@ async function abrirDetalheTarefa(id) {
                 html += '<div style="font-size:14px; color:#475569; white-space:pre-wrap;">' + escapeHtmlTarefa(c.texto) + '</div>';
                 if (anexosC.length > 0) {
                     html += '<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">';
-                    anexosC.forEach(function (a) {
+                    anexosC.forEach(function(a) {
                         html += '<a href="' + a.url + '" target="_blank" style="display:inline-flex; align-items:center; gap:4px; font-size:13px; color:#3b82f6; text-decoration:none; background:white; padding:4px 8px; border-radius:4px; border:1px solid #e2e8f0;">';
                         html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
                         html += escapeHtmlTarefa(a.nome_arquivo || 'Anexo') + '</a>';
@@ -3231,7 +3253,7 @@ async function abrirDetalheTarefa(id) {
             var preview = document.getElementById('tarefa-comentario-anexos-preview');
             if (!preview) return;
             var html = '';
-            window._comentarioAnexosTemp.forEach(function (f, idx) {
+            window._comentarioAnexosTemp.forEach(function(f, idx) {
                 html += '<div style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; padding:3px 8px; border-radius:4px; font-size:12px; color:#334155;">';
                 html += escapeHtmlTarefa(f.name);
                 html += '<button onclick="window.removerAnexoComentario(' + idx + ')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px; padding:0; line-height:1;">✕</button>';
@@ -3240,7 +3262,7 @@ async function abrirDetalheTarefa(id) {
             preview.innerHTML = html;
         }
 
-        window.removerAnexoComentario = function (idx) {
+        window.removerAnexoComentario = function(idx) {
             window._comentarioAnexosTemp.splice(idx, 1);
             atualizarPreviewAnexosComentario();
             var input = document.getElementById('tarefa-comentario-anexo');
@@ -3249,7 +3271,7 @@ async function abrirDetalheTarefa(id) {
 
         var inputAnexoComentario = document.getElementById('tarefa-comentario-anexo');
         if (inputAnexoComentario) {
-            inputAnexoComentario.addEventListener('change', function (e) {
+            inputAnexoComentario.addEventListener('change', function(e) {
                 if (e.target.files) {
                     for (var i = 0; i < e.target.files.length; i++) {
                         window._comentarioAnexosTemp.push(e.target.files[i]);
@@ -3274,34 +3296,34 @@ async function alterarStatusTarefa(id, novoStatus) {
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+        
         var { data: tarefaBasica } = await supabaseClient.from('tarefas').select('criado_por, tarefa_responsaveis(user_id)').eq('id', id).maybeSingle();
         var ehCriador = tarefaBasica && tarefaBasica.criado_por === userIdGlobal;
 
         if (!ehDiretor && !ehSecretario) {
             var responsaveis = tarefaBasica && tarefaBasica.tarefa_responsaveis ? tarefaBasica.tarefa_responsaveis : [];
-            var ehResponsavel = responsaveis.some(function (r) { return r.user_id === userIdGlobal; });
+            var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
             if (!ehCriador && !ehResponsavel) {
                 Swal.fire('Acesso Negado', 'Apenas o criador, um responsável, Diretor ou Secretário(a) podem alterar o status.', 'error');
                 return;
             }
         }
-
+        
         if (novoStatus === 'concluida' && !ehCriador) {
             // Verificar se há subtarefas pendentes
             var { data: subtarefas } = await supabaseClient
                 .from('tarefas')
                 .select('id, status')
                 .eq('tarefa_pai_id', id);
-
+            
             if (subtarefas && subtarefas.length > 0) {
-                var subtarefasPendentes = subtarefas.filter(function (s) { return s.status !== 'concluida'; });
+                var subtarefasPendentes = subtarefas.filter(function(s) { return s.status !== 'concluida'; });
                 if (subtarefasPendentes.length > 0) {
-                    Swal.fire('Ação Bloqueada', 'Existem ' + subtarefasPendentes.length + ' subtarefa(s) pendente(s). Conclua todas as subtarefas antes de concluir esta tarefa.', 'warning');
+                    Swal.fire('Ação Bloqueada', 'Existem ' + subtarefasPendentes.length + ' subtarefa(s) sem movimentação. Conclua todas as subtarefas antes de concluir esta tarefa.', 'warning');
                     return;
                 }
             }
-
+            
             // Verificar anexos ou respostas na tabela dedicada
             const { data: anexos } = await supabaseClient.from('tarefa_anexos').select('id').eq('tarefa_id', id).limit(1);
             const { data: respostasExistentes } = await supabaseClient.from('tarefa_respostas').select('id').eq('tarefa_id', id).limit(1);
@@ -3330,8 +3352,8 @@ async function alterarStatusTarefa(id, novoStatus) {
 async function excluirTarefa(id) {
     var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, titulo, created_at').eq('id', id).maybeSingle();
     if (!tarefa || tarefa.criado_por !== userIdGlobal) {
-        Swal.fire('Acesso Negado', 'Apenas quem criou a tarefa pode excluí-la.', 'error');
-        return;
+        Swal.fire('Acesso Negado', 'Apenas quem criou a tarefa pode excluí-la.', 'error'); 
+        return; 
     }
 
     var criacao = new Date(tarefa.created_at);
@@ -3348,14 +3370,14 @@ async function excluirTarefa(id) {
     try {
         // Buscar subtarefas
         var { data: subs } = await supabaseClient.from('tarefas').select('id').eq('tarefa_pai_id', id);
-        var subIds = (subs || []).map(function (s) { return s.id; });
+        var subIds = (subs || []).map(function(s) { return s.id; });
         var todosIds = [id].concat(subIds);
 
         // Anexos da tarefa e subtarefas
         var { data: anexosDel } = await supabaseClient.from('tarefa_anexos').select('url').in('tarefa_id', todosIds);
         // Anexos dos comentários
         var { data: comentariosDel } = await supabaseClient.from('tarefa_comentarios').select('id').eq('tarefa_id', id);
-        var { data: anexosComDel } = await supabaseClient.from('tarefa_comentario_anexos').select('url').in('comentario_id', (comentariosDel || []).map(function (c) { return c.id; }));
+        var { data: anexosComDel } = await supabaseClient.from('tarefa_comentario_anexos').select('url').in('comentario_id', (comentariosDel || []).map(function(c){ return c.id; }));
 
         // Nota: os arquivos permanecem no Cloudinary. A limpeza de storage
         // será feita no final do ano conforme processo existente.
@@ -3443,7 +3465,7 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
         var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
 
         _responsaveisSubCache = [];
-
+        
         (users || []).forEach(function (u) {
             var roleLower = (u.role || '').toLowerCase();
             var roleLowerNorm = roleLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -3464,11 +3486,11 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
             // Se for Gerente de Regularização Ambiental, pode atribuir para si mesmo, sua equipe ou Consórcio
             if (ehGerenteAmbiental) {
                 var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
-                    roleLower.includes('engenheiro') ||
-                    roleLower.includes('agrônomo') ||
-                    roleLower.includes('agronomo') ||
-                    roleLower.includes('analista ambiental') ||
-                    roleLower.includes('auxiliar de serviços');
+                                        roleLower.includes('engenheiro') || 
+                                        roleLower.includes('agrônomo') || 
+                                        roleLower.includes('agronomo') ||
+                                        roleLower.includes('analista ambiental') ||
+                                        roleLower.includes('auxiliar de serviços');
                 var isConsorcioCargo = roleLowerNorm.includes('consorcio') && !roleLowerNorm.includes('analista');
                 var isSecDoSec = roleLowerNorm.includes('secretario(a) do secretario(a)');
                 if (u.id !== userIdGlobal && !isEquipeAmbiental && !isConsorcioCargo && !isSecDoSec) return;
@@ -3483,21 +3505,21 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
             }
 
             // Verifica se é um cargo válido (comparação case-insensitive)
-            var isValidRole = validRoles.some(function (r) { return r.toLowerCase() === roleLower; }) ||
-                roleLower.includes('gerente') ||
-                roleLower.includes('fiscal') ||
-                roleLower.includes('administrativo') ||
-                roleLower.includes('diretor') ||
-                roleLower.includes('secretário') ||
-                roleLower.includes('secretario') ||
-                roleLowerNorm.includes('consorcio');
+            var isValidRole = validRoles.some(function(r) { return r.toLowerCase() === roleLower; }) ||
+                              roleLower.includes('gerente') ||
+                              roleLower.includes('fiscal') ||
+                              roleLower.includes('administrativo') ||
+                              roleLower.includes('diretor') ||
+                              roleLower.includes('secretário') ||
+                              roleLower.includes('secretario') ||
+                              roleLowerNorm.includes('consorcio');
             // Verifica se é da equipe do Gerente de Regularização Ambiental
             var isEquipeAmbiental = cargosEquipeAmbiental.indexOf(u.role) !== -1 ||
-                roleLower.includes('engenheiro') ||
-                roleLower.includes('agrônomo') ||
-                roleLower.includes('agronomo') ||
-                roleLower.includes('analista ambiental') ||
-                roleLower.includes('auxiliar de serviços');
+                                    roleLower.includes('engenheiro') || 
+                                    roleLower.includes('agrônomo') || 
+                                    roleLower.includes('agronomo') ||
+                                    roleLower.includes('analista ambiental') ||
+                                    roleLower.includes('auxiliar de serviços');
 
             if (isValidRole || isEquipeAmbiental) {
                 _responsaveisSubCache.push({
@@ -3510,7 +3532,7 @@ async function carregarListaResponsaveisSubtarefa(responsaveisPreSelecionados) {
 
         // Renderizar com pesquisa
         renderizarListaResponsaveisSubComPesquisa('', responsaveisPreSelecionados);
-
+        
     } catch (err) {
         container.innerHTML = '<p style="color:#ef4444;">Erro: ' + err.message + '</p>';
     }
@@ -3523,11 +3545,26 @@ var _pesquisaResponsavelSubValor = '';
 function renderizarListaResponsaveisSubComPesquisa(filtro, preSelecionados) {
     var container = document.getElementById('subtarefa-responsaveis-list');
     if (!container) return;
+    
+    // PRESERVAR ESTADO ANTES DE RENDERIZAR
+    var listaContainer = document.getElementById('responsaveis-sub-items');
+    if (listaContainer) {
+        if (!_responsaveisSubEditandoIds) _responsaveisSubEditandoIds = [];
+        var allCheckboxes = listaContainer.querySelectorAll('.cb-resp-sub');
+        allCheckboxes.forEach(function(cb) {
+            var idx = _responsaveisSubEditandoIds.indexOf(cb.value);
+            if (cb.checked && idx === -1) {
+                _responsaveisSubEditandoIds.push(cb.value);
+            } else if (!cb.checked && idx !== -1) {
+                _responsaveisSubEditandoIds.splice(idx, 1);
+            }
+        });
+    }
 
     _pesquisaResponsavelSubValor = filtro || '';
     var filtroLower = _pesquisaResponsavelSubValor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     var preSelSet = preSelecionados || _responsaveisSubEditandoIds || [];
-
+    
     // Na primeira renderização, cria a estrutura completa
     if (!document.getElementById('pesquisa-responsavel-sub')) {
         // Campo de pesquisa fixo
@@ -3537,65 +3574,65 @@ function renderizarListaResponsaveisSubComPesquisa(filtro, preSelecionados) {
         html += '<input type="text" id="pesquisa-responsavel-sub" placeholder="Pesquisar nome ou cargo..." ';
         html += 'style="width:100%; padding:8px 12px 8px 36px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; outline:none; box-sizing:border-box;">';
         html += '</div></div>';
-
+        
         // Lista de responsáveis (será preenchida dinamicamente)
         html += '<div id="responsaveis-sub-items" style="max-height:140px; overflow-y:auto;"></div>';
-
+        
         // Contador
         html += '<div style="padding-top:8px; border-top:1px solid #e2e8f0; margin-top:8px; font-size:12px; color:#64748b; text-align:center;">';
         html += 'Selecionados: <span id="contador-selecionados-sub">0</span> | ';
         html += 'Mostrando: <span id="mostrando-responsaveis-sub">0</span> de ' + _responsaveisSubCache.length;
         html += '</div>';
-
+        
         container.innerHTML = html;
-
+        
         // Adicionar event listener no input
-        document.getElementById('pesquisa-responsavel-sub').addEventListener('input', function (e) {
+        document.getElementById('pesquisa-responsavel-sub').addEventListener('input', function(e) {
             filtrarResponsaveisSub(e.target.value);
         });
     }
-
+    
     // Atualizar valor do input
     var inputPesquisa = document.getElementById('pesquisa-responsavel-sub');
     if (inputPesquisa && filtro !== undefined) {
         inputPesquisa.value = filtro;
     }
-
+    
     // Renderizar apenas a lista de itens
     var listaContainer = document.getElementById('responsaveis-sub-items');
     if (!listaContainer) return;
-
-    var usuariosFiltrados = _responsaveisSubCache.filter(function (u) {
+    
+    var usuariosFiltrados = _responsaveisSubCache.filter(function(u) {
         if (!filtroLower) return true;
         var nomeNormalizado = u.full_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         var cargoNormalizado = (u.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         return nomeNormalizado.includes(filtroLower) || cargoNormalizado.includes(filtroLower);
     });
-
+    
     var html = '';
     if (usuariosFiltrados.length === 0) {
         html = '<p style="color:#94a3b8; text-align:center; padding:20px;">Nenhum responsável encontrado.</p>';
     } else {
-        usuariosFiltrados.forEach(function (u) {
+        usuariosFiltrados.forEach(function(u) {
             var checked = (preSelSet.indexOf(u.id) !== -1) ? ' checked' : '';
             html += '<label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; font-size:15px; color:#334155;">';
             html += '<input type="checkbox" class="cb-resp-sub" value="' + u.id + '" data-name="' + u.full_name + '"' + checked + ' style="width:16px; height:16px; accent-color:#10b981;">';
             html += u.full_name + ' <span style="font-size:14px; color:#94a3b8;">(' + (u.role || 'Sem Cargo') + ')</span></label>';
         });
     }
-
+    
     listaContainer.innerHTML = html;
-
+    
     // Atualizar contadores
     atualizarContadorSelecionadosSub();
     var mostrandoEl = document.getElementById('mostrando-responsaveis-sub');
     if (mostrandoEl) {
         mostrandoEl.textContent = usuariosFiltrados.length;
     }
-
+    
     // Adicionar listeners nos checkboxes
     var checkboxes = listaContainer.querySelectorAll('.cb-resp-sub');
-    checkboxes.forEach(function (cb) {
+    checkboxes.forEach(function(cb) {
         cb.addEventListener('change', atualizarContadorSelecionadosSub);
     });
 }
@@ -3625,7 +3662,7 @@ async function carregarDadosSubtarefaParaEdicao() {
             if (inputPrazo && subtarefa.prazo) inputPrazo.value = subtarefa.prazo; // formato 'YYYY-MM-DD'
         }
 
-        _responsaveisSubEditandoIds = (responsaveis || []).map(function (r) { return r.user_id; });
+        _responsaveisSubEditandoIds = (responsaveis || []).map(function(r) { return r.user_id; });
         carregarListaResponsaveisSubtarefa(_responsaveisSubEditandoIds);
     } catch (err) {
         console.error('Erro ao carregar dados da subtarefa para edição:', err);
@@ -3637,7 +3674,7 @@ async function carregarDadosSubtarefaParaEdicao() {
 function filtrarResponsaveisSub(valor) {
     renderizarListaResponsaveisSubComPesquisa(valor);
     // Restaurar foco no input após renderização
-    setTimeout(function () {
+    setTimeout(function() {
         var input = document.getElementById('pesquisa-responsavel-sub');
         if (input) {
             input.focus();
@@ -3652,10 +3689,25 @@ function filtrarResponsaveisSub(valor) {
 function atualizarContadorSelecionadosSub() {
     var container = document.getElementById('subtarefa-responsaveis-list');
     if (!container) return;
-    var checkboxes = container.querySelectorAll('.cb-resp-sub:checked');
+    
+    var idsInDom = [];
+    var count = 0;
+    
+    var allCbs = container.querySelectorAll('.cb-resp-sub');
+    allCbs.forEach(function(cb) {
+        idsInDom.push(cb.value);
+        if (cb.checked) count++;
+    });
+    
+    if (typeof _responsaveisSubEditandoIds !== 'undefined' && _responsaveisSubEditandoIds) {
+        _responsaveisSubEditandoIds.forEach(function(id) {
+            if (idsInDom.indexOf(id) === -1) count++;
+        });
+    }
+    
     var contador = document.getElementById('contador-selecionados-sub');
     if (contador) {
-        contador.textContent = checkboxes.length;
+        contador.textContent = count;
     }
 }
 
@@ -3664,25 +3716,25 @@ async function confirmarSubtarefa(tarefaPaiId) {
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = roleLowerRaw.includes('diretor');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+    
     var temPermissao = false;
     if (!ehDiretor && !ehSecretario && !_subtarefaEditandoId) {
         var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
         var { data: responsaveis } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaPaiId);
-
+        
         var ehCriador = tarefaPai && tarefaPai.criado_por === userIdGlobal;
-        var ehResponsavel = (responsaveis || []).some(function (r) { return r.user_id === userIdGlobal; });
-
+        var ehResponsavel = (responsaveis || []).some(function(r) { return r.user_id === userIdGlobal; });
+        
         temPermissao = ehCriador || ehResponsavel;
     } else {
         temPermissao = true; // Edição, Diretor ou Secretário passam direto
     }
-
+    
     if (!temPermissao) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a), criador ou responsável podem criar subtarefas.', 'error');
         return;
     }
-
+    
     var titulo = document.getElementById('subtarefa-titulo').value.trim();
     if (!titulo) { alert('Preencha o título da subtarefa.'); return; }
 
@@ -3692,11 +3744,27 @@ async function confirmarSubtarefa(tarefaPaiId) {
     var anexoInput = document.getElementById('subtarefa-anexo-descricao');
     var anexoFile = anexoInput && anexoInput.files[0] ? anexoInput.files[0] : null;
 
-    var responsaveisCBs = document.querySelectorAll('.cb-resp-sub:checked');
     var responsaveis = [];
-    responsaveisCBs.forEach(function (cb) {
-        responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
+    var idsInDom = [];
+    var allCbs = document.querySelectorAll('.cb-resp-sub');
+    allCbs.forEach(function (cb) {
+        idsInDom.push(cb.value);
+        if (cb.checked) {
+            responsaveis.push({ user_id: cb.value, user_name: cb.getAttribute('data-name') });
+        }
     });
+    
+    // Mesclar com seleções em memória ocultas pela pesquisa
+    if (typeof _responsaveisSubEditandoIds !== 'undefined' && _responsaveisSubEditandoIds && _responsaveisSubEditandoIds.length > 0) {
+        _responsaveisSubEditandoIds.forEach(function(id) {
+            if (idsInDom.indexOf(id) === -1) {
+                var user = _responsaveisSubCache.find(function(u) { return u.id === id; });
+                if (user) {
+                    responsaveis.push({ user_id: user.id, user_name: user.full_name });
+                }
+            }
+        });
+    }
 
     fecharModal('modal-nova-subtarefa');
 
@@ -3823,30 +3891,30 @@ async function toggleSubtarefa(subId, checked) {
             .select('tarefa_pai_id, criado_por, tarefa_responsaveis(user_id)')
             .eq('id', subId)
             .maybeSingle();
-
+        
         if (!subInfo) return;
-
+        
         var ehCriador = subInfo.criado_por === userIdGlobal;
         // Verificar se o usuário é responsável pela subtarefa
         var responsaveis = subInfo.tarefa_responsaveis || [];
-        var ehResponsavel = responsaveis.some(function (r) { return r.user_id === userIdGlobal; });
+        var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+        
         // Só permite concluir se for criador, responsável ou Diretor/Secretário
         if (!ehCriador && !ehResponsavel && !ehDiretor && !ehSecretario) {
             Swal.fire('Acesso Negado', 'Apenas o criador ou o responsável pela subtarefa podem concluí-la.', 'error');
             return;
         }
-
+        
         // Se marcando como concluída, verificar se tem anexo OU resposta (Criador ignora isso)
         if (checked && !ehCriador) {
             var { data: anexos } = await supabaseClient
                 .from('tarefa_anexos')
                 .select('id')
                 .eq('tarefa_id', subId);
-
+            
             var { data: subData } = await supabaseClient
                 .from('tarefa_respostas')
                 .select('id')
@@ -3907,18 +3975,18 @@ async function excluirSubtarefa(subId, tarefaPaiId) {
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
     var ehGerente = roleLowerRaw.includes('gerente');
     var ehConsorcio = roleLowerRawNorm.includes('consorcio') && !roleLowerRawNorm.includes('analista');
-
+    
     // Se for Gerente ou Consórcio, verificar se criou a tarefa pai
     var gerentePodeExcluir = false;
     if ((ehGerente || ehConsorcio) && !ehDiretor && !ehSecretario) {
         var { data: tarefaPai } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaPaiId).maybeSingle();
         gerentePodeExcluir = tarefaPai && tarefaPai.criado_por === userIdGlobal;
     }
-
+    
     // Apenas Diretor, Secretário e quem criou a tarefa pai podem excluir subtarefas
     if (!ehDiretor && !ehSecretario && !gerentePodeExcluir) {
-        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou quem criou a tarefa pode excluir subtarefas.', 'error');
-        return;
+        Swal.fire('Acesso Negado', 'Apenas o Diretor, Secretário(a) ou quem criou a tarefa pode excluir subtarefas.', 'error'); 
+        return; 
     }
 
     try {
@@ -3943,22 +4011,22 @@ async function uploadAnexo(tarefaId, inputEl) {
             .select('tarefa_pai_id, criado_por, tarefa_responsaveis(user_id)')
             .eq('id', tarefaId)
             .maybeSingle();
-
+        
         if (!tarefaInfo) { Swal.fire('Erro', 'Tarefa não encontrada.', 'error'); return; }
-
+        
         var responsaveis = tarefaInfo.tarefa_responsaveis || [];
-        var ehResponsavel = responsaveis.some(function (r) { return r.user_id === userIdGlobal; });
+        var ehResponsavel = responsaveis.some(function(r) { return r.user_id === userIdGlobal; });
         var ehCriador = tarefaInfo.criado_por === userIdGlobal;
         var roleLower = (userRoleGlobal || '').toLowerCase();
         var ehDiretor = roleLower.includes('diretor');
         var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+        
         // Só permite anexar se for responsável, criador ou Diretor/Secretário
         if (!ehResponsavel && !ehCriador && !ehDiretor && !ehSecretario) {
             Swal.fire('Acesso Negado', 'Apenas o responsável ou criador da tarefa pode anexar arquivos.', 'error');
             return;
         }
-
+        
         var filePath = tarefaId + '/' + Date.now() + '_' + sanitizarNomeArquivo(file.name);
         try {
             var uploadResult = await cloudinaryUploadComPath(file, 'tarefa_anexos/' + filePath);
@@ -4120,7 +4188,7 @@ async function abrirHistoricoTarefas() {
             if (roleLowerHist.includes('gerente') && roleLowerHist.includes('postur')) {
                 var { data: respPosturas } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
                 var idsRespPosturas = respPosturas ? respPosturas.map(function (r) { return r.tarefa_id; }) : [];
-
+                
                 historicoTarefasDados = historicoTarefasDados.filter(function (t) {
                     return t.criado_por === userIdGlobal || idsRespPosturas.indexOf(t.id) !== -1;
                 });
@@ -4129,7 +4197,7 @@ async function abrirHistoricoTarefas() {
             else if (roleLowerHist.includes('regularizacao') || roleLowerHist.includes('regularização')) {
                 var { data: respAmbiental } = await supabaseClient.from('tarefa_responsaveis').select('tarefa_id').eq('user_id', userIdGlobal);
                 var idsRespAmbiental = respAmbiental ? respAmbiental.map(function (r) { return r.tarefa_id; }) : [];
-
+                
                 historicoTarefasDados = historicoTarefasDados.filter(function (t) {
                     return t.criado_por === userIdGlobal || idsRespAmbiental.indexOf(t.id) !== -1;
                 });
@@ -4247,11 +4315,11 @@ async function carregarMinhasTarefasHome(containerId) {
         var authResult = await getAuthUser();
         var user = authResult.data.user;
         if (!user) return;
-
+        
         // Determinar IDs de interesse (dele ou subordinados se for Diretor)
         var idsInteresse = [user.id];
         var roleLower = (userRoleGlobal || '').toLowerCase();
-
+        
         if (roleLower.includes('diretor')) {
             // Diretor vê tarefas dele e de toda a equipe subordinada
             var subordinates = [].concat(
@@ -4403,7 +4471,7 @@ async function carregarMinhasTarefasHome(containerId) {
             }
 
             // Status
-            var statusLabel = t.status === 'em_progresso' ? 'Em progresso' : 'Pendente';
+            var statusLabel = t.status === 'em_progresso' ? 'Em progresso' : 'Sem Movimentação';
             var statusColor = t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b';
             html += '<td style="text-align:center; padding:10px;"><span style="background:' + statusColor + '15; color:' + statusColor + '; padding:3px 10px; border-radius:12px; font-size:14px; font-weight:600;">' + statusLabel + '</span></td>';
 
@@ -4453,7 +4521,7 @@ async function carregarMinhasTarefasModulo() {
         var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
         console.log('[Tarefas] carregarMinhasTarefasModulo - modo:', diretorModoVisualizacao, 'role:', userRoleGlobal);
         console.log('[Tarefas] idsGerentesGlobal:', idsGerentesGlobal.length, 'idsGerentesAmbientalGlobal:', idsGerentesAmbientalGlobal.length);
-
+        
         if (roleLowerRaw.includes('diretor')) {
             if (diretorModoVisualizacao === 'direcao') {
                 idsInteresse = [userIdGlobal];
@@ -4551,7 +4619,7 @@ async function carregarMinhasTarefasModulo() {
             var prazoDt = t.prazo ? new Date(t.prazo) : null;
             var atrasada = prazoDt && prazoDt < hoje && t.status !== 'concluida';
             var corStatus = t.status === 'concluida' ? '#10b981' : (t.status === 'em_progresso' ? '#3b82f6' : '#f59e0b');
-            var labelStatus = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em progresso' : 'Pendente');
+            var labelStatus = t.status === 'concluida' ? 'Concluída' : (t.status === 'em_progresso' ? 'Em progresso' : 'Sem Movimentação');
 
             html += '<tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" onclick="abrirDetalheTarefa(\'' + t.id + '\')">';
             html += '<td style="padding:12px; font-weight:600; color:#0c3e2b;">' + (t.evento ? t.evento.titulo : 'Sem Nome') + '</td>';
@@ -4813,7 +4881,7 @@ function coletarCamposMultiplos(containerId, classe) {
     var container = document.getElementById(containerId);
     if (!container) return [];
     var valores = [];
-    container.querySelectorAll('.' + classe).forEach(function (input) {
+    container.querySelectorAll('.' + classe).forEach(function(input) {
         var v = input.value.trim();
         if (v) valores.push(v);
     });
@@ -4824,7 +4892,7 @@ function coletarOrcamentos(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return [];
     var items = [];
-    container.querySelectorAll(':scope > div').forEach(function (row) {
+    container.querySelectorAll(':scope > div').forEach(function(row) {
         var desc = row.querySelector('.campo-orcamento-desc');
         var valor = row.querySelector('.campo-orcamento-valor');
         if (desc && valor && (desc.value.trim() || valor.value.trim())) {
@@ -4838,7 +4906,7 @@ function coletarPatrocinios(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return [];
     var items = [];
-    container.querySelectorAll(':scope > div').forEach(function (row) {
+    container.querySelectorAll(':scope > div').forEach(function(row) {
         var desc = row.querySelector('.campo-patrocinio-desc');
         var valor = row.querySelector('.campo-patrocinio-valor');
         if (desc && valor && (desc.value.trim() || valor.value.trim())) {
@@ -4851,7 +4919,7 @@ function coletarPatrocinios(containerId) {
 function preencherCamposMultiplos(containerId, tipo, valores) {
     var container = document.getElementById(containerId);
     if (!container || !valores) return;
-    (valores || []).forEach(function (v) {
+    (valores || []).forEach(function(v) {
         adicionarCampoMultiplo(containerId, tipo);
         var inputs = container.querySelectorAll('.campo-' + tipo);
         if (inputs.length > 0) inputs[inputs.length - 1].value = v;
@@ -4861,7 +4929,7 @@ function preencherCamposMultiplos(containerId, tipo, valores) {
 function preencherOrcamentos(containerId, items) {
     var container = document.getElementById(containerId);
     if (!container || !items) return;
-    (items || []).forEach(function (item) {
+    (items || []).forEach(function(item) {
         adicionarCampoOrcamento(containerId);
         var rows = container.querySelectorAll(':scope > div');
         var lastRow = rows[rows.length - 1];
@@ -4877,7 +4945,7 @@ function preencherOrcamentos(containerId, items) {
 function preencherPatrocinios(containerId, items) {
     var container = document.getElementById(containerId);
     if (!container || !items) return;
-    (items || []).forEach(function (item) {
+    (items || []).forEach(function(item) {
         adicionarCampoPatrocinio(containerId);
         var rows = container.querySelectorAll(':scope > div');
         var lastRow = rows[rows.length - 1];
@@ -4961,7 +5029,7 @@ async function salvarEventoAvancado() {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem criar eventos.', 'error');
         return;
     }
-
+    
     var titulo = document.getElementById('ev-titulo').value.trim();
     var descricao = document.getElementById('ev-descricao').value.trim();
     var dataInicio = document.getElementById('ev-data-inicio').value;
@@ -5090,13 +5158,13 @@ async function abrirModalEditarEvento(id) {
     var roleLowerRaw = (userRoleGlobal || '').toLowerCase();
     var ehDiretor = (roleLowerRaw === 'diretor(a)' || roleLowerRaw === 'diretor(a) de meio ambiente' || roleLowerRaw === 'diretor' || roleLowerRaw === 'diretor de meio ambiente');
     var ehSecretario = (userRoleGlobal === 'Secretário(a)' || userRoleGlobal === 'Secretário(a) do Secretário(a)');
-
+    
     // Apenas Diretor e Secretário podem editar eventos
     if (!ehDiretor && !ehSecretario) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem editar eventos.', 'error');
         return;
     }
-
+    
     var ev = eventosMesCache.find(e => e.id === id);
     if (!ev) return;
 
@@ -5164,7 +5232,7 @@ async function abrirModalEditarEvento(id) {
     document.body.insertAdjacentHTML('beforeend', html);
 
     // Preencher campos dinâmicos com dados existentes
-    setTimeout(function () {
+    setTimeout(function() {
         preencherCamposMultiplos('edit-ev-parcerias-lista', 'parceria', ev.parcerias || []);
         preencherOrcamentos('edit-ev-orcamentos-lista', ev.orcamentos || []);
         preencherPatrocinios('edit-ev-patrocinios-lista', ev.patrocinios || []);
@@ -5209,7 +5277,7 @@ async function salvarEdicaoEvento(id) {
         Swal.fire('Acesso Negado', 'Apenas o Diretor ou Secretário(a) podem editar eventos.', 'error');
         return;
     }
-
+    
     var titulo = document.getElementById('edit-ev-titulo').value.trim();
     var data = document.getElementById('edit-ev-data').value;
     var descricao = document.getElementById('edit-ev-descricao').value.trim();
@@ -5307,7 +5375,7 @@ async function enviarComentarioTarefa(tarefaId) {
         if (insertErr) throw insertErr;
 
         if (novoComentario && anexosEnviados.length > 0) {
-            var anexosInsert = anexosEnviados.map(function (a) {
+            var anexosInsert = anexosEnviados.map(function(a) {
                 return { comentario_id: novoComentario.id, nome_arquivo: a.nome, url: a.url };
             });
             await supabaseClient.from('tarefa_comentario_anexos').insert(anexosInsert);
@@ -5325,7 +5393,7 @@ async function enviarComentarioTarefa(tarefaId) {
             if (tarefaInfo.criado_por && tarefaInfo.criado_por !== userIdGlobal) {
                 notificarIds.push(tarefaInfo.criado_por);
             }
-            (tarefaInfo.tarefa_responsaveis || []).forEach(function (r) {
+            (tarefaInfo.tarefa_responsaveis || []).forEach(function(r) {
                 if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
                     notificarIds.push(r.user_id);
                 }
@@ -5357,10 +5425,10 @@ async function enviarComentarioTarefa(tarefaId) {
 
 function configurarModoTarefas(modo) {
     diretorModoVisualizacao = modo;
-
+    
     // Sincroniza com variável global para uso em painel.js
     window.diretorModoVisualizacao = modo;
-
+    
     console.log('[Tarefas] Modo configurado:', modo);
 
     // Atualiza a aba que estiver visível
@@ -5370,7 +5438,7 @@ function configurarModoTarefas(modo) {
     } else {
         if (typeof carregarTarefas === 'function') carregarTarefas();
     }
-
+    
     // Atualizar calendário também
     if (typeof carregarEventos === 'function') carregarEventos();
 
