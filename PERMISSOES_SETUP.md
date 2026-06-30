@@ -19,6 +19,7 @@ Secretário(a) (nível 4)
  │         └── Coordenador(a) do Cuidado Animal (nível 1)
  ├── Gerente de Interface Jurídica (Cargo Especial)
  └── Agente de Administração (Cargo Especial)
+      └── Estagiário do Agente de Administração (Cargo Especial)
 
 Permissões de exclusão:
 Secretário(a) → pode excluir: Diretor, Gerente, Fiscal, Equipe Ambiental, Consórcio, Analista do Consórcio
@@ -591,7 +592,7 @@ ADD COLUMN IF NOT EXISTS responsaveis TEXT;
 
 | Política | Comando | Público | Restrição |
 |----------|---------|---------|-----------|
-| Agente Administracao ve proprias tarefas | ALL | authenticated | Agente de Administração + dono/responsável |
+| Agente Administracao ve proprias tarefas | ALL | authenticated | Agente de Administração / Estagiário do Agente de Administração + dono/responsável |
 | Coordenador Cuidado Animal ve proprias tarefas | SELECT | authenticated | Coordenador CA + dono/responsável |
 | Diretor Cuidado Animal ve todas tarefas CA | SELECT | authenticated | Diretor CA vê toda a equipe CA |
 | Gerente Cuidado Animal ve tarefas da equipe | SELECT | authenticated | Gerente CA vê tarefas dos coordenadores |
@@ -614,7 +615,7 @@ ADD COLUMN IF NOT EXISTS responsaveis TEXT;
 
 | Política | Comando | Público | Restrição |
 |----------|---------|---------|-----------|
-| Cargo especial gerencia proprios responsaveis | ALL | authenticated | Gerente Jurídico ou Agente de Administração |
+| Cargo especial gerencia proprios responsaveis | ALL | authenticated | Gerente Jurídico, Agente de Administração ou Estagiário |
 | Diretor CA gerencia responsaveis | ALL | authenticated | Diretor do Cuidado Animal |
 | Gerente CA gerencia responsaveis | ALL | authenticated | Gerente do Cuidado Animal |
 | Responsáveis: exclusão | DELETE | authenticated | Livre |
@@ -3649,3 +3650,62 @@ ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS prazo_solicitado_motivo TEXT
 | `solicitacao_prazo` | Quando um responsável solicita extensão |
 | `prazo_aprovado` | Quando o criador aprova a solicitação |
 | `prazo_recusado` | Quando o criador recusa a solicitação |
+
+---
+
+## 🆕 MIGRAÇÃO: Liquidação de Recebimentos
+
+> Execute este bloco SQL no **Editor SQL** do Supabase para adicionar a tabela de liquidação e suas políticas.
+
+```sql
+CREATE TABLE IF NOT EXISTS public.liquidacoes (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    ata TEXT,
+    itens JSONB DEFAULT '[]'::JSONB,
+    data_recebimento DATE,
+    fornecedor TEXT,
+    nota_fiscal TEXT,
+    valor NUMERIC(10, 2),
+    solicitacao_fornecimento TEXT,
+    empenho TEXT,
+    numero_liquidacao TEXT,
+    pagamento TEXT,
+    protocolo TEXT,
+    observacao TEXT,
+    status TEXT DEFAULT 'pendente',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    owner_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.liquidacoes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acesso leitura liquidacoes"
+    ON public.liquidacoes FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles 
+            WHERE profiles.id = auth.uid() 
+            AND (
+                profiles.role ILIKE '%agente%administra%' 
+                OR profiles.role ILIKE '%estagiario%administra%'
+                OR profiles.role ILIKE '%secret%'
+                OR profiles.role ILIKE '%diretor%'
+            )
+        )
+    );
+
+CREATE POLICY "Acesso escrita liquidacoes"
+    ON public.liquidacoes FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles 
+            WHERE profiles.id = auth.uid() 
+            AND (
+                profiles.role ILIKE '%agente%administra%' 
+                OR profiles.role ILIKE '%estagiario%administra%'
+                OR profiles.role ILIKE '%secret%'
+                OR profiles.role ILIKE '%diretor%'
+            )
+        )
+    );
+```

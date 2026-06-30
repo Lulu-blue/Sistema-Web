@@ -446,18 +446,21 @@ h1 {
 
 /* Tela média: calendário e lista de eventos empilham */
 @media (max-width: 1100px) {
-    #aba-projetos>div:nth-child(2) {
+    #aba-projetos>div:nth-child(2),
+    #aba-liquidacoes>div:nth-child(2) {
         flex-direction: column !important;
     }
 
-    #aba-projetos .calendario-container {
+    #aba-projetos .calendario-container,
+    #aba-liquidacoes .calendario-container {
         min-width: unset !important;
         flex: unset !important;
         width: 100% !important;
     }
 
     /* Painel de lista de eventos */
-    #aba-projetos>div:nth-child(2)>div:nth-child(2) {
+    #aba-projetos>div:nth-child(2)>div:nth-child(2),
+    #aba-liquidacoes>div:nth-child(2)>div:nth-child(2) {
         min-width: unset !important;
         flex: unset !important;
         width: 100% !important;
@@ -721,7 +724,8 @@ h1 {
     }
 
     /* Cabeçalho Eventos: título + botão */
-    #aba-projetos h1 {
+    #aba-projetos h1,
+    #aba-liquidacoes h1 {
         font-size: 1.6rem;
         margin-bottom: 1rem;
     }
@@ -998,7 +1002,8 @@ h1 {
     /* ==========================================
        PROJETOS / CALENDÁRIO
        ========================================== */
-    #aba-projetos .calendario-container {
+    #aba-projetos .calendario-container,
+    #aba-liquidacoes .calendario-container {
         min-width: unset !important;
         width: 100% !important;
     }

@@ -4903,8 +4903,8 @@ document.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown-custom')) {
         document.querySelectorAll('.dropdown-lista.aberto').forEach(el => el.classList.remove('aberto'));
     }
-    if (e.target.id === 'modal-produtividade') fecharModalProdutividade();
-    if (e.target.id === 'modal-detalhes') fecharDetalhes();
+    // if (e.target.id === 'modal-produtividade') fecharModalProdutividade();
+    // if (e.target.id === 'modal-detalhes') fecharDetalhes();
 });
 
 // Fechar com ESC

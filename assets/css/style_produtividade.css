@@ -845,6 +845,7 @@
     overflow-x: auto;
     transform: rotateX(180deg);
 }
+
 .table-scroll-top table {
     transform: rotateX(180deg);
 }
@@ -890,6 +891,7 @@
 .historico-tabela th .th-full {
     display: inline;
 }
+
 .historico-tabela th .th-abbr {
     display: none;
 }
@@ -901,6 +903,7 @@
         white-space: nowrap;
         width: 1%;
     }
+
     .historico-tabela td,
     .historico-tabela th {
         max-width: 200px;
@@ -908,9 +911,11 @@
         white-space: normal;
         min-width: unset;
     }
+
     .historico-tabela th .th-full {
         display: none;
     }
+
     .historico-tabela th .th-abbr {
         display: inline;
     }
@@ -1206,7 +1211,7 @@
         display: none !important;
     }
 
-    #modal-relatorio-gerente > div {
+    #modal-relatorio-gerente>div {
         display: block !important;
     }
 
@@ -1224,7 +1229,7 @@
         display: none !important;
     }
 
-    #modal-estatisticas-funcionario > div {
+    #modal-estatisticas-funcionario>div {
         max-width: 100% !important;
         width: 100% !important;
         box-shadow: none !important;
@@ -1241,7 +1246,7 @@
     }
 
     #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas table,
-    #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas > div {
+    #modal-estatisticas-funcionario #secao-relatorio-fiscal-estatisticas>div {
         page-break-inside: avoid;
     }
 
@@ -1266,7 +1271,8 @@
     }
 
     /* Garantir que o body e html não limitem a altura */
-    html, body {
+    html,
+    body {
         height: auto !important;
         overflow: visible !important;
     }

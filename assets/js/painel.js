@@ -3254,6 +3254,13 @@ function configurarCargoEspecial() {
     var especialOpts = document.getElementById('especial-options');
     if (especialOpts) especialOpts.style.display = 'block';
 
+    var roleLowerNorm = (window.userRoleGlobal || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var isAgenteAdmin = roleLowerNorm.includes('agente') && roleLowerNorm.includes('administracao');
+    if (isAgenteAdmin) {
+        var btnLiq = document.getElementById('btn-menu-liquidacoes');
+        if (btnLiq) btnLiq.style.display = 'inline-flex';
+    }
+
     // Oculta menus de outros cargos
     var tarefasComum = document.getElementById('tarefas-comum');
     if (tarefasComum) tarefasComum.style.display = 'none';

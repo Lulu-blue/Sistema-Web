@@ -427,6 +427,9 @@
                             style="font-size: 0.85rem;">
                             Tarefas (RH)
                         </button>
+                        <button class="nav-btn" onclick="mudarAba('liquidacoes')" style="font-size: 0.85rem;">
+                            Liquidação de recebimentos
+                        </button>
                     </div>
                 </div>
 
@@ -469,6 +472,14 @@
                             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                         </svg>
                         Tarefas
+                    </button>
+                    <button class="nav-btn" onclick="mudarAba('liquidacoes')" id="btn-menu-liquidacoes" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                        Liquidação de recebimentos
                     </button>
                 </div>
 
@@ -2670,6 +2681,97 @@
                 </div>
             </section>
 
+            <!-- ABA: LIQUIDAÇÕES -->
+            <section id="aba-liquidacoes" class="content-section" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1>Liquidação de recebimentos</h1>
+                </div>
+
+                <div style="display: flex; gap: 24px; align-items: flex-start;">
+                    <!-- LADO ESQUERDO: CALENDÁRIO -->
+                    <div class="calendario-container"
+                        style="flex: 0.8; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); min-width: 320px; border: 1px solid #e2e8f0;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <button onclick="mudarMesCalendarioLiq(-1)"
+                                style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
+                                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+                            <h2 id="calendario-liq-mes-ano"
+                                style="margin: 0; color: #1e293b; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                                Novembro 2026</h2>
+                            <button onclick="mudarMesCalendarioLiq(1)"
+                                style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #475569; font-weight: bold; transition: 0.2s;"
+                                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div
+                            style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; margin-bottom: 8px;">
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">DOM</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.7rem; padding: 4px 0;">SEG</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">TER</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUA</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">QUI</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SEX</div>
+                            <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; padding: 4px 0;">SÁB</div>
+                        </div>
+
+                        <div id="calendario-liq-grid"
+                            style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; grid-auto-rows: minmax(45px, auto);">
+                            <!-- Dias serão injetados pelo JS -->
+                        </div>
+                    </div>
+
+                    <!-- TABELA DE LIQUIDAÇÕES -->
+                    <div style="flex: 2.2; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-height: calc(100vh - 180px); overflow-y: auto;">
+                        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px;">
+                            <h2 style="color: #1e293b; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; font-weight: 700;">
+                                <div style="width: 4px; height: 24px; background: #0c3e2b; border-radius: 2px;"></div>
+                                Liquidações
+                            </h2>
+                            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                <div id="container-pesquisa-liq" style="display: none; align-items: center; background: #f1f5f9; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0 12px; overflow: hidden; transition: 0.3s;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <input type="text" id="input-pesquisa-liq" placeholder="Pesquisar..." onkeyup="renderizarCardsLiquidacoes()" style="border: none; background: transparent; padding: 8px; outline: none; width: 200px; font-size: 0.9rem;">
+                                </div>
+                                <button id="btn-toggle-pesquisa-liq" class="nav-btn"
+                                    onclick="var c = document.getElementById('container-pesquisa-liq'); var i = document.getElementById('input-pesquisa-liq'); if(c.style.display === 'none') { c.style.display = 'flex'; i.focus(); } else { c.style.display = 'none'; i.value = ''; renderizarCardsLiquidacoes(); }"
+                                    style="width: auto; height: auto; background: white; color: #475569; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; cursor: pointer; transition: 0.2s;" title="Filtro de Pesquisa">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                </button>
+                                <button id="btn-download-liquidacoes" class="nav-btn"
+                                    onclick="executarDownloadLiquidacoesAno()"
+                                    style="width: auto; height: auto; background: white; color: #475569; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; cursor: pointer; transition: 0.2s;" title="Baixar e Fechar Liquidações do Ano">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                </button>
+                                <button id="btn-nova-liquidacao" class="nav-btn"
+                                    onclick="abrirModalNovaLiquidacao()"
+                                    style="width: auto; height: auto; background: #0c3e2b; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(12, 62, 43, 0.2);"
+                                    onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 15px rgba(12, 62, 43, 0.3)';"
+                                    onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 10px rgba(12, 62, 43, 0.2)';">
+                                    + Nova Liquidação
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="lista-liquidacoes-container" style="padding: 5px; margin-bottom: 20px;">
+                            <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 1rem;">
+                                Carregando liquidações...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- ABA: CONFIGURAÇÕES (Perfil) -->
             <section id="aba-configuracoes" class="content-section" style="display: none;">
                 <h1>Meu Perfil</h1>
@@ -3349,6 +3451,7 @@
     <script src="assets/js/tarefas.js"></script>
     <script src="assets/js/projetos.js"></script>
     <script src="assets/js/fechamento.js"></script>
+    <script src="assets/js/liquidacoes.js"></script>
     <script src="assets/js/painel.js"></script>
 </body>
 

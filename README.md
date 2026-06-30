@@ -65,6 +65,7 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
 | **Consórcio** | Criação e visualização de tarefas, atribuição para Analistas do Consórcio, criação de subtarefas em tarefas próprias, **sem** acesso a Eventos |
 | **Analista do Consórcio** | Tarefas atribuídas pelo Consórcio, visualização de tarefas onde é responsável, **sem** gestão de equipe |
 | **Agente de Administração** | Tarefas próprias (criar/ver apenas onde é responsável), visualização de projetos, **sem** gestão de equipe |
+| **Estagiário do Agente de Administração** | Mesmas permissões do Agente de Administração |
 
 ### Aba de Configurações (Meu Perfil)
 - Fica disponível para qualquer um na navegação inferior esquerda.
@@ -177,7 +178,7 @@ Sistema de calendário mensal vanilla JS para gerenciamento de eventos e projeto
 | Consórcio | ✗ (sem acesso) | ✗ | ✗ |
 | Cargos Especiais* | Apenas onde é responsável (Tarefas de Eventos) | ✗ | ✗ |
 
-\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
+\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração, Estagiário do Agente de Administração
 
 ---
 
@@ -370,7 +371,7 @@ Módulo completo acessível pela aba **Tarefas** na sidebar (visível para todos
 | Cadastrar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Desativar Funcionários | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
 
-\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração
+\* **Cargos Especiais**: Gerente de Interface Jurídica, Agente de Administração, Estagiário do Agente de Administração
 
 ### Ícones SVG
 - Todos os ícones do módulo utilizam **SVGs inline stroke-only** (estilo minimalista da sidebar), sem emojis.
@@ -574,9 +575,10 @@ Secretário(a) (nível 4)
  │
  ├── Gerente de Interface Jurídica (Cargo Especial)
  └── Agente de Administração (Cargo Especial)
+      └── Estagiário do Agente de Administração (Cargo Especial)
 ```
 
-> **Nota**: Cargos Especiais (Gerente de Interface Jurídica, Agente de Administração) **não fazem parte da hierarquia de gestão**. Eles têm acesso apenas às próprias tarefas e não gerenciam equipes.
+> **Nota**: Cargos Especiais (Gerente de Interface Jurídica, Agente de Administração, Estagiário do Agente de Administração) **não fazem parte da hierarquia de gestão**. Eles têm acesso apenas às próprias tarefas e não gerenciam equipes.
 
 ### Funcionalidades de Gestão:
 - **Gestão Completa de Funcionários**: Cadastro e desativação de todos os cargos
@@ -684,6 +686,7 @@ Cargos com permissões específicas e restritas, **não tratados como Gerentes**
 |-------|-----------|
 | **Gerente de Interface Jurídica** | Responsável por demandas jurídicas e interface com o setor legal |
 | **Agente de Administração** | Responsável por tarefas administrativas internas |
+| **Estagiário do Agente de Administração** | Suporte às tarefas administrativas internas |
 
 ### Características dos Cargos Especiais:
 
@@ -901,7 +904,7 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - Filtro de tarefas por modo `cuidado_animal`
 
 ### Cargos Especiais: Interface Jurídica e Administração
-- **Novos Cargos**: "Gerente de Interface Jurídica" e "Agente de Administração"
+- **Novos Cargos**: "Gerente de Interface Jurídica", "Agente de Administração" e "Estagiário do Agente de Administração"
 - **Home Exclusiva**: Layout em duas colunas (Tarefas de Eventos + Calendário de Projetos)
 - **Permissões Restritas**: Apenas tarefas onde é responsável, atribuição somente para si mesmo
 - **Sem Acesso**: Não podem criar projetos/eventos, não gerenciam equipes, não aparecem no ranking
