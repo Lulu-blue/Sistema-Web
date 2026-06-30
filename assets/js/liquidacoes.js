@@ -6,7 +6,7 @@ window.mesAtualLiq = hojeLiq.getMonth();
 window.anoAtualLiq = hojeLiq.getFullYear();
 window.dataFiltroLiqSelecionada = null; // Para filtrar os cards quando clica no calendário
 
-const CORES_ATA = ['#ff748eff', '#F94144', '#F3722C', '#F8961E', '#F9C74F', '#90BE6D', '#43AA8B', '#00B4D8', '#0077B6', '#7209B7'];
+const CORES_ATA = ['#ff748eff', '#F94144', '#F3722C', '#F8961E', '#F9C74F', '#66de74ff', '#43AA8B', '#00B4D8', '#0077B6', '#7209B7'];
 
 document.addEventListener('DOMContentLoaded', function () {
     var observer = new MutationObserver(function (mutations) {
@@ -107,7 +107,7 @@ function renderizarCardsLiquidacoes() {
                 liq.solicitacao_fornecimento, liq.empenho, liq.numero_liquidacao,
                 liq.pagamento, liq.protocolo, liq.observacao
             ].join(' ').toLowerCase();
-            
+
             var itensText = (liq.itens || []).map(i => (i.nome || '') + ' ' + (i.quantidade || '')).join(' ').toLowerCase();
             if (!textoLiq.includes(termo) && !itensText.includes(termo)) {
                 return;
@@ -185,9 +185,9 @@ function renderizarCardsLiquidacoes() {
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 8px; min-width: 140px;">
                             ${liq.status !== 'concluida' ?
-                                `<button onclick="marcarLiquidacaoConcluida('${liq.id}')" style="background: #16a34a; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">✓ Concluir</button>`
-                                : ''
-                            }
+                `<button onclick="marcarLiquidacaoConcluida('${liq.id}')" style="background: #16a34a; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">✓ Concluir</button>`
+                : ''
+            }
                             <button onclick="abrirModalNovaLiquidacao('${liq.id}')" style="background: #eab308; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Editar</button>
                             <button onclick="excluirLiquidacao('${liq.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Excluir</button>
                         </div>
@@ -636,7 +636,7 @@ async function executarDownloadLiquidacoesAno() {
 
     var liquidadas = window.liquidacoesDados || [];
     var registrosAno = liquidadas.filter(l => l.data_recebimento && l.data_recebimento.startsWith(ano.toString()));
-    
+
     if (registrosAno.length === 0) {
         Swal.fire('Aviso', 'Nenhuma liquidação encontrada para o ano ' + ano, 'info');
         return;
@@ -651,15 +651,15 @@ async function executarDownloadLiquidacoesAno() {
             dataVencimento = new Date(dataRecebimento);
             dataVencimento.setDate(dataVencimento.getDate() + 30);
         }
-        
+
         let vencimentoStr = dataVencimento ? dataVencimento.toLocaleDateString('pt-BR') : '';
         let recebimentoStr = dataRecebimento ? dataRecebimento.toLocaleDateString('pt-BR') : '';
-        
+
         let statusStr = liq.status === 'concluida' ? 'Concluída' : 'Pendente';
         let valorStr = liq.valor ? liq.valor.toFixed(2).replace('.', ',') : '';
-        
+
         let itensStr = (liq.itens || []).map(i => `${i.nome || ''} (${i.quantidade || ''} ${i.unidade || ''})`).join('; ');
-        
+
         let escapeCSV = (str) => {
             if (str === null || str === undefined) return '""';
             return '"' + str.toString().replace(/"/g, '""') + '"';
@@ -683,12 +683,12 @@ async function executarDownloadLiquidacoesAno() {
             escapeCSV(statusStr),
             escapeCSV(liq.observacao)
         ].join(',');
-        
+
         csvContent += row + "\n";
     });
 
     let blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    
+
     // Download para o usuário
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -790,11 +790,11 @@ async function executarDownloadLiquidacoesAno() {
     });
 
     if (opcaoExclusao) {
-        Swal.fire({title: 'Excluindo...', allowOutsideClick: false});
+        Swal.fire({ title: 'Excluindo...', allowOutsideClick: false });
         Swal.showLoading();
 
         try {
-            var limiteStr = `${ano}-12-31`; 
+            var limiteStr = `${ano}-12-31`;
             var limiteInferior = `${ano}-01-01`;
 
             let query = supabaseClient
@@ -810,7 +810,7 @@ async function executarDownloadLiquidacoesAno() {
             var { error } = await query;
 
             if (error) throw error;
-            
+
             await Swal.fire('Sucesso!', `As liquidações selecionadas de ${ano} foram excluídas do banco de dados.`, 'success');
             carregarLiquidacoes();
         } catch (err) {
