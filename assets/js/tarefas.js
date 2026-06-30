@@ -5474,3 +5474,490 @@ window.excluirAnexo = excluirAnexo;
 window.enviarComentarioTarefa = enviarComentarioTarefa;
 window.carregarTarefas = carregarTarefas;
 window.carregarEventos = carregarEventos;
+
+window.baixarTarefasCSV = async function() {
+    Swal.fire({title: 'Carregando opções...', allowOutsideClick: false});
+    Swal.showLoading();
+    
+    // Pegar usuários permitidos
+    var { data: todosUsuarios, error: errU } = await supabaseClient.from('profiles').select('*').order('full_name', {ascending: true});
+    if (errU) {
+        Swal.fire('Erro', 'Não foi possível carregar os usuários.', 'error');
+        return;
+    }
+    
+    var cargoLocal = typeof userRoleGlobal !== 'undefined' ? userRoleGlobal : (window.cargoGlobal || '');
+    var roleLowerNorm = cargoLocal.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var isGerenteRA = roleLowerNorm.includes('gerente') && (roleLowerNorm.includes('ambiental') || roleLowerNorm.includes('regularizacao'));
+    var isGerentePosturas = roleLowerNorm.includes('gerente') && roleLowerNorm.includes('postura');
+    var isDiretorA = roleLowerNorm.includes('diretor');
+    var isGestorLocal = window.isGestorGlobal || isDiretorA || roleLowerNorm.includes('secretari');
+    
+    var cargosEquipeAmbiental = ['Engenheiro(a) Agrônomo(a)', 'Engenheiro(a) Civil', 'Analista Ambiental', 'Auxiliar de Serviços II'];
+    
+    var usuariosPermitidos = todosUsuarios.filter(function(u) {
+        if (isGestorLocal) return true;
+        if (u.id === window.userIdGlobal) return true;
+        var uRole = u.role || '';
+        var uRoleLower = uRole.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (isGerenteRA && cargosEquipeAmbiental.includes(uRole)) return true;
+        if (isGerentePosturas && (uRoleLower.includes('fiscal de postura') || uRoleLower.includes('agente de postura') || uRoleLower.includes('chefe de divisao') || uRoleLower.includes('auxiliar') || uRoleLower.includes('estagiari'))) return true;
+        return false;
+    });
+
+    var htmlUsuarios = '';
+    usuariosPermitidos.forEach(function(u) {
+        var isChecked = (u.id === window.userIdGlobal) ? 'checked' : '';
+        htmlUsuarios += '<label class="lbl-usuario-download" style="display:flex; align-items:center; gap:8px; text-align:left; font-size:14px; margin-bottom:8px; cursor:pointer;">' +
+            '<input type="checkbox" class="chk-user-download" value="' + u.id + '" data-nome="' + u.full_name + '" ' + isChecked + '>' +
+            u.full_name + ' <span style="color:#64748b; font-size:12px;">(' + (u.role || 'Sem Cargo') + ')</span>' +
+        '</label>';
+    });
+
+    var html = `
+        <div style="text-align:left; font-size:14px; margin-bottom:10px; color:#475569;">Selecione os usuários:</div>
+        <input type="text" id="pesquisa-usuarios-download" placeholder="Pesquisar funcionário..." class="swal2-input" style="width:75%; max-width:350px; display:block; margin: 0 auto 15px auto; box-sizing:border-box; font-size:14px; height: 2.5em; padding: 0 10px;" onkeyup="var termo = this.value.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''); document.querySelectorAll('.lbl-usuario-download').forEach(function(lbl) { var texto = lbl.textContent.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''); lbl.style.display = texto.includes(termo) ? 'flex' : 'none'; });">
+        <div id="lista-usuarios-download" style="max-height: 200px; overflow-y:auto; border:1px solid #cbd5e1; padding:12px; border-radius:8px; margin-bottom:20px; background:#f8fafc; box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);">
+            ${htmlUsuarios}
+        </div>
+        <div style="text-align:center;">
+            <label style="font-weight:600; font-size:14px; color:#1e293b; display:block; margin-bottom:5px;">Ano das Tarefas:</label>
+            <input type="number" id="download-tarefas-ano" value="${new Date().getFullYear()}" class="swal2-input" style="width:50%; max-width:150px; display:block; margin: 0 auto; box-sizing:border-box; text-align:center;">
+        </div>
+    `;
+
+    var { value: formValues } = await Swal.fire({
+        title: 'Baixar Tarefas',
+        html: html,
+        showCancelButton: true,
+        confirmButtonText: 'Continuar',
+        cancelButtonText: 'Cancelar',
+        preConfirm: function() {
+            var chks = document.querySelectorAll('.chk-user-download:checked');
+            if (chks.length === 0) {
+                Swal.showValidationMessage('Selecione pelo menos um usuário');
+                return false;
+            }
+            var ano = document.getElementById('download-tarefas-ano').value;
+            if (!ano) {
+                Swal.showValidationMessage('Informe o ano');
+                return false;
+            }
+            var usuariosSel = Array.from(chks).map(function(c) { return { id: c.value, nome: c.getAttribute('data-nome') }; });
+            return { usuariosSel: usuariosSel, ano: ano };
+        }
+    });
+
+    if (!formValues) return;
+    
+    // Validação de E-mail
+    var emailDestino = null;
+    try {
+        var { data: perfil } = await supabaseClient.from('profiles').select('email_real, email_verificado').eq('id', window.userIdGlobal).maybeSingle();
+        emailDestino = perfil?.email_real;
+        var verificado = perfil?.email_verificado || false;
+
+        while (true) {
+            while (!emailDestino || !validarEmailFmt(emailDestino)) {
+                emailDestino = await registrarEmailNoAto(window.userIdGlobal);
+                if (!emailDestino) {
+                    var { isConfirmed } = await Swal.fire({
+                        title: 'E-mail Obrigatório',
+                        text: 'O envio por e-mail é obrigatório para concluir o backup.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Informar E-mail',
+                        cancelButtonText: 'Cancelar'
+                    });
+                    if (!isConfirmed) return;
+                }
+                verificado = false;
+            }
+            if (!verificado) {
+                var sucessoV = typeof realizarVerificacaoOTP === 'function' ? await realizarVerificacaoOTP(window.userIdGlobal, emailDestino) : true;
+                if (!sucessoV) {
+                    emailDestino = null;
+                    continue;
+                }
+            }
+            break;
+        }
+    } catch (err) {
+        console.error("Erro email:", err);
+        Swal.fire('Erro', 'Não foi possível validar seu e-mail.', 'error');
+        return;
+    }
+
+    Swal.fire({title: 'Buscando tarefas...', text: 'Isso pode levar alguns instantes.', allowOutsideClick: false, showConfirmButton: false});
+    Swal.showLoading();
+
+    try {
+        var todasAsTarefas = [];
+        var limit = 1000;
+        var start = 0;
+        var hasMore = true;
+
+        while (hasMore) {
+            var { data: tarefasBatch, error: errTar } = await supabaseClient.from('tarefas')
+                .select('*, tarefa_responsaveis(user_id)')
+                .gte('created_at', formValues.ano + '-01-01T00:00:00Z')
+                .lte('created_at', formValues.ano + '-12-31T23:59:59Z')
+                .order('id', { ascending: true })
+                .range(start, start + limit - 1);
+
+            if (errTar) throw errTar;
+            if (tarefasBatch && tarefasBatch.length > 0) {
+                todasAsTarefas = todasAsTarefas.concat(tarefasBatch);
+                start += limit;
+                if (tarefasBatch.length < limit) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+        }
+        var tarefas = todasAsTarefas;
+
+        // Após carregar, precisamos garantir que tarefas-pai e sub-tarefas que possam estar fora do range do ano sejam carregadas caso necessário?
+        // Vamos focar em organizar o que foi carregado e arrumar o CSV
+        var idsTarefas = tarefas.map(function(t){return t.id;});
+
+        var anexos = [];
+        var comentariosAnexos = [];
+        var todosComentarios = [];
+        var todasRespostas = [];
+        
+        if (idsTarefas.length > 0) {
+            if (Swal.isVisible()) Swal.update({title: 'Processando anexos e respostas...'});
+            var chunkSize = 200;
+            for(var i=0; i<idsTarefas.length; i+=chunkSize){
+                var chunk = idsTarefas.slice(i, i+chunkSize);
+                var { data: an } = await supabaseClient.from('tarefa_anexos').select('*').in('tarefa_id', chunk);
+                if (an) anexos = anexos.concat(an);
+                
+                var { data: resps } = await supabaseClient.from('tarefa_respostas').select('id, tarefa_id, user_name, created_at, texto').in('tarefa_id', chunk);
+                if (resps) todasRespostas = todasRespostas.concat(resps);
+
+                var { data: coms } = await supabaseClient.from('tarefa_comentarios').select('id, tarefa_id, user_name, created_at, texto').in('tarefa_id', chunk);
+                if (coms && coms.length > 0) {
+                    todosComentarios = todosComentarios.concat(coms);
+                    var comIds = coms.map(function(c){return c.id;});
+                    var { data: comAn } = await supabaseClient.from('tarefa_comentario_anexos').select('*').in('comentario_id', comIds);
+                    if (comAn) {
+                        comAn.forEach(function(ca) {
+                            var comentarioRef = coms.find(function(c){return c.id === ca.comentario_id;});
+                            if (comentarioRef) {
+                                ca.tarefa_id = comentarioRef.tarefa_id;
+                                comentariosAnexos.push(ca);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        var zip = new JSZip();
+        
+        for (var i = 0; i < formValues.usuariosSel.length; i++) {
+            var user = formValues.usuariosSel[i];
+            var folderNome = user.nome.replace(/[^a-zA-Z0-9_-]/g, '_');
+            var userFolder = zip.folder(folderNome);
+            
+            // Filtra as tarefas deste usuário, incluindo sub-tarefas e tarefas-pai (e tarefas que ele criou)
+            var tarefasDoUserMap = new Map();
+            tarefas.forEach(function(t) {
+                var ehResponsavel = t.tarefa_responsaveis && t.tarefa_responsaveis.some(function(tr){return tr.user_id === user.id;});
+                var ehCriador = t.criado_por === user.id;
+                
+                if (ehResponsavel || ehCriador) {
+                    tarefasDoUserMap.set(t.id, t);
+                    // Adicionar sub-tarefas diretas
+                    tarefas.forEach(function(sub) {
+                        if (sub.tarefa_pai_id === t.id) {
+                            tarefasDoUserMap.set(sub.id, sub);
+                        }
+                    });
+                }
+            });
+            // Adicionar tarefas-pai se a sub-tarefa estiver na lista
+            var chavesAtuais = Array.from(tarefasDoUserMap.keys());
+            chavesAtuais.forEach(function(key) {
+                var t = tarefasDoUserMap.get(key);
+                if (t.tarefa_pai_id) {
+                    var parent = tarefas.find(function(p){return p.id === t.tarefa_pai_id;});
+                    if (parent) tarefasDoUserMap.set(parent.id, parent);
+                }
+            });
+            var tarefasDoUser = Array.from(tarefasDoUserMap.values());
+            
+            var concluidas = [];
+            var atrasadas = [];
+            var outras = [];
+            
+            tarefasDoUser.forEach(function(t) {
+                var st = t.status || 'aberta';
+                
+                if (st !== 'concluida' && t.prazo_conclusao) {
+                    var pParts = t.prazo_conclusao.split('-');
+                    if (pParts.length === 3) {
+                        var dtPrazo = new Date(pParts[0], pParts[1] - 1, pParts[2]);
+                        var dtHoje = new Date();
+                        dtHoje.setHours(0,0,0,0);
+                        if (dtPrazo < dtHoje) st = 'atrasada';
+                    }
+                }
+                
+                if (st === 'concluida') {
+                    concluidas.push(t);
+                } else if (st === 'atrasada') {
+                    atrasadas.push(t);
+                } else {
+                    outras.push(t);
+                }
+            });
+            
+            var cols = [
+                'ID Tarefa', 
+                'ID Tarefa Pai', 
+                'Título', 
+                'Descrição', 
+                'Status', 
+                'Data de Criação', 
+                'Prazo', 
+                'Prioridade', 
+                'Data Conclusão', 
+                'Criador', 
+                'Responsáveis', 
+                'Respostas',
+                'Comentários', 
+                'Anexos (Qtd)'
+            ];
+            var gerarCSV = function(lista) {
+                var csv = '\uFEFF' + cols.join(';') + '\r\n';
+                lista.forEach(function(t) {
+                    var nomesResponsaveis = '';
+                    if (t.tarefa_responsaveis && t.tarefa_responsaveis.length > 0) {
+                        nomesResponsaveis = t.tarefa_responsaveis.map(function(tr) {
+                            var p = todosUsuarios.find(function(u){return u.id === tr.user_id;});
+                            return p ? p.full_name : 'Desconhecido';
+                        }).join(', ');
+                    }
+                    var criador = '';
+                    if (t.criado_por) {
+                        var pC = todosUsuarios.find(function(u){return u.id === t.criado_por;});
+                        criador = pC ? pC.full_name : t.criado_por;
+                    }
+                    
+                    var respsTarefa = todasRespostas.filter(function(r){return r.tarefa_id === t.id;}) || [];
+                    var txtRespostas = respsTarefa.map(function(r) {
+                        var rData = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
+                        return '[' + r.user_name + ' em ' + rData + ']: ' + (r.texto || '');
+                    }).join(' | ');
+
+                    var comsTarefa = todosComentarios.filter(function(c){return c.tarefa_id === t.id;}) || [];
+                    var txtComentarios = comsTarefa.map(function(c) {
+                        var cData = c.created_at ? new Date(c.created_at).toLocaleDateString() : '';
+                        return '[' + c.user_name + ' em ' + cData + ']: ' + (c.texto || '');
+                    }).join(' | ');
+                    
+                    var qtdAnexos = anexos.filter(function(a){return a.tarefa_id === t.id;}).length;
+                    qtdAnexos += comentariosAnexos.filter(function(ca){return ca.tarefa_id === t.id;}).length;
+                    
+                    var safeText = function(str) {
+                        if (str === null || str === undefined) return '';
+                        return String(str).replace(/;/g, ',').replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/"/g, '""');
+                    };
+
+                    var linha = [
+                        t.id,
+                        t.tarefa_pai_id || '',
+                        safeText(t.titulo),
+                        safeText(t.descricao),
+                        safeText(t.status),
+                        safeText(t.created_at),
+                        safeText(t.prazo_conclusao),
+                        safeText(t.prioridade),
+                        safeText(t.data_conclusao),
+                        safeText(criador),
+                        safeText(nomesResponsaveis),
+                        safeText(txtRespostas),
+                        safeText(txtComentarios),
+                        qtdAnexos
+                    ].map(function(v) { return '"' + v + '"'; }).join(';');
+                    csv += linha + '\r\n';
+                });
+                return csv;
+            };
+            var ordernarPorHierarquia = function(lista) {
+                var ordenado = [];
+                var raizes = lista.filter(function(t) {
+                    return !t.tarefa_pai_id || !lista.some(function(p){return p.id === t.tarefa_pai_id;});
+                });
+                raizes.sort(function(a, b) { return a.id - b.id; });
+                
+                raizes.forEach(function(raiz) {
+                    ordenado.push(raiz);
+                    var filhas = lista.filter(function(c){return c.tarefa_pai_id === raiz.id;});
+                    filhas.sort(function(a, b) { return a.id - b.id; });
+                    ordenado = ordenado.concat(filhas);
+                });
+                
+                return ordenado;
+            };
+            
+            if (concluidas.length > 0) userFolder.file('concluidas.csv', gerarCSV(ordernarPorHierarquia(concluidas)));
+            if (atrasadas.length > 0) userFolder.file('atrasadas.csv', gerarCSV(ordernarPorHierarquia(atrasadas)));
+            if (outras.length > 0) userFolder.file('outras.csv', gerarCSV(ordernarPorHierarquia(outras)));
+            
+            // Adicionar anexos
+            for (var j = 0; j < tarefasDoUser.length; j++) {
+                var t = tarefasDoUser[j];
+                var tNomeSafe = (t.titulo || 'tarefa_' + t.id).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+                
+                var tAnexos = anexos.filter(function(a){return a.tarefa_id === t.id;});
+                for (var k = 0; k < tAnexos.length; k++) {
+                    var a = tAnexos[k];
+                    if (a.url) {
+                        try {
+                            if (Swal.isVisible()) Swal.update({title: 'Baixando anexo da tarefa...', text: a.nome_arquivo});
+                            var res = await fetch(a.url);
+                            var blob = await res.blob();
+                            var aNomeSafe = (a.nome_arquivo || 'anexo' + k).replace(/[^a-zA-Z0-9_.-]/g, '_');
+                            userFolder.file(tNomeSafe + '-anexo' + (k+1) + '-' + aNomeSafe, blob);
+                        } catch(e) { console.error('Erro baixar anexo tarefa', e); }
+                    }
+                }
+                
+                var tcAnexos = comentariosAnexos.filter(function(ca){return ca.tarefa_id === t.id;});
+                for (var k = 0; k < tcAnexos.length; k++) {
+                    var a = tcAnexos[k];
+                    if (a.url) {
+                        try {
+                            if (Swal.isVisible()) Swal.update({title: 'Baixando anexo do comentário...', text: a.nome_arquivo});
+                            var res = await fetch(a.url);
+                            var blob = await res.blob();
+                            var aNomeSafe = (a.nome_arquivo || 'anexo_comentario' + k).replace(/[^a-zA-Z0-9_.-]/g, '_');
+                            userFolder.file(tNomeSafe + '-comentario-anexo' + (k+1) + '-' + aNomeSafe, blob);
+                        } catch(e) { console.error('Erro baixar anexo comentario', e); }
+                    }
+                }
+            }
+        }
+        
+        if (Swal.isVisible()) Swal.update({title: 'Gerando arquivo ZIP...', text: 'Aguarde...'});
+        var content = await zip.generateAsync({type: 'blob'});
+        
+        var reader = new FileReader();
+        var base64Promise = new Promise(function(resolve) {
+            reader.onloadend = function() { resolve(reader.result); };
+            reader.readAsDataURL(content);
+        });
+        var base64Data = await base64Promise;
+        var GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwc-q6uBW3DigEvoQWOImXIlgPsBizoUwquUmaU2RXyHbjSVEvx4fLtAyBzIqNuveQR/exec";
+
+        Swal.fire({
+            title: 'Enviando E-mail...',
+            html: 'Enviando backup das tarefas para <b>' + emailDestino + '</b>...',
+            allowOutsideClick: false,
+            didOpen: function() { Swal.showLoading(); }
+        });
+
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            cache: 'no-cache',
+            body: JSON.stringify({
+                to: emailDestino,
+                subject: 'Backup de Tarefas - ' + formValues.ano,
+                body: 'Olá,\\n\\nSegue em anexo o arquivo ZIP contendo as tarefas selecionadas e seus respectivos anexos, separados por usuário e status, referentes ao ano de ' + formValues.ano + '.\\n\\nEste é um backup automático do sistema SEMAC.',
+                fileName: 'tarefas_backup_' + formValues.ano + '.zip',
+                attachmentBase64: base64Data
+            })
+        });
+        
+        // Download local de segurança
+        var urlLocal = URL.createObjectURL(content);
+        var linkLocal = document.createElement('a');
+        linkLocal.href = urlLocal;
+        linkLocal.download = 'tarefas_backup_' + formValues.ano + '.zip';
+        document.body.appendChild(linkLocal);
+        linkLocal.click();
+        document.body.removeChild(linkLocal);
+        URL.revokeObjectURL(urlLocal);
+
+        await Swal.fire('Enviado!', 'O backup foi baixado e enviado para ' + emailDestino + ' com sucesso.', 'success');
+
+        // Perguntar Exclusão
+        var optHtml = '<div style="text-align:left; font-size:14px; margin-top:10px;">' +
+            '<label style="display:block; margin-bottom:8px; cursor:pointer;"><input type="radio" name="swal-exclusao-opt" value="concluidas" checked> Excluir APENAS as que estão Concluídas</label>' +
+            '<label style="display:block; cursor:pointer;"><input type="radio" name="swal-exclusao-opt" value="todas"> Excluir TODAS as exportadas</label>' +
+        '</div>';
+
+        var resExclusao = await Swal.fire({
+            title: 'Excluir dados de ' + formValues.ano + '?',
+            html: 'Deseja excluir as tarefas dos usuários exportados do banco de dados?' + optHtml,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Confirmar Exclusão',
+            cancelButtonText: 'Manter Dados no Banco',
+            confirmButtonColor: '#dc2626',
+            preConfirm: function() {
+                var checked = document.querySelector('input[name="swal-exclusao-opt"]:checked');
+                return checked ? checked.value : null;
+            }
+        });
+
+        if (resExclusao.isConfirmed && resExclusao.value) {
+            Swal.fire({title: 'Excluindo tarefas...', allowOutsideClick: false});
+            Swal.showLoading();
+            
+            var tarefasParaExcluir = [];
+            for (var u = 0; u < formValues.usuariosSel.length; u++) {
+                var userEx = formValues.usuariosSel[u];
+                var tarefasEx = tarefas.filter(function(t) {
+                    if (!t.tarefa_responsaveis) return false;
+                    return t.tarefa_responsaveis.some(function(tr){return tr.user_id === userEx.id;});
+                });
+                
+                if (resExclusao.value === 'concluidas') {
+                    tarefasEx = tarefasEx.filter(function(t) {
+                        var statusObj = typeof determinarStatusTarefa === 'function' ? determinarStatusTarefa(t) : { status: t.status || 'aberta' };
+                        return statusObj.status === 'concluida' || t.status === 'concluida';
+                    });
+                }
+                
+                tarefasParaExcluir = tarefasParaExcluir.concat(tarefasEx.map(function(t){return t.id;}));
+            }
+            
+            // Remove duplicações se uma tarefa tiver múltiplos responsáveis
+            tarefasParaExcluir = [...new Set(tarefasParaExcluir)];
+            
+            if (tarefasParaExcluir.length > 0) {
+                var chunkSizeDel = 500;
+                for (var i = 0; i < tarefasParaExcluir.length; i += chunkSizeDel) {
+                    var chunkDel = tarefasParaExcluir.slice(i, i + chunkSizeDel);
+                    // Deleta responsáveis, anexos, comentários, anexos de comentário, etc. Não há deleção em cascata garantida, então...
+                    await supabaseClient.from('tarefa_responsaveis').delete().in('tarefa_id', chunkDel);
+                    await supabaseClient.from('tarefa_anexos').delete().in('tarefa_id', chunkDel);
+                    
+                    var { data: comsDel } = await supabaseClient.from('tarefa_comentarios').select('id').in('tarefa_id', chunkDel);
+                    if (comsDel && comsDel.length > 0) {
+                        var comIdsDel = comsDel.map(function(c){return c.id;});
+                        await supabaseClient.from('tarefa_comentario_anexos').delete().in('comentario_id', comIdsDel);
+                        await supabaseClient.from('tarefa_comentarios').delete().in('tarefa_id', chunkDel);
+                    }
+                    
+                    await supabaseClient.from('tarefas').delete().in('id', chunkDel);
+                }
+                await Swal.fire('Sucesso', 'As tarefas exportadas foram excluídas do banco.', 'success');
+                if (typeof carregarTarefasEquipe === 'function') carregarTarefasEquipe();
+                if (typeof carregarTarefasAtribuidas === 'function') carregarTarefasAtribuidas();
+                if (typeof carregarMinhasTarefas === 'function') carregarMinhasTarefas();
+            } else {
+                await Swal.fire('Aviso', 'Nenhuma tarefa compatível encontrada para exclusão.', 'info');
+            }
+        }
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Ocorreu um erro ao gerar o backup: ' + (e.message || 'Erro desconhecido'), 'error');
+    }
+};

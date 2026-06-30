@@ -103,7 +103,7 @@ function renderizarCardsLiquidacoes() {
         if (inputPesquisa && inputPesquisa.value.trim() !== '') {
             var termo = inputPesquisa.value.trim().toLowerCase();
             var textoLiq = [
-                liq.ata, liq.fornecedor, liq.cnpj, liq.valor, liq.nota_fiscal,
+                liq.ficha, liq.ata, liq.fornecedor, liq.cnpj, liq.valor, liq.nota_fiscal,
                 liq.solicitacao_fornecimento, liq.empenho, liq.numero_liquidacao,
                 liq.pagamento, liq.protocolo, liq.observacao
             ].join(' ').toLowerCase();
@@ -179,6 +179,7 @@ function renderizarCardsLiquidacoes() {
                                 <div><strong>Liquidação:</strong> ${liq.numero_liquidacao || '---'}</div>
                                 <div><strong>Pagamento:</strong> ${liq.pagamento || '---'}</div>
                                 <div><strong>Protocolo:</strong> ${liq.protocolo || '---'}</div>
+                                <div><strong>Ficha:</strong> ${liq.ficha || '---'}</div>
                             </div>
                             ${liq.observacao ? `<div style="margin-top: 12px; font-size: 0.85rem; color: #475569; background: white; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;"><strong>Obs:</strong> ${liq.observacao}</div>` : ''}
                         </div>
@@ -454,6 +455,10 @@ function abrirModalNovaLiquidacao(idEdit = null) {
                         <label style="display:block; font-weight:600; font-size:0.85rem; margin-bottom:4px;">Protocolo</label>
                         <input type="text" id="liq-protocolo" value="${liqObj && liqObj.protocolo ? liqObj.protocolo.replace(/"/g, '&quot;') : ''}" placeholder="Ex: 456/2026" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
                     </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="display:block; font-weight:600; font-size:0.85rem; margin-bottom:4px;">Ficha</label>
+                        <input type="text" id="liq-ficha" value="${liqObj && liqObj.ficha ? liqObj.ficha.replace(/"/g, '&quot;') : ''}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;" placeholder="Opcional">
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 16px;">
@@ -510,6 +515,7 @@ async function salvarLiquidacao() {
 
     try {
         var idEdit = document.getElementById('liq-id').value;
+        var ficha = document.getElementById('liq-ficha').value.trim();
         var ata = document.getElementById('liq-ata').value.trim();
         var data_recebimento = document.getElementById('liq-data').value;
         var fornecedor = document.getElementById('liq-fornecedor').value.trim();
@@ -541,6 +547,7 @@ async function salvarLiquidacao() {
         });
 
         var payload = {
+            ficha: ficha,
             ata: ata,
             itens: itens,
             data_recebimento: data_recebimento || null,
@@ -635,7 +642,7 @@ async function executarDownloadLiquidacoesAno() {
         return;
     }
 
-    let csvContent = "Ata,Fornecedor,CNPJ,Data de Recebimento,Data de Vencimento,Valor (R$),Itens,NF/Doc,Sol. Fornecimento,Empenho,Liquidação,Pagamento,Protocolo,Status,Observação\n";
+    let csvContent = "Ata,Fornecedor,CNPJ,Data de Recebimento,Data de Vencimento,Valor (R$),Itens,NF/Doc,Sol. Fornecimento,Empenho,Liquidação,Pagamento,Protocolo,Ficha,Status,Observação\n";
 
     registrosAno.forEach(liq => {
         let dataRecebimento = liq.data_recebimento ? new Date(liq.data_recebimento + 'T00:00:00') : null;
@@ -672,6 +679,7 @@ async function executarDownloadLiquidacoesAno() {
             escapeCSV(liq.numero_liquidacao),
             escapeCSV(liq.pagamento),
             escapeCSV(liq.protocolo),
+            escapeCSV(liq.ficha),
             escapeCSV(statusStr),
             escapeCSV(liq.observacao)
         ].join(',');

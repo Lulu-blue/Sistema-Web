@@ -2732,7 +2732,7 @@ function editarRegistro() {
 
     // Fechar detalhes
     fecharDetalhes();
-    
+
     // RESTAURA A VARIÁVEL GLOBAL POIS fecharDetalhes() A ZEROU!
     // (Esse era o bug raiz que apagava os anexos e perdia a pontuação original)
     registroSelecionado = reg;
@@ -3323,13 +3323,34 @@ function togglePainelFiltro() {
     atualizarIndicadorFiltro();
 }
 
-// Fecha o painel ao clicar fora dele
+// Fecha o painel ao clicar fora dele com um "limite invisível" de segurança
 document.addEventListener('click', function (e) {
     const painel = document.getElementById('painel-filtro-popup');
     const btn = document.getElementById('btn-filtro-toggle');
     if (!painel || !btn) return;
+
+    // Só atua se o painel estiver aberto
+    if (painel.style.display !== 'block') return;
+
     if (!painel.contains(e.target) && !btn.contains(e.target)) {
+        // Obter as dimensões do painel na tela
+        const rect = painel.getBoundingClientRect();
+        // Define o limite invisível em pixels (ex: 80px para cada lado)
+        const limiteInvisivel = 90;
+
+        // Verifica se o clique ocorreu dentro dessa "bolha" invisível
+        if (
+            e.clientX >= (rect.left - limiteInvisivel) &&
+            e.clientX <= (rect.right + limiteInvisivel) &&
+            e.clientY >= (rect.top - limiteInvisivel) &&
+            e.clientY <= (rect.bottom + limiteInvisivel)
+        ) {
+            // Clique foi perto do modal, então não fecha
+            return;
+        }
+
         painel.style.display = 'none';
+        if (typeof atualizarIndicadorFiltro === 'function') atualizarIndicadorFiltro();
     }
 });
 

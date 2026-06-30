@@ -1163,7 +1163,7 @@
                     Tarefas
                 </h1>
 
-                <div style="display: flex; gap: 8px; margin-bottom: 24px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;">
                     <button id="btn-tab-atribuidas" class="sub-aba-btn active" onclick="trocarAbaTarefas('atribuidas')"
                         style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; background: linear-gradient(135deg, #062117, #0c3e2b); color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         Tarefas Atribuídas
@@ -1171,6 +1171,15 @@
                     <button id="btn-tab-minhas" class="sub-aba-btn" onclick="trocarAbaTarefas('minhas')"
                         style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: transparent; color: #475569; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s;">
                         Tarefas de Eventos e Projetos
+                    </button>
+                    <button id="btn-baixar-tarefas" onclick="baixarTarefasCSV()"
+                        style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1e293b; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 6px; margin-left: auto;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Baixar Tarefas
                     </button>
                 </div>
 
