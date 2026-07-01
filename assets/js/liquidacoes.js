@@ -6,7 +6,7 @@ window.mesAtualLiq = hojeLiq.getMonth();
 window.anoAtualLiq = hojeLiq.getFullYear();
 window.dataFiltroLiqSelecionada = null; // Para filtrar os cards quando clica no calendário
 
-const CORES_ATA = ['#ff748eff', '#F94144', '#F3722C', '#F8961E', '#F9C74F', '#66de74ff', '#43AA8B', '#00B4D8', '#0077B6', '#7209B7'];
+const CORES_ATA = ['#ff5070ff', '#ff3e41ff', '#F3722C', '#F8961E', '#ffcc22ff', '#00b615ff', '#00e4a0ff', '#00B4D8', '#0091dfff', '#7209B7'];
 
 document.addEventListener('DOMContentLoaded', function () {
     var observer = new MutationObserver(function (mutations) {
@@ -127,11 +127,11 @@ function renderizarCardsLiquidacoes() {
 
         if (liq.status === 'concluida') {
             borderCor = '#16a34a';
-            bgCor = '#f0fdf4';
+            bgCor = '#e2ffeaff';
             tituloCor = '#15803d';
         } else if (atrasado) {
             borderCor = '#dc2626';
-            bgCor = '#fef2f2';
+            bgCor = '#ffe3e3ff';
             tituloCor = '#b91c1c';
         }
 
