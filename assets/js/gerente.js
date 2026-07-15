@@ -2264,6 +2264,69 @@ function gerarCSVControleDenuncias(registros) {
 }
 
 async function baixarCSVControleDenuncias() {
+    var termo = (document.getElementById('busca-denuncias-geral')?.value || '').toLowerCase().trim();
+    var origem = (document.getElementById('filtro-denuncias-origem')?.value || '').toLowerCase().trim();
+    var enc = (document.getElementById('filtro-denuncias-encaminhado')?.value || '').toLowerCase().trim();
+    var concl = document.getElementById('filtro-denuncias-concluido')?.value || '';
+    var vencido = document.getElementById('filtro-denuncias-vencido')?.value || '';
+    var dataInicio = document.getElementById('filtro-denuncias-data-inicio')?.value || '';
+    var dataFim = document.getElementById('filtro-denuncias-data-fim')?.value || '';
+
+    var temFiltroAtivo = (termo || origem || enc || concl || vencido || dataInicio || dataFim);
+
+    if (temFiltroAtivo) {
+        var respFiltro = await Swal.fire({
+            title: 'Filtro Detectado',
+            text: 'Deseja baixar apenas os resultados da sua pesquisa atual (aba aberta) ou fazer um backup completo?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Baixar Resultados da Aba',
+            cancelButtonText: 'Backup Completo (Outras Categorias)'
+        });
+        
+        if (respFiltro.isConfirmed) {
+            var hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+
+            var filtrados = registrosDenunciasAtual.filter(function (r) {
+                if (origem && !(r.origem || '').toLowerCase().includes(origem)) return false;
+                if (enc && !(r.encaminhado_para_nome || '').toLowerCase().includes(enc)) return false;
+                if (concl !== '') {
+                    var esperado = concl === 'true';
+                    if (r.concluido !== esperado) return false;
+                }
+                if (vencido) {
+                    var prazo = r.prazo_conclusao ? new Date(r.prazo_conclusao) : null;
+                    if (vencido === 'vencido') {
+                        if (!prazo || prazo >= hoje || r.concluido) return false;
+                    } else if (vencido === 'no_prazo') {
+                        if (!prazo || prazo < hoje) return false;
+                    }
+                }
+                if (dataInicio && r.data) {
+                    if (r.data < dataInicio) return false;
+                }
+                if (dataFim && r.data) {
+                    if (r.data > dataFim) return false;
+                }
+                if (termo) {
+                    var texto = JSON.stringify(r).toLowerCase();
+                    if (!texto.includes(termo)) return false;
+                }
+                return true;
+            });
+            
+            if (filtrados.length === 0) {
+                Swal.fire('Aviso', 'Não há registros filtrados para baixar.', 'info');
+                return;
+            }
+            gerarCSVControleDenuncias(filtrados);
+            return;
+        } else if (respFiltro.dismiss !== Swal.DismissReason.cancel) {
+            return; // Cancelou o modal (fechou)
+        }
+    }
+
     const categoriasHtml = `
         <div style="text-align: left; max-height: 250px; overflow-y: auto; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 15px; font-size: 14px;">
             <label style="display: block; margin-bottom: 8px; cursor: pointer;"><input type="checkbox" class="swal2-checkbox cat-chk" value="comunicacao_interna" checked> Comunicação Interna</label>

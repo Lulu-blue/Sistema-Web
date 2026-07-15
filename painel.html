@@ -1469,6 +1469,45 @@
                                     style="outline:none; width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; background:white;">
                                 <datalist id="datalist-bairros-historico"></datalist>
                             </div>
+                            <div id="filtros-extras-ai" style="display:none; border-top: 1px dashed #cbd5e1; margin-top: 14px; padding-top: 14px;">
+                                <div style="margin-bottom:14px;">
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Nº da Notificação</label>
+                                    <input type="text" id="busca-notificacao-ai" placeholder="Nº da Notificação..."
+                                        oninput="filtrarHistoricoGeral()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom:14px;">
+                                    <div>
+                                        <label
+                                            style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Lote</label>
+                                        <input type="text" id="busca-lote-ai" placeholder="Lote..."
+                                            oninput="filtrarHistoricoGeral()"
+                                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                    </div>
+                                    <div>
+                                        <label
+                                            style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Zona</label>
+                                        <input type="text" id="busca-zona-ai" placeholder="Zona..."
+                                            oninput="filtrarHistoricoGeral()"
+                                            style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                    </div>
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Quadra</label>
+                                    <input type="text" id="busca-quadra-ai" placeholder="Quadra..."
+                                        oninput="filtrarHistoricoGeral()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                </div>
+                                <div style="margin-bottom:14px;">
+                                    <label
+                                        style="display:block; font-weight:600; margin-bottom:6px; font-size:13px; color:#475569;">Endereço do Imóvel Autuado</label>
+                                    <input type="text" id="busca-endereco-ai" placeholder="Endereço do Imóvel..."
+                                        oninput="filtrarHistoricoGeral()"
+                                        style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;">
+                                </div>
+                            </div>
                             <button onclick="limparFiltrosHistorico()"
                                 style="width:100%; padding:8px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; transition:0.2s;"
                                 onmouseover="this.style.background='#e2e8f0'"
@@ -2584,6 +2623,10 @@
             <section id="aba-projetos" class="content-section" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h1>Eventos e Projetos</h1>
+                    <button id="btn-download-projetos" onclick="executarDownloadEventosProjetos()" style="background: #0ea5e9; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Backup e Limpeza
+                    </button>
                 </div>
 
                 <div style="display: flex; gap: 24px; align-items: flex-start;">

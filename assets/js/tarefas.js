@@ -5961,3 +5961,379 @@ window.baixarTarefasCSV = async function() {
         Swal.fire('Erro', 'Ocorreu um erro ao gerar o backup: ' + (e.message || 'Erro desconhecido'), 'error');
     }
 };
+
+window.executarDownloadEventosProjetos = async function() {
+    // 1. Perguntar tipo
+    var resultTipo = await Swal.fire({
+        title: 'O que deseja baixar e limpar?',
+        input: 'select',
+        inputOptions: {
+            'ambos': 'Eventos e Projetos',
+            'evento': 'Apenas Eventos',
+            'projeto': 'Apenas Projetos'
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Continuar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!resultTipo.isConfirmed) return;
+    var tipoEscolhido = resultTipo.value;
+
+    // 2. Perguntar ano
+    var resultAno = await Swal.fire({
+        title: 'Selecione o Ano',
+        input: 'number',
+        inputValue: new Date().getFullYear(),
+        showCancelButton: true,
+        confirmButtonText: 'Buscar Dados',
+        inputValidator: function(v) { if (!v) return 'Ano é obrigatório'; }
+    });
+    if (!resultAno.isConfirmed) return;
+    var anoEscolhido = resultAno.value;
+
+    Swal.fire({title: 'Buscando Dados...', text: 'Coletando projetos, tarefas e anexos. Isso pode demorar...', allowOutsideClick: false, showConfirmButton: false});
+    Swal.showLoading();
+
+    try {
+        var startDate = anoEscolhido + '-01-01T00:00:00Z';
+        var endDate = anoEscolhido + '-12-31T23:59:59Z';
+        
+        var query = supabaseClient.from('eventos').select('*')
+            .gte('data_inicio', startDate)
+            .lte('data_inicio', endDate)
+            .order('data_inicio', { ascending: true });
+            
+        if (tipoEscolhido !== 'ambos') {
+            query = query.eq('tipo', tipoEscolhido);
+        }
+
+        var { data: eventos, error: errEv } = await query;
+        if (errEv) throw errEv;
+        if (!eventos || eventos.length === 0) {
+            Swal.fire('Aviso', 'Nenhum registro encontrado para o ano ' + anoEscolhido, 'info');
+            return;
+        }
+
+        var idsEventos = eventos.map(function(e) { return e.id; });
+
+        if (Swal.isVisible()) Swal.update({title: 'Buscando anexos e tarefas...'});
+
+        var eventoAnexos = [];
+        var { data: evAn } = await supabaseClient.from('evento_anexos').select('*').in('evento_id', idsEventos);
+        if (evAn) eventoAnexos = evAn;
+
+        // Fetch tarefas vinculadas aos eventos
+        var todasAsTarefas = [];
+        var start = 0;
+        var limit = 1000;
+        var hasMore = true;
+        while (hasMore) {
+            var { data: tarBatch, error: errTar } = await supabaseClient.from('tarefas').select('*, tarefa_responsaveis(user_id)').in('evento_id', idsEventos).range(start, start + limit - 1);
+            if (tarBatch && tarBatch.length > 0) {
+                todasAsTarefas = todasAsTarefas.concat(tarBatch);
+                start += limit;
+                if (tarBatch.length < limit) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+        }
+        
+        // Fetch sub-tarefas
+        var idsTarefasDiretas = todasAsTarefas.map(function(t) { return t.id; });
+        var subtasks = [];
+        if (idsTarefasDiretas.length > 0) {
+            start = 0; hasMore = true;
+            while(hasMore) {
+                var { data: subBatch } = await supabaseClient.from('tarefas').select('*, tarefa_responsaveis(user_id)').in('tarefa_pai_id', idsTarefasDiretas).range(start, start+limit-1);
+                if (subBatch && subBatch.length > 0) {
+                    subtasks = subtasks.concat(subBatch);
+                    start += limit;
+                    if (subBatch.length < limit) hasMore = false;
+                } else {
+                    hasMore = false;
+                }
+            }
+        }
+        
+        var todasTarefasProjeto = todasAsTarefas.concat(subtasks);
+        var idsTodasTarefas = todasTarefasProjeto.map(function(t) { return t.id; });
+
+        var tarAnexos = [];
+        var tarRespostas = [];
+        var tarComentarios = [];
+        var tarComAnexos = [];
+        
+        if (idsTodasTarefas.length > 0) {
+            var chunk = 200;
+            for(var i=0; i<idsTodasTarefas.length; i+=chunk) {
+                var c = idsTodasTarefas.slice(i, i+chunk);
+                
+                var {data: a1} = await supabaseClient.from('tarefa_anexos').select('*').in('tarefa_id', c);
+                if (a1) tarAnexos = tarAnexos.concat(a1);
+                
+                var {data: r1} = await supabaseClient.from('tarefa_respostas').select('*').in('tarefa_id', c);
+                if (r1) tarRespostas = tarRespostas.concat(r1);
+                
+                var {data: c1} = await supabaseClient.from('tarefa_comentarios').select('*').in('tarefa_id', c);
+                if (c1 && c1.length > 0) {
+                    tarComentarios = tarComentarios.concat(c1);
+                    var cIds = c1.map(function(x){return x.id;});
+                    var {data: ca1} = await supabaseClient.from('tarefa_comentario_anexos').select('*').in('comentario_id', cIds);
+                    if (ca1) {
+                        ca1.forEach(function(x) {
+                            var ref = c1.find(function(y){return y.id === x.comentario_id;});
+                            if (ref) { x.tarefa_id = ref.tarefa_id; tarComAnexos.push(x); }
+                        });
+                    }
+                }
+            }
+        }
+
+        var { data: todosUsuarios } = await supabaseClient.from('profiles').select('id, full_name');
+        if (!todosUsuarios) todosUsuarios = [];
+
+        var zip = new JSZip();
+
+        var safeText = function(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/;/g, ',').replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/"/g, '""');
+        };
+        
+        var evtCols = ['ID', 'Tipo', 'Título', 'Descrição', 'Data Início', 'Data Fim', 'Status', 'Cor', 'Criador', 'Responsável'];
+        var evtCsv = '\uFEFF' + evtCols.join(';') + '\r\n';
+        
+        eventos.forEach(function(ev) {
+            var pCriador = todosUsuarios.find(function(u){return u.id === ev.criado_por;});
+            var pResp = todosUsuarios.find(function(u){return u.id === ev.responsavel_id;});
+            var criador = pCriador ? pCriador.full_name : (ev.criado_por || '');
+            var resp = pResp ? pResp.full_name : (ev.responsavel_id || '');
+            
+            var st = ev.status || 'aberta';
+            if (st !== 'concluida' && ev.data_inicio) {
+                var dFim = ev.data_fim ? new Date(ev.data_fim) : new Date(ev.data_inicio);
+                if (dFim < new Date()) st = 'atrasado';
+            }
+            
+            evtCsv += [
+                ev.id, ev.tipo, safeText(ev.titulo), safeText(ev.descricao), 
+                ev.data_inicio, ev.data_fim || ev.data_inicio, st, ev.cor, 
+                criador, resp
+            ].map(function(v){ return '"' + v + '"'; }).join(';') + '\r\n';
+        });
+        
+        zip.file('Relatorio_Geral_' + tipoEscolhido + '.csv', evtCsv);
+
+        for (var i=0; i<eventos.length; i++) {
+            var ev = eventos[i];
+            var folderName = (ev.tipo.toUpperCase() + ' - ' + (ev.titulo || 'Sem_Titulo')).replace(/[^a-zA-Z0-9_\- ]/g, '_').substring(0, 50);
+            var folder = zip.folder(folderName);
+            
+            var evAnexs = eventoAnexos.filter(function(a){return a.evento_id === ev.id;});
+            for(var k=0; k<evAnexs.length; k++) {
+                if (evAnexs[k].url) {
+                    if (Swal.isVisible()) Swal.update({title: 'Baixando anexo do ' + ev.tipo + '...', text: evAnexs[k].nome_arquivo});
+                    try {
+                        var res = await fetch(evAnexs[k].url);
+                        var blob = await res.blob();
+                        folder.file('Anexo_Evento_' + (k+1) + '_' + evAnexs[k].nome_arquivo.replace(/[^a-zA-Z0-9_.-]/g, '_'), blob);
+                    } catch(e){}
+                }
+            }
+            
+            var tarsEvento = todasTarefasProjeto.filter(function(t) {
+                return t.evento_id === ev.id || (t.tarefa_pai_id && todasAsTarefas.some(function(pai){return pai.id === t.tarefa_pai_id && pai.evento_id === ev.id;}));
+            });
+            
+            if (tarsEvento.length > 0) {
+                var tarCols = ['ID Tarefa', 'ID Tarefa Pai', 'Título', 'Descrição', 'Status', 'Data de Criação', 'Prazo', 'Prioridade', 'Data Conclusão', 'Criador', 'Responsáveis', 'Respostas', 'Comentários', 'Anexos (Qtd)'];
+                var tarCsv = '\uFEFF' + tarCols.join(';') + '\r\n';
+                
+                var ordernarPorHierarquia = function(lista) {
+                    var ordenado = [];
+                    var raizes = lista.filter(function(t){return !t.tarefa_pai_id || !lista.some(function(p){return p.id === t.tarefa_pai_id;});});
+                    raizes.sort(function(a,b){return a.id - b.id;});
+                    raizes.forEach(function(raiz) {
+                        ordenado.push(raiz);
+                        var filhas = lista.filter(function(c){return c.tarefa_pai_id === raiz.id;});
+                        filhas.sort(function(a,b){return a.id - b.id;});
+                        ordenado = ordenado.concat(filhas);
+                    });
+                    return ordenado;
+                };
+                
+                var ordenadas = ordernarPorHierarquia(tarsEvento);
+                
+                ordenadas.forEach(function(t) {
+                    var nomesResponsaveis = '';
+                    if (t.tarefa_responsaveis) {
+                        nomesResponsaveis = t.tarefa_responsaveis.map(function(tr){
+                            var u = todosUsuarios.find(function(usr){return usr.id === tr.user_id;});
+                            return u ? u.full_name : '';
+                        }).filter(function(n){return n;}).join(', ');
+                    }
+                    var pCriadorTar = todosUsuarios.find(function(u){return u.id === t.criado_por;});
+                    var cNome = pCriadorTar ? pCriadorTar.full_name : t.criado_por;
+                    
+                    var rTxt = tarRespostas.filter(function(r){return r.tarefa_id===t.id;}).map(function(r){return '['+r.user_name+']: '+(r.texto||'');}).join(' | ');
+                    var cTxt = tarComentarios.filter(function(c){return c.tarefa_id===t.id;}).map(function(c){return '['+c.user_name+']: '+(c.texto||'');}).join(' | ');
+                    
+                    var qAnexos = tarAnexos.filter(function(a){return a.tarefa_id===t.id;}).length + tarComAnexos.filter(function(a){return a.tarefa_id===t.id;}).length;
+                    
+                    var st = t.status || 'aberta';
+                    if (st !== 'concluida' && t.prazo_conclusao) {
+                        var parts = t.prazo_conclusao.split('-');
+                        var pDt = new Date(parts[0], parts[1]-1, parts[2]); 
+                        pDt.setHours(23,59,59);
+                        var dtHj = new Date();
+                        if (pDt < dtHj) st = 'atrasada';
+                    }
+
+                    tarCsv += [
+                        t.id, t.tarefa_pai_id||'', safeText(t.titulo), safeText(t.descricao),
+                        st, t.created_at, t.prazo_conclusao, t.prioridade, t.data_conclusao,
+                        safeText(cNome), safeText(nomesResponsaveis), safeText(rTxt), safeText(cTxt), qAnexos
+                    ].map(function(v){ return '"' + v + '"'; }).join(';') + '\r\n';
+                });
+                folder.file('Tarefas_Atribuidas.csv', tarCsv);
+                
+                for(var j=0; j<ordenadas.length; j++){
+                    var t = ordenadas[j];
+                    var tNome = (t.titulo || 'tarefa').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0,30);
+                    
+                    var an1 = tarAnexos.filter(function(a){return a.tarefa_id===t.id;});
+                    for(var k=0;k<an1.length;k++){
+                        if(an1[k].url){
+                            if(Swal.isVisible()) Swal.update({title: 'Baixando anexo de tarefa...', text: an1[k].nome_arquivo});
+                            try {
+                                var res = await fetch(an1[k].url);
+                                var b = await res.blob();
+                                folder.file('Tarefa_' + t.id + '-anexo' + (k+1) + '-' + an1[k].nome_arquivo.replace(/[^a-zA-Z0-9_.-]/g,'_'), b);
+                            } catch(e){}
+                        }
+                    }
+                    
+                    var an2 = tarComAnexos.filter(function(a){return a.tarefa_id===t.id;});
+                    for(var k=0;k<an2.length;k++){
+                        if(an2[k].url){
+                            if(Swal.isVisible()) Swal.update({title: 'Baixando anexo de comentário...', text: an2[k].nome_arquivo});
+                            try {
+                                var res = await fetch(an2[k].url);
+                                var b = await res.blob();
+                                folder.file('Tarefa_' + t.id + '-comentario-anexo' + (k+1) + '-' + an2[k].nome_arquivo.replace(/[^a-zA-Z0-9_.-]/g,'_'), b);
+                            } catch(e){}
+                        }
+                    }
+                }
+            }
+        }
+
+        if (Swal.isVisible()) Swal.update({title: 'Gerando arquivo ZIP...', text: 'Aguarde...'});
+        var content = await zip.generateAsync({type: 'blob'});
+
+        var reader = new FileReader();
+        var base64Data = await new Promise(function(resolve) {
+            reader.onloadend = function() { resolve(reader.result); };
+            reader.readAsDataURL(content);
+        });
+
+        var urlDownload = URL.createObjectURL(content);
+        var aDL = document.createElement('a');
+        aDL.href = urlDownload;
+        aDL.download = 'Backup_' + tipoEscolhido.toUpperCase() + '_' + anoEscolhido + '.zip';
+        document.body.appendChild(aDL);
+        aDL.click();
+        document.body.removeChild(aDL);
+        URL.revokeObjectURL(urlDownload);
+
+        // Upload and Email
+        let emailDestino = null;
+        try {
+            const user = window.userIdGlobal ? { id: window.userIdGlobal } : (await getAuthUser()).data.user;
+            const { data: perfil } = await supabaseClient.from('profiles').select('email_real, email_verificado').eq('id', user.id).maybeSingle();
+            emailDestino = perfil?.email_real;
+            let verificado = perfil?.email_verificado || false;
+
+            while (true) {
+                while (!emailDestino || !validarEmailFmt(emailDestino)) {
+                    emailDestino = await registrarEmailNoAto(user.id);
+                    if (!emailDestino) {
+                        const { isConfirmed } = await Swal.fire({
+                            title: 'E-mail Obrigatório',
+                            text: 'O envio por e-mail é obrigatório para concluir o backup.',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Informar E-mail',
+                            cancelButtonText: 'Cancelar'
+                        });
+                        if (!isConfirmed) return;
+                    }
+                    verificado = false;
+                }
+                if (!verificado) {
+                    const sucessoV = await realizarVerificacaoOTP(user.id, emailDestino);
+                    if (!sucessoV) { emailDestino = null; continue; }
+                }
+                break;
+            }
+        } catch(err) { console.error("Erro email", err); }
+
+        if (emailDestino) {
+            Swal.fire({title: 'Enviando E-mail...', allowOutsideClick: false, showConfirmButton: false});
+            Swal.showLoading();
+            const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwc-q6uBW3DigEvoQWOImXIlgPsBizoUwquUmaU2RXyHbjSVEvx4fLtAyBzIqNuveQR/exec";
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST', mode: 'no-cors', cache: 'no-cache',
+                    body: JSON.stringify({
+                        to: emailDestino,
+                        subject: 'Backup ' + tipoEscolhido.toUpperCase() + ' SEMAC - ' + anoEscolhido,
+                        body: 'Olá,\n\nSegue o backup contendo ' + tipoEscolhido.toUpperCase() + ' e todas as tarefas e anexos referentes a eles.\n\nArquivo ZIP anexo.',
+                        fileName: 'Backup_' + tipoEscolhido + '_' + anoEscolhido + '.zip',
+                        attachmentBase64: base64Data
+                    })
+                });
+                await Swal.fire('Enviado!', 'Enviado para ' + emailDestino + ' com sucesso.', 'success');
+            } catch(err) {}
+        }
+
+        var msgDel = tipoEscolhido === 'ambos' ? 'Eventos e Projetos' : (tipoEscolhido === 'evento' ? 'Eventos' : 'Projetos');
+        var resDel = await Swal.fire({
+            title: 'Excluir ' + msgDel + ' de ' + anoEscolhido + '?',
+            text: 'ATENÇÃO: Isso excluirá todos os registros baixados do banco de dados, BEM COMO TODAS as tarefas que pertencem a eles!',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, Limpar Banco',
+            cancelButtonText: 'Manter Dados',
+            confirmButtonColor: '#dc2626'
+        });
+
+        if (resDel.isConfirmed) {
+            Swal.fire({title: 'Excluindo dados...', allowOutsideClick: false, showConfirmButton: false});
+            Swal.showLoading();
+
+            try {
+                if (idsTodasTarefas.length > 0) {
+                    for(var i=0; i<idsTodasTarefas.length; i+=200) {
+                        var c = idsTodasTarefas.slice(i, i+200);
+                        await supabaseClient.from('tarefas').delete().in('id', c);
+                    }
+                }
+
+                for(var i=0; i<idsEventos.length; i+=200) {
+                    var c = idsEventos.slice(i, i+200);
+                    await supabaseClient.from('eventos').delete().in('id', c);
+                }
+
+                Swal.fire('Sucesso', 'Banco de dados limpo.', 'success');
+                if (typeof carregarEventos === 'function') carregarEventos();
+                if (typeof carregarCalendarioProjetosSecretario === 'function') carregarCalendarioProjetosSecretario();
+            } catch(e) {
+                Swal.fire('Erro', 'Não foi possível limpar o banco. ' + e.message, 'error');
+            }
+        }
+
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Erro', 'Falha ao realizar backup: ' + (err.message || 'Erro desconhecido'), 'error');
+    }
+};

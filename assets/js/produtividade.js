@@ -3097,6 +3097,25 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     if (selectBairro) selectBairro.value = '';
     const selectAno = document.getElementById('busca-ano-geral');
     if (selectAno) selectAno.value = '';
+
+    // Limpar filtros específicos de AI
+    const notificacaoVal = document.getElementById('busca-notificacao-ai');
+    const loteVal = document.getElementById('busca-lote-ai');
+    const zonaVal = document.getElementById('busca-zona-ai');
+    const quadraVal = document.getElementById('busca-quadra-ai');
+    const enderecoVal = document.getElementById('busca-endereco-ai');
+    if (notificacaoVal) notificacaoVal.value = '';
+    if (loteVal) loteVal.value = '';
+    if (zonaVal) zonaVal.value = '';
+    if (quadraVal) quadraVal.value = '';
+    if (enderecoVal) enderecoVal.value = '';
+
+    // Exibir/Ocultar painel de filtros extras de AI
+    const painelAI = document.getElementById('filtros-extras-ai');
+    if (painelAI) {
+        painelAI.style.display = (categoriaId === '1.2') ? 'block' : 'none';
+    }
+
     atualizarIndicadorFiltro();
     carregarHistoricoGeral(categoriaId);
     atualizarVisibilidadeBotoesVencidosAtendidos();
@@ -3155,6 +3174,31 @@ async function carregarHistoricoGeral(categoriaId) {
     if (anoSelecionado) {
         query = query.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
             .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
+    }
+
+    // Filtros específicos para Auto de Infração (categoria 1.2)
+    if (categoriaId === '1.2') {
+        const notificacaoVal = (document.getElementById('busca-notificacao-ai')?.value || '').trim();
+        const loteVal = (document.getElementById('busca-lote-ai')?.value || '').trim();
+        const zonaVal = (document.getElementById('busca-zona-ai')?.value || '').trim();
+        const quadraVal = (document.getElementById('busca-quadra-ai')?.value || '').trim();
+        const enderecoVal = (document.getElementById('busca-endereco-ai')?.value || '').trim();
+
+        if (notificacaoVal) {
+            query = query.ilike('campos->>n_notificacao', `%${notificacaoVal}%`);
+        }
+        if (loteVal) {
+            query = query.ilike('campos->>inscricao_lote', `%${loteVal}%`);
+        }
+        if (zonaVal) {
+            query = query.ilike('campos->>inscricao_zona', `%${zonaVal}%`);
+        }
+        if (quadraVal) {
+            query = query.ilike('campos->>inscricao_quadra', `%${quadraVal}%`);
+        }
+        if (enderecoVal) {
+            query = query.ilike('campos->>endereco_imovel', `%${enderecoVal}%`);
+        }
     }
 
     // Busca Livre em múltiplos campos JSON + número sequencial nativo
@@ -3235,6 +3279,29 @@ async function carregarHistoricoGeral(categoriaId) {
             queryNP = queryNP.gte('created_at', `${anoSelecionado}-01-01T00:00:00`)
                 .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
         }
+
+        const notificacaoVal = (document.getElementById('busca-notificacao-ai')?.value || '').trim();
+        const loteVal = (document.getElementById('busca-lote-ai')?.value || '').trim();
+        const zonaVal = (document.getElementById('busca-zona-ai')?.value || '').trim();
+        const quadraVal = (document.getElementById('busca-quadra-ai')?.value || '').trim();
+        const enderecoVal = (document.getElementById('busca-endereco-ai')?.value || '').trim();
+
+        if (notificacaoVal) {
+            queryNP = queryNP.ilike('campos->>n_notificacao', `%${notificacaoVal}%`);
+        }
+        if (loteVal) {
+            queryNP = queryNP.ilike('campos->>inscricao_lote', `%${loteVal}%`);
+        }
+        if (zonaVal) {
+            queryNP = queryNP.ilike('campos->>inscricao_zona', `%${zonaVal}%`);
+        }
+        if (quadraVal) {
+            queryNP = queryNP.ilike('campos->>inscricao_quadra', `%${quadraVal}%`);
+        }
+        if (enderecoVal) {
+            queryNP = queryNP.ilike('campos->>endereco_imovel', `%${enderecoVal}%`);
+        }
+
         if (termo) {
             const camposBusca = ['n_notificacao', 'n_auto', 'n_ar', 'n_oficio', 'n_relatorio', 'n_protocolo', 'n_replica', 'n_certidao', 'nome', 'bairro', 'n_inscricao'];
             const orConditions = camposBusca.map(f => `campos->>${f}.ilike.%${termo}%`);
@@ -3358,8 +3425,22 @@ document.addEventListener('click', function (e) {
 function limparFiltrosHistorico() {
     const inputFiscal = document.getElementById('busca-fiscal-geral');
     const selectBairro = document.getElementById('filtro-bairro-historico');
+    const selectAno = document.getElementById('busca-ano-geral');
+    const notificacaoVal = document.getElementById('busca-notificacao-ai');
+    const loteVal = document.getElementById('busca-lote-ai');
+    const zonaVal = document.getElementById('busca-zona-ai');
+    const quadraVal = document.getElementById('busca-quadra-ai');
+    const enderecoVal = document.getElementById('busca-endereco-ai');
+
     if (inputFiscal) inputFiscal.value = '';
     if (selectBairro) selectBairro.value = '';
+    if (selectAno) selectAno.value = '';
+    if (notificacaoVal) notificacaoVal.value = '';
+    if (loteVal) loteVal.value = '';
+    if (zonaVal) zonaVal.value = '';
+    if (quadraVal) quadraVal.value = '';
+    if (enderecoVal) enderecoVal.value = '';
+
     filtrarHistoricoGeral();
     atualizarIndicadorFiltro();
 }
@@ -3370,7 +3451,22 @@ function atualizarIndicadorFiltro() {
     if (!btn) return;
     const inputFiscal = document.getElementById('busca-fiscal-geral');
     const selectBairro = document.getElementById('filtro-bairro-historico');
-    const temFiltro = (inputFiscal && inputFiscal.value.trim()) || (selectBairro && selectBairro.value);
+    const selectAno = document.getElementById('busca-ano-geral');
+    const notificacaoVal = document.getElementById('busca-notificacao-ai');
+    const loteVal = document.getElementById('busca-lote-ai');
+    const zonaVal = document.getElementById('busca-zona-ai');
+    const quadraVal = document.getElementById('busca-quadra-ai');
+    const enderecoVal = document.getElementById('busca-endereco-ai');
+
+    const temFiltro = (inputFiscal && inputFiscal.value.trim()) ||
+                      (selectBairro && selectBairro.value) ||
+                      (selectAno && selectAno.value) ||
+                      (notificacaoVal && notificacaoVal.value.trim()) ||
+                      (loteVal && loteVal.value.trim()) ||
+                      (zonaVal && zonaVal.value.trim()) ||
+                      (quadraVal && quadraVal.value.trim()) ||
+                      (enderecoVal && enderecoVal.value.trim());
+
     btn.innerHTML = temFiltro
         ? 'Filtro <span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;"></span>'
         : 'Filtro';
