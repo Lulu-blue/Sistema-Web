@@ -2181,7 +2181,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
                 if (sub.prazo_solicitado_nome) h += ' por ' + escapeHtmlTarefa(sub.prazo_solicitado_nome);
                 h += '</div>';
                 if (sub.prazo_solicitado_motivo) h += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(sub.prazo_solicitado_motivo) + '</div>';
-                var podeAprovarSub = (sub.criado_por === userIdGlobal) || ehDir || ehSec || ehGer;
+                var podeAprovarSub = ((sub.criado_por === userIdGlobal) || ehDir || ehSec || ehGer || ehRespSub) && (sub.prazo_solicitado_por !== userIdGlobal);
                 if (podeAprovarSub) {
                     h += '<div style="display:flex; gap:8px; margin-top:8px;">';
                     h += '<button onclick="aprovarExtensaoPrazo(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="background:#10b981; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✓ Aprovar</button>';
@@ -2192,8 +2192,8 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
             }
             h += '</div>'; // card prazo
         }
-        // Botão solicitar extensão — sempre visível para responsável (não-criador), tarefa não concluída
-        if (ehRespSub && sub.criado_por !== userIdGlobal && !sub.prazo_solicitado && !subJaConcluida) {
+        // Botão solicitar extensão — sempre visível para criador ou responsável, tarefa não concluída
+        if ((ehRespSub || sub.criado_por === userIdGlobal) && !sub.prazo_solicitado && !subJaConcluida) {
             h += '<button onclick="solicitarExtensaoPrazo(\'' + subId + '\', \'' + tarefaPaiId + '\', true)" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:5px; width:fit-content;">📅 Solicitar extensão de prazo</button>';
         }
 
@@ -2377,26 +2377,28 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         var { error } = await supabaseClient.from('tarefas').update(payload).eq('id', tarefaId);
         if (error) throw error;
 
-        // Determinar quem notificar
+        // Determinar quem notificar (criador, outros responsáveis da tarefa atual e responsáveis da tarefa pai)
         var notificarIds = [];
         var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, titulo').eq('id', tarefaId).maybeSingle();
 
-        if (ehSubtarefa && tarefaPaiId) {
-            // Notificar: criador da subtarefa + responsáveis da tarefa pai
-            if (tarefa && tarefa.criado_por && tarefa.criado_por !== userIdGlobal) {
-                notificarIds.push(tarefa.criado_por);
+        if (tarefa && tarefa.criado_por && tarefa.criado_por !== userIdGlobal) {
+            notificarIds.push(tarefa.criado_por);
+        }
+
+        var { data: respsAtuais } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        (respsAtuais || []).forEach(function(r) {
+            if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
+                notificarIds.push(r.user_id);
             }
+        });
+
+        if (ehSubtarefa && tarefaPaiId) {
             var { data: respPai } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaPaiId);
             (respPai || []).forEach(function(r) {
                 if (r.user_id !== userIdGlobal && notificarIds.indexOf(r.user_id) === -1) {
                     notificarIds.push(r.user_id);
                 }
             });
-        } else {
-            // Notificar: criador da tarefa
-            if (tarefa && tarefa.criado_por && tarefa.criado_por !== userIdGlobal) {
-                notificarIds.push(tarefa.criado_por);
-            }
         }
 
         // Formatar data solicitada para exibição
@@ -2415,9 +2417,19 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         }
         if (notificarIds.length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
 
-        Swal.fire({ icon: 'success', title: 'Solicitação enviada!', text: 'O responsável será notificado para aprovar ou recusar.', timer: 2000, showConfirmButton: false });
+        // Registrar solicitação nos comentários para histórico
+        var tId = ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId;
+        await supabaseClient.from('tarefa_comentarios').insert({
+            tarefa_id: tId,
+            user_id: userIdGlobal,
+            user_name: 'Sistema',
+            texto: '⏳ Solicitação de alteração de prazo da ' + (ehSubtarefa ? 'subtarefa "' + tituloTarefa + '"' : 'tarefa') + ' para ' + dataExibicao + ' enviada por ' + nomeSolicitante + '.' + (novaData.motivo ? ' Motivo: ' + novaData.motivo : '')
+        });
 
-        // Recarregar o modal
+        Swal.fire({ icon: 'success', title: 'Solicitação enviada!', text: 'Os responsáveis foram notificados para aprovar ou recusar.', timer: 2000, showConfirmButton: false });
+
+        // Recarregar o modal e atualizar a tela
+        await carregarTarefas();
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
             setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
@@ -2436,7 +2448,7 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
  */
 async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
     try {
-        var { data: tarefa } = await supabaseClient.from('tarefas').select('prazo, prazo_anterior, prazo_solicitado, prazo_solicitado_nome, titulo').eq('id', tarefaId).maybeSingle();
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('prazo, prazo_anterior, prazo_solicitado, prazo_solicitado_nome, prazo_solicitado_por, titulo').eq('id', tarefaId).maybeSingle();
         if (!tarefa || !tarefa.prazo_solicitado) return;
 
         var arrayAntigos = [];
@@ -2473,26 +2485,42 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         }).eq('id', tarefaId);
         if (error) throw error;
 
-        // Notificar o solicitante
-        var { data: tarefaAtualizada } = await supabaseClient.from('tarefas').select('criado_por').eq('id', tarefaId).maybeSingle();
-        var { data: solicitante } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
-        // Buscar quem havia solicitado (salvo antes da limpeza)
-        // Notificamos todos os responsáveis da tarefa
-        var notifIds = (solicitante || []).map(function(r) { return r.user_id; });
-        for (var i = 0; i < notifIds.length; i++) {
-            if (notifIds[i] !== userIdGlobal) {
-                await supabaseClient.from('notificacoes').insert({
-                    user_id: notifIds[i],
-                    tipo: 'prazo_aprovado',
-                    titulo: 'Extensão de prazo aprovada',
-                    mensagem: 'Seu prazo para "' + (tarefa.titulo || 'tarefa') + '" foi estendido para ' + dataExibicao + '.',
-                    tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
-                });
+        // Notificar o solicitante e demais envolvidos
+        var notifIds = [];
+        if (tarefa.prazo_solicitado_por && tarefa.prazo_solicitado_por !== userIdGlobal) {
+            notifIds.push(tarefa.prazo_solicitado_por);
+        }
+        var { data: resps } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        (resps || []).forEach(function(r) {
+            if (r.user_id !== userIdGlobal && notifIds.indexOf(r.user_id) === -1) {
+                notifIds.push(r.user_id);
             }
+        });
+
+        for (var i = 0; i < notifIds.length; i++) {
+            await supabaseClient.from('notificacoes').insert({
+                user_id: notifIds[i],
+                tipo: 'prazo_aprovado',
+                titulo: 'Extensão de prazo aprovada',
+                mensagem: 'Prazo para "' + (tarefa.titulo || 'tarefa') + '" foi estendido para ' + dataExibicao + '.',
+                tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
+            });
         }
         if (notifIds.length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
 
+        // Registrar alteração nos comentários
+        var { data: perfilAprovador } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeAprovador = perfilAprovador ? perfilAprovador.full_name : 'Usuário';
+        var tId = ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId;
+        await supabaseClient.from('tarefa_comentarios').insert({
+            tarefa_id: tId,
+            user_id: userIdGlobal,
+            user_name: 'Sistema',
+            texto: '📅 Alteração de prazo da ' + (ehSubtarefa ? 'subtarefa "' + (tarefa.titulo || '') + '"' : 'tarefa') + ' aprovada. Novo prazo: ' + dataExibicao + ' (aprovado por ' + nomeAprovador + ').'
+        });
+
         Swal.fire({ icon: 'success', title: 'Prazo aprovado!', timer: 1500, showConfirmButton: false });
+        await carregarTarefas();
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
             setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
@@ -2521,7 +2549,7 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
     if (!isConfirmed) return;
 
     try {
-        var { data: tarefa } = await supabaseClient.from('tarefas').select('titulo').eq('id', tarefaId).maybeSingle();
+        var { data: tarefa } = await supabaseClient.from('tarefas').select('titulo, prazo_solicitado, prazo_solicitado_por').eq('id', tarefaId).maybeSingle();
         var { error } = await supabaseClient.from('tarefas').update({
             prazo_solicitado: null,
             prazo_solicitado_por: null,
@@ -2530,22 +2558,42 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         }).eq('id', tarefaId);
         if (error) throw error;
 
-        // Notificar responsáveis da tarefa sobre a recusa
-        var { data: resps } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
-        for (var i = 0; i < (resps || []).length; i++) {
-            if (resps[i].user_id !== userIdGlobal) {
-                await supabaseClient.from('notificacoes').insert({
-                    user_id: resps[i].user_id,
-                    tipo: 'prazo_recusado',
-                    titulo: 'Extensão de prazo recusada',
-                    mensagem: 'Sua solicitação de extensão de prazo para "' + (tarefa ? tarefa.titulo : 'tarefa') + '" foi recusada.',
-                    tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
-                });
-            }
+        // Notificar o solicitante e os demais envolvidos
+        var notifIds = [];
+        if (tarefa && tarefa.prazo_solicitado_por && tarefa.prazo_solicitado_por !== userIdGlobal) {
+            notifIds.push(tarefa.prazo_solicitado_por);
         }
-        if ((resps || []).length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
+        var { data: resps } = await supabaseClient.from('tarefa_responsaveis').select('user_id').eq('tarefa_id', tarefaId);
+        (resps || []).forEach(function(r) {
+            if (r.user_id !== userIdGlobal && notifIds.indexOf(r.user_id) === -1) {
+                notifIds.push(r.user_id);
+            }
+        });
+
+        for (var i = 0; i < notifIds.length; i++) {
+            await supabaseClient.from('notificacoes').insert({
+                user_id: notifIds[i],
+                tipo: 'prazo_recusado',
+                titulo: 'Extensão de prazo recusada',
+                mensagem: 'Sua solicitação de extensão de prazo para "' + (tarefa ? tarefa.titulo : 'tarefa') + '" foi recusada.',
+                tarefa_id: ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId
+            });
+        }
+        if (notifIds.length > 0) window.dispatchEvent(new CustomEvent('novaNotificacao'));
+
+        // Registrar recusa nos comentários
+        var { data: perfilRecusador } = await supabaseClient.from('profiles').select('full_name').eq('id', userIdGlobal).maybeSingle();
+        var nomeRecusador = perfilRecusador ? perfilRecusador.full_name : 'Usuário';
+        var tId = ehSubtarefa ? (tarefaPaiId || tarefaId) : tarefaId;
+        await supabaseClient.from('tarefa_comentarios').insert({
+            tarefa_id: tId,
+            user_id: userIdGlobal,
+            user_name: 'Sistema',
+            texto: '❌ Solicitação de alteração de prazo da ' + (ehSubtarefa ? 'subtarefa "' + (tarefa ? tarefa.titulo : '') + '"' : 'tarefa') + ' para ' + (tarefa && tarefa.prazo_solicitado ? new Date(tarefa.prazo_solicitado + 'T12:00:00').toLocaleDateString('pt-BR') : '') + ' foi recusada por ' + nomeRecusador + '.'
+        });
 
         Swal.fire({ icon: 'info', title: 'Solicitação recusada.', timer: 1500, showConfirmButton: false });
+        await carregarTarefas();
         if (ehSubtarefa && tarefaPaiId) {
             fecharModal('modal-detalhe-subtarefa');
             setTimeout(function() { abrirDetalheSubtarefa(tarefaId, tarefaPaiId); }, 150);
@@ -2557,10 +2605,6 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         Swal.fire('Erro', 'Não foi possível recusar: ' + err.message, 'error');
     }
 }
-
-window.solicitarExtensaoPrazo = solicitarExtensaoPrazo;
-window.aprovarExtensaoPrazo = aprovarExtensaoPrazo;
-window.negarExtensaoPrazo = negarExtensaoPrazo;
 
 async function salvarRespostaTarefa(tarefaId) {
     var area = document.getElementById('nova-resposta-tarefa-' + tarefaId);
@@ -2975,7 +3019,7 @@ async function abrirDetalheTarefa(id) {
                 html += '</div>';
                 if (tarefa.prazo_solicitado_motivo) html += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(tarefa.prazo_solicitado_motivo) + '</div>';
                 // Botões aprovar/negar — visíveis para quem pode (criador da tarefa ou gerente/diretor/secretário)
-                var podeAprovar = (tarefa.criado_por === userIdGlobal) || ehDiretor || ehSecretario || ehGerente;
+                var podeAprovar = ((tarefa.criado_por === userIdGlobal) || ehDiretor || ehSecretario || ehGerente || ehResponsavel) && (tarefa.prazo_solicitado_por !== userIdGlobal);
                 if (podeAprovar) {
                     html += '<div style="display:flex; gap:8px; margin-top:8px;">';
                     html += '<button onclick="aprovarExtensaoPrazo(\'' + id + '\', null, false)" style="background:#10b981; color:white; border:none; border-radius:6px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer;">✓ Aprovar</button>';
@@ -2986,8 +3030,8 @@ async function abrirDetalheTarefa(id) {
             }
             html += '</div>'; // card prazo
         }
-        // Botão solicitar extensão — sempre visível para o responsável (não-criador), inclusive se atrasada ou sem prazo
-        if (ehResponsavel && tarefa.criado_por !== userIdGlobal && !tarefa.prazo_solicitado && tarefa.status !== 'concluida') {
+        // Botão solicitar extensão — sempre visível para criador ou responsável, inclusive se atrasada ou sem prazo
+        if ((ehResponsavel || tarefa.criado_por === userIdGlobal) && !tarefa.prazo_solicitado && tarefa.status !== 'concluida') {
             html += '<button onclick="solicitarExtensaoPrazo(\'' + id + '\', null, false)" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:5px; width:fit-content;">📅 Solicitar extensão de prazo</button>';
         }
 
