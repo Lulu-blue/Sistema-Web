@@ -3150,6 +3150,9 @@ async function carregarHistoricoGeral(categoriaId) {
 
     container.innerHTML = '<div class="historico-vazio">Carregando...</div>';
 
+    // Recarregar os bairros do sistema para garantir que os filtros estejam atualizados com os bairros ativos
+    await carregarBairrosSistema();
+
     // 1. Coleta filtros da UI
     const termo = (document.getElementById('busca-historico-geral')?.value || '').toLowerCase().trim();
     const termoFiscal = (document.getElementById('busca-fiscal-geral')?.value || '').toLowerCase().trim();
@@ -3350,17 +3353,13 @@ function popularFiltroBairros(registros) {
     // Limpar opções
     datalist.innerHTML = '';
 
-    // Extrair os bairros que existem dentro do campo JSON "campos"
-    const bairros = new Set();
-    registros.forEach(reg => {
-        if (reg.campos && reg.campos.bairro) {
-            const b = reg.campos.bairro.trim();
-            if (b) bairros.add(b);
-        }
-    });
+    // Utilizar os bairros ativos cadastrados no sistema se estiverem disponíveis
+    const fonteBairros = (bairrosSistema && bairrosSistema.length > 0)
+        ? bairrosSistema
+        : Array.from(new Set(registros.map(reg => reg.campos?.bairro?.trim()).filter(Boolean)));
 
     // Ordenar alfabeticamente e criar as tags <option>
-    Array.from(bairros).sort().forEach(bairro => {
+    Array.from(fonteBairros).sort().forEach(bairro => {
         const option = document.createElement('option');
         option.value = bairro;
         datalist.appendChild(option);

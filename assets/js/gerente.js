@@ -32,20 +32,26 @@ function isSecretario(role) {
 
 function podeEditarDenuncia(reg) {
     var role = window.userRoleGlobal || '';
-    // Gerente, Diretor e Secretário podem editar/excluir tudo
+    // Gerente, Diretor e Secretário podem editar tudo
     if (isGerenteOuSuperior(role)) return true;
-    // Administrativo de Posturas e Demais usuários podem editar/excluir o que criaram sem limite de tempo
+    // Administrativo de Posturas pode editar tudo (mas não excluir, tratado em podeExcluirDenuncia)
+    if (isAdminPosturas(role)) return true;
+    // Demais usuários podem editar o que criaram sem limite de tempo
+    return reg && reg.created_by === (window.userIdGlobal || '');
+}
+
+function podeExcluirDenuncia(reg) {
+    var role = window.userRoleGlobal || '';
+    // Gerente, Diretor e Secretário podem excluir tudo
+    if (isGerenteOuSuperior(role)) return true;
+    // Administrativo de Posturas e Demais usuários podem excluir apenas o que criaram sem limite de tempo
     return reg && reg.created_by === (window.userIdGlobal || '');
 }
 
 function podeEditarDenunciaConcluido(reg) {
     var role = window.userRoleGlobal || '';
-    // Gerente+ já tem permissão total via podeEditarDenuncia; esta função é para casos especiais
-    if (isGerenteOuSuperior(role)) return false;
-    // Administrativo de Posturas pode alterar apenas o campo Concluído de QUALQUER registro que ele não tenha criado
-    if (isAdminPosturas()) {
-        return true;
-    }
+    // Gerente+ e Administrativo de Posturas já podem editar completamente, então não precisam do modo limitado
+    if (isGerenteOuSuperior(role) || isAdminPosturas(role)) return false;
     return false;
 }
 
@@ -656,18 +662,20 @@ function calcularPesoBairros(contagemNP, contagemAI, contagemDenuncias, filtro) 
             todosBairros[b] = vDen;
         }
     });
-    var arr = Object.keys(todosBairros).map(function (k) {
-        // Tentar usar o nome cadastrado no bairro para exibição
-        var nomeExibicao = k;
+    var arr = [];
+    Object.keys(todosBairros).forEach(function (k) {
         if (globalBairros && globalBairros.length > 0) {
             var bairroCadastrado = globalBairros.find(function (b) {
                 return normalizarNomeBairro(b.nome) === k;
             });
+            // Apenas incluir se o bairro cadastrado existir na tabela oficial do banco de dados
             if (bairroCadastrado) {
-                nomeExibicao = bairroCadastrado.nome;
+                arr.push({ bairro: bairroCadastrado.nome, qtde: todosBairros[k] });
             }
+        } else {
+            // Fallback temporário caso a lista global de bairros ainda não esteja carregada
+            arr.push({ bairro: k, qtde: todosBairros[k] });
         }
-        return { bairro: nomeExibicao, qtde: todosBairros[k] };
     });
     arr.sort(function (a, b) { return b.qtde - a.qtde; });
     return arr;
@@ -928,6 +936,17 @@ async function carregarGraficoBairros(tentativa) {
 
     try {
         var hoje = new Date();
+
+        // Garantir que a lista de bairros cadastrados está populada
+        if (!globalBairros || globalBairros.length === 0) {
+            var { data: bairrosData } = await supabaseClient
+                .from('bairros')
+                .select('*')
+                .order('nome', { ascending: true });
+            if (bairrosData) {
+                globalBairros = bairrosData;
+            }
+        }
 
         // Buscar NP + AI sem limite de 1000
         var { data: registrosCP, error } = await buscarTodosRegistrosPaginados('controle_processual', 'categoria_id, campos', 'categoria_id', ['1.1', '1.2']);
@@ -1303,13 +1322,16 @@ function renderizarTabelaDenuncias(registros, tipo) {
             var val = '-';
             if (c.tipo === 'acoes') {
                 var podeEditar = podeEditarDenuncia(reg);
+                var podeExcluir = podeExcluirDenuncia(reg);
                 var podeConcluir = podeEditarDenunciaConcluido(reg);
                 var criadorNome = reg.criador_nome ? reg.criador_nome.split(' ')[0] : 'Desconhecido';
                 
                 var acoesHtml = '<div style="display:flex; flex-direction:column; gap:4px;"><div>';
                 if (podeEditar) {
                     acoesHtml += '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
-                    acoesHtml += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
+                    if (podeExcluir) {
+                        acoesHtml += '<button onclick="excluirDenuncia(\'' + reg.id + '\')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Excluir</button>';
+                    }
                 } else if (podeConcluir) {
                     acoesHtml += '<button onclick="editarDenunciaConcluido(\'' + reg.id + '\')" style="background:#10b981; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer;">Concluir</button>';
                 } else if (isAdminPostura) {
@@ -1924,7 +1946,7 @@ async function excluirDenuncia(id) {
         var { data, error } = await supabaseClient.from('controle_denuncias').select('*').eq('id', id).single();
         if (!error && data) reg = data;
     }
-    if (!podeEditarDenuncia(reg)) {
+    if (!podeExcluirDenuncia(reg)) {
         Swal.fire({ icon: 'warning', title: 'Ação não permitida', text: 'Você não tem permissão para excluir este registro.', confirmButtonColor: '#0f172a' });
         return;
     }

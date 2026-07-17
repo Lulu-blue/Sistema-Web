@@ -1097,7 +1097,7 @@ ON controle_denuncias FOR INSERT
 TO authenticated
 WITH CHECK (true);
 
--- UPDATE: apenas o criador ou cargos gerenciais (Gerente, Diretor, Secretário)
+-- UPDATE: apenas o criador, cargos gerenciais ou Administrativo de Posturas
 CREATE POLICY "controle_denuncias_update_gerencia"
 ON controle_denuncias FOR UPDATE
 TO authenticated
@@ -1111,6 +1111,8 @@ USING (
       OR profiles.role ILIKE '%diretor%'
       OR profiles.role ILIKE '%secretario%'
       OR profiles.role ILIKE '%secretário%'
+      OR (profiles.role ILIKE '%administrativo%' AND profiles.role ILIKE '%postura%')
+      OR (profiles.role ILIKE '%administrador%' AND profiles.role ILIKE '%postura%')
     )
   )
 );

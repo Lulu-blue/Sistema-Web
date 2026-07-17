@@ -1418,8 +1418,8 @@ SEMAC/
 - **Gerente de Posturas (GP) ou superior** (Diretor, Secretário): pode **criar, editar e excluir** qualquer registro sem restrição.
 - **Administrativo de Posturas**:
   - ✅ **Pode criar** novas linhas normalmente.
-  - ✅ **Edição/Exclusão completa SEM limite de tempo**: pode editar ou excluir os registros **que ele mesmo criou** a qualquer momento.
-  - ✅ **Conclusão universal**: o botão **"Concluir"** (verde) aparece para **qualquer registro** gerado por terceiros. Ao clicar, abre-se um modal restrito onde **apenas o campo "Concluído" (Sim/Não)** pode ser modificado.
+  - ✅ **Edição completa**: pode **editar** qualquer registro do Controle Interno de Denúncias sem restrição.
+  - ❌ **Exclusão restrita**: só pode **excluir** registros que **ele mesmo criou**.
 - **Demais usuários** (Fiscais, etc.): só podem editar/excluir registros **criados por eles mesmos** (`created_by === userId`) sem restrição de tempo.
 
 ---
