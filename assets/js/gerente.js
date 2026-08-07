@@ -23,7 +23,7 @@ function isDiretorOuSuperior(role) {
 function isAdminPosturas(role) {
     var r = (role || window.userRoleGlobal || '').toLowerCase();
     return (r.includes('administrativo') && r.includes('postura')) ||
-           (r.includes('administrador') && r.includes('postura'));
+        (r.includes('administrador') && r.includes('postura'));
 }
 
 function isSecretario(role) {
@@ -197,7 +197,7 @@ async function fetchAllPontuacoes(tabela, ids) {
     let allData = [];
     let start = 0;
     const limit = 1000;
-    while(true) {
+    while (true) {
         const { data, error } = await supabaseClient
             .from(tabela)
             .select('user_id, pontuacao')
@@ -222,7 +222,7 @@ async function carregarGraficoFiscais() {
         const { data: fiscais, error: errFiscais } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url')
-            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura']);
+            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura', 'Fiscal de Meio Ambiente', 'fiscal de meio ambiente']);
 
         if (errFiscais) throw errFiscais;
         if (!fiscais || fiscais.length === 0) {
@@ -325,7 +325,7 @@ async function carregarRankingFiscaisHome() {
         const { data: fiscais, error: errFiscais } = await supabaseClient
             .from('profiles')
             .select('id, full_name, avatar_url')
-            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura']);
+            .in('role', ['Fiscal', 'Fiscal de Posturas', 'Fiscal de Postura', 'fiscal de posturas', 'fiscal de postura', 'Fiscal de Meio Ambiente', 'fiscal de meio ambiente']);
 
         if (errFiscais) throw errFiscais;
         if (!fiscais || fiscais.length === 0) {
@@ -467,13 +467,16 @@ async function carregarGraficoDocumentos() {
             '1.5': 'Relatório',
             '1.6': 'Protocolo',
             '1.7': 'Réplica',
-            '1.8': 'Certidão'
+            '1.8': 'Certidão',
+            '1.9': 'Auto de Fiscalização',
+            '1.2.MA': 'Auto de Infração Ambiental',
+            '11': 'Dívida Ativa'
         };
 
         // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8'];
+        var categoriasCP = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8', '1.9', '11'];
 
         for (var i = 0; i < categoriasCP.length; i++) {
             var cat = categoriasCP[i];
@@ -515,7 +518,7 @@ async function carregarGraficoDocumentos() {
         if (!canvas) return;
 
         if (graficoDocsInstance) {
-            try { graficoDocsInstance.destroy(); } catch(e) {}
+            try { graficoDocsInstance.destroy(); } catch (e) { }
             graficoDocsInstance = null;
         }
 
@@ -949,7 +952,7 @@ async function carregarGraficoBairros(tentativa) {
         }
 
         // Buscar NP + AI sem limite de 1000
-        var { data: registrosCP, error } = await buscarTodosRegistrosPaginados('controle_processual', 'categoria_id, campos', 'categoria_id', ['1.1', '1.2']);
+        var { data: registrosCP, error } = await buscarTodosRegistrosPaginados('controle_processual', 'categoria_id, campos', 'categoria_id', ['1.1', '1.2', '1.2.MA', '1.9']);
 
         if (error) throw error;
         if (!registrosCP) registrosCP = [];
@@ -961,9 +964,9 @@ async function carregarGraficoBairros(tentativa) {
             var bairro = (r.campos && r.campos.bairro) ? normalizarNomeBairro(r.campos.bairro) : '';
             if (!bairro) return; // Ignora registros sem bairro
 
-            if (r.categoria_id === '1.1') {
+            if (r.categoria_id === '1.1' || r.categoria_id === '1.9') {
                 contagemNP[bairro] = (contagemNP[bairro] || 0) + 1;
-            } else if (r.categoria_id === '1.2') {
+            } else if (r.categoria_id === '1.2' || r.categoria_id === '1.2.MA') {
                 contagemAI[bairro] = (contagemAI[bairro] || 0) + 1;
             }
         });
@@ -981,7 +984,7 @@ async function carregarGraficoBairros(tentativa) {
             registrosDen.forEach(function (r) {
                 if (!r.bairro) return; // Ignora denúncias sem bairro
                 var bairrosArray = r.bairro.split('|');
-                bairrosArray.forEach(function(b) {
+                bairrosArray.forEach(function (b) {
                     var bairroNorm = normalizarNomeBairro(b.trim());
                     if (!bairroNorm) return;
                     if (!contagemDenuncias[bairroNorm]) contagemDenuncias[bairroNorm] = {};
@@ -1085,7 +1088,7 @@ async function carregarControleDenuncias(tipo) {
         var denuncias = data || [];
 
         var criadorIds = [];
-        denuncias.forEach(function(d) {
+        denuncias.forEach(function (d) {
             if (d.created_by && criadorIds.indexOf(d.created_by) === -1) {
                 criadorIds.push(d.created_by);
             }
@@ -1095,11 +1098,11 @@ async function carregarControleDenuncias(tipo) {
         if (criadorIds.length > 0) {
             var res = await supabaseClient.from('profiles').select('id, full_name').in('id', criadorIds);
             if (res.data) {
-                res.data.forEach(function(p) { mapCriadores[p.id] = p.full_name; });
+                res.data.forEach(function (p) { mapCriadores[p.id] = p.full_name; });
             }
         }
 
-        denuncias.forEach(function(d) {
+        denuncias.forEach(function (d) {
             if (d.created_by && mapCriadores[d.created_by]) {
                 d.criador_nome = mapCriadores[d.created_by];
             }
@@ -1325,7 +1328,7 @@ function renderizarTabelaDenuncias(registros, tipo) {
                 var podeExcluir = podeExcluirDenuncia(reg);
                 var podeConcluir = podeEditarDenunciaConcluido(reg);
                 var criadorNome = reg.criador_nome ? reg.criador_nome.split(' ')[0] : 'Desconhecido';
-                
+
                 var acoesHtml = '<div style="display:flex; flex-direction:column; gap:4px;"><div>';
                 if (podeEditar) {
                     acoesHtml += '<button onclick="editarDenuncia(\'' + reg.id + '\')" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; cursor:pointer; margin-right:4px;">Editar</button>';
@@ -1603,21 +1606,21 @@ function renderizarSelectBairroDenuncia(lista) {
     if (!container) return;
     // Preservar valor atual para não perder seleção do usuário durante carregamento async
     var valorAtual = obterBairroSelecionadoDenuncia();
-    
+
     var html = '';
     lista.forEach(function (nome) {
         html += '<label style="display:block; padding: 4px 0; cursor:pointer;"><input type="checkbox" name="denuncia_bairros_chk" value="' + nome + '" style="margin-right:8px;" onchange="atualizarBairrosSelecionadosUI()">' + nome + '</label>';
     });
     container.innerHTML = html;
-    
+
     var busca = document.getElementById('denuncia-bairro-busca');
     if (busca) {
         var novoBusca = busca.cloneNode(true);
         busca.parentNode.replaceChild(novoBusca, busca);
-        novoBusca.addEventListener('input', function(e) {
+        novoBusca.addEventListener('input', function (e) {
             var termo = e.target.value.toLowerCase().trim();
             var labels = container.querySelectorAll('label');
-            labels.forEach(function(lbl) {
+            labels.forEach(function (lbl) {
                 var txt = lbl.textContent.toLowerCase();
                 lbl.style.display = txt.includes(termo) ? 'block' : 'none';
             });
@@ -1633,23 +1636,23 @@ function obterBairroSelecionadoDenuncia() {
     var checkboxes = document.querySelectorAll('input[name="denuncia_bairros_chk"]:checked');
     if (checkboxes.length === 0) return '';
     var selecionados = [];
-    checkboxes.forEach(function(chk) { selecionados.push(chk.value); });
+    checkboxes.forEach(function (chk) { selecionados.push(chk.value); });
     return selecionados.join('|');
 }
 
 function marcarBairroSelecionadoDenuncia(valor) {
     var checkboxes = document.querySelectorAll('input[name="denuncia_bairros_chk"]');
-    var valores = (valor || '').split('|').map(function(v) { return v.trim(); });
+    var valores = (valor || '').split('|').map(function (v) { return v.trim(); });
     if (valor && valor.includes(',') && !valor.includes('|')) {
-         valores = valor.split(',').map(function(v) { return v.trim(); });
+        valores = valor.split(',').map(function (v) { return v.trim(); });
     }
-    checkboxes.forEach(function(chk) {
+    checkboxes.forEach(function (chk) {
         chk.checked = valores.includes(chk.value.trim());
     });
     atualizarBairrosSelecionadosUI();
 }
 
-window.atualizarBairrosSelecionadosUI = function() {
+window.atualizarBairrosSelecionadosUI = function () {
     var container = document.getElementById('denuncia-bairro-selecionados');
     if (!container) return;
     var checkboxes = document.querySelectorAll('input[name="denuncia_bairros_chk"]:checked');
@@ -1660,16 +1663,16 @@ window.atualizarBairrosSelecionadosUI = function() {
     }
     container.style.display = 'flex';
     var html = '';
-    checkboxes.forEach(function(chk) {
-        html += '<span style="background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">' + chk.value + 
-                ' <span style="cursor:pointer; color:#ef4444; font-weight:bold; font-size: 14px; margin-left: 2px;" onclick="removerBairroSelecionado(\'' + chk.value.replace(/'/g, "\\'") + '\')">&times;</span></span>';
+    checkboxes.forEach(function (chk) {
+        html += '<span style="background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">' + chk.value +
+            ' <span style="cursor:pointer; color:#ef4444; font-weight:bold; font-size: 14px; margin-left: 2px;" onclick="removerBairroSelecionado(\'' + chk.value.replace(/'/g, "\\'") + '\')">&times;</span></span>';
     });
     container.innerHTML = html;
 };
 
-window.removerBairroSelecionado = function(valor) {
+window.removerBairroSelecionado = function (valor) {
     var checkboxes = document.querySelectorAll('input[name="denuncia_bairros_chk"]');
-    checkboxes.forEach(function(chk) {
+    checkboxes.forEach(function (chk) {
         if (chk.value === valor) chk.checked = false;
     });
     atualizarBairrosSelecionadosUI();
@@ -2240,7 +2243,7 @@ function gerarCSVControleDenuncias(registros) {
     };
 
     var colunas = [
-        { chave: 'tipo', label: 'Tipo', transform: function(v) { return tipoMap[v] || v; } },
+        { chave: 'tipo', label: 'Tipo', transform: function (v) { return tipoMap[v] || v; } },
         { chave: 'data', label: 'Data' },
         { chave: 'tarefa', label: 'Tarefa' },
         { chave: 'origem', label: 'Origem' },
@@ -2253,12 +2256,12 @@ function gerarCSVControleDenuncias(registros) {
         { chave: 'prazo_conclusao', label: 'Prazo' },
         { chave: 'data_entrega', label: 'Data Entrega' },
         { chave: 'obs', label: 'Observações' },
-        { chave: 'concluido', label: 'Concluído', transform: function(v) { return v ? 'Sim' : 'Não'; } },
-        { chave: 'app_preservacao', label: 'Área de Preservação Permanente', transform: function(v) { return v ? 'Sim' : 'Não'; } }
+        { chave: 'concluido', label: 'Concluído', transform: function (v) { return v ? 'Sim' : 'Não'; } },
+        { chave: 'app_preservacao', label: 'Área de Preservação Permanente', transform: function (v) { return v ? 'Sim' : 'Não'; } }
     ];
 
     var linhas = [];
-    var header = colunas.map(function(c) { return '"' + c.label + '"'; }).join(';');
+    var header = colunas.map(function (c) { return '"' + c.label + '"'; }).join(';');
     linhas.push(header);
 
     registros.forEach(function (reg) {
@@ -2305,7 +2308,7 @@ async function baixarCSVControleDenuncias() {
             confirmButtonText: 'Baixar Resultados da Aba',
             cancelButtonText: 'Backup Completo (Outras Categorias)'
         });
-        
+
         if (respFiltro.isConfirmed) {
             var hoje = new Date();
             hoje.setHours(0, 0, 0, 0);
@@ -2337,7 +2340,7 @@ async function baixarCSVControleDenuncias() {
                 }
                 return true;
             });
-            
+
             if (filtrados.length === 0) {
                 Swal.fire('Aviso', 'Não há registros filtrados para baixar.', 'info');
                 return;
@@ -2391,13 +2394,13 @@ async function baixarCSVControleDenuncias() {
     if (!configDownload) return;
     const { categorias, ano } = configDownload;
 
-    Swal.fire({title: 'Buscando dados...', allowOutsideClick: false});
+    Swal.fire({ title: 'Buscando dados...', allowOutsideClick: false });
     Swal.showLoading();
 
     // Buscar dados do banco filtrando pelo ano
     var limiteInferior = `${ano}-01-01`;
     var limiteStr = `${ano}-12-31`;
-    
+
     var { data: registrosTotais, error: errBusca } = await supabaseClient
         .from('controle_denuncias')
         .select('*')
@@ -2433,7 +2436,7 @@ async function baixarCSVControleDenuncias() {
     };
 
     var colunas = [
-        { chave: 'tipo', label: 'Tipo', transform: function(v) { return tipoMap[v] || v; } },
+        { chave: 'tipo', label: 'Tipo', transform: function (v) { return tipoMap[v] || v; } },
         { chave: 'data', label: 'Data' },
         { chave: 'tarefa', label: 'Tarefa' },
         { chave: 'origem', label: 'Origem' },
@@ -2446,12 +2449,12 @@ async function baixarCSVControleDenuncias() {
         { chave: 'prazo_conclusao', label: 'Prazo' },
         { chave: 'data_entrega', label: 'Data Entrega' },
         { chave: 'obs', label: 'Observações' },
-        { chave: 'concluido', label: 'Concluído', transform: function(v) { return v ? 'Sim' : 'Não'; } },
-        { chave: 'app_preservacao', label: 'Área de Preservação Permanente', transform: function(v) { return v ? 'Sim' : 'Não'; } }
+        { chave: 'concluido', label: 'Concluído', transform: function (v) { return v ? 'Sim' : 'Não'; } },
+        { chave: 'app_preservacao', label: 'Área de Preservação Permanente', transform: function (v) { return v ? 'Sim' : 'Não'; } }
     ];
 
     var linhas = [];
-    var header = colunas.map(function(c) { return '"' + c.label + '"'; }).join(';');
+    var header = colunas.map(function (c) { return '"' + c.label + '"'; }).join(';');
     linhas.push(header);
 
     registrosAno.forEach(function (reg) {
@@ -2467,7 +2470,7 @@ async function baixarCSVControleDenuncias() {
 
     var csv = '\uFEFF' + linhas.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    
+
     // Download Local
     var url = URL.createObjectURL(blob);
     var link = document.createElement('a');
@@ -2569,7 +2572,7 @@ async function baixarCSVControleDenuncias() {
     });
 
     if (opcaoExclusao) {
-        Swal.fire({title: 'Excluindo...', allowOutsideClick: false});
+        Swal.fire({ title: 'Excluindo...', allowOutsideClick: false });
         Swal.showLoading();
 
         try {
@@ -2577,7 +2580,7 @@ async function baixarCSVControleDenuncias() {
             if (opcaoExclusao === 'concluidas') {
                 idsParaExcluir = idsParaExcluir.filter(r => r.concluido === true);
             }
-            
+
             let ids = idsParaExcluir.map(r => r.id);
 
             const chunkSize = 500;
@@ -2589,7 +2592,7 @@ async function baixarCSVControleDenuncias() {
                     .in('id', chunk);
                 if (error) throw error;
             }
-            
+
             await Swal.fire('Sucesso!', `Foram excluídas ${ids.length} denúncias do ano ${ano} do banco de dados.`, 'success');
             carregarControleDenuncias(subAbaDenunciasAtual);
         } catch (err) {
@@ -2938,7 +2941,7 @@ async function carregarGestaoBairrosAreas() {
         if (errBairros) throw errBairros;
 
         // 3. Buscar Registros Processuais (para contagem igual ao grafico)
-        var { data: registrosCP, error: errCP } = await buscarTodosRegistrosPaginados('controle_processual', 'categoria_id, campos', 'categoria_id', ['1.1', '1.2']);
+        var { data: registrosCP, error: errCP } = await buscarTodosRegistrosPaginados('controle_processual', 'categoria_id, campos', 'categoria_id', ['1.1', '1.2', '1.2.MA', '1.9']);
 
         // 3.1 Buscar Denúncias para contagem por bairro
         var { data: registrosDen, error: errDen } = await buscarTodosRegistrosPaginados('controle_denuncias', 'bairro, tipo');
@@ -2949,7 +2952,7 @@ async function carregarGestaoBairrosAreas() {
             registrosDen.forEach(function (r) {
                 if (!r.bairro) return; // Ignora denúncias sem bairro
                 var bairrosArray = r.bairro.split('|');
-                bairrosArray.forEach(function(b) {
+                bairrosArray.forEach(function (b) {
                     var bairroNorm = normalizarNomeBairro(b.trim());
                     if (!bairroNorm) return;
                     if (!denPorBairro[bairroNorm]) denPorBairro[bairroNorm] = {};
@@ -2968,16 +2971,16 @@ async function carregarGestaoBairrosAreas() {
         globalDenunciasPorBairro = denPorBairro;
 
         // Ordenar áreas numericamente pelo número extraído do nome (ex: "Área 1", "Área 2" ... "Área 10")
-        globalAreas.sort(function(a, b) {
+        globalAreas.sort(function (a, b) {
             var numA = parseInt(String(a.nome).replace(/\D/g, ''), 10) || 0;
             var numB = parseInt(String(b.nome).replace(/\D/g, ''), 10) || 0;
             return numA - numB;
         });
 
         // Ordenar bairros: primeiro por área (numérico), depois alfabeticamente pelo nome
-        globalBairros.sort(function(a, b) {
-            var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
-            var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+        globalBairros.sort(function (a, b) {
+            var areaA = globalAreas.find(function (area) { return area.id === a.area_id; });
+            var areaB = globalAreas.find(function (area) { return area.id === b.area_id; });
 
             var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
             var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
@@ -2989,7 +2992,7 @@ async function carregarGestaoBairrosAreas() {
         renderizarListaAreas();
         renderizarListaBairros();
         renderizarAreasDemanda();
-        
+
         setTimeout(() => {
             inicializarMapaLeaflet();
         }, 300);
@@ -3012,8 +3015,8 @@ function processarContagemBairro(nomeBairro) {
     globalRegistrosCP.forEach(function (r) {
         var rb = (r.campos && r.campos.bairro) ? normalizarNomeBairro(r.campos.bairro) : '';
         if (rb === bn) {
-            if (r.categoria_id === '1.1') contNP++;
-            if (r.categoria_id === '1.2') contAI++;
+            if (r.categoria_id === '1.1' || r.categoria_id === '1.9') contNP++;
+            if (r.categoria_id === '1.2' || r.categoria_id === '1.2.MA') contAI++;
         }
     });
     var denBairro = globalDenunciasPorBairro[bn];
@@ -3102,13 +3105,13 @@ function renderizarListaBairros() {
     }
 
     if (bairrosFiltrados.length === 0) {
-        var msg = termoBusca 
+        var msg = termoBusca
             ? '<div style="text-align: center; padding: 30px; color: #64748b;">' +
-              '<p style="margin-bottom: 12px;">Nenhum bairro encontrado com o termo "<strong>' + termoBusca + '</strong>".</p>' +
-              '<button onclick="abrirModalNovoBairro(\'' + termoBusca + '\')" style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer;">+ Cadastrar "' + termoBusca + '"</button>' +
-              '</div>'
+            '<p style="margin-bottom: 12px;">Nenhum bairro encontrado com o termo "<strong>' + termoBusca + '</strong>".</p>' +
+            '<button onclick="abrirModalNovoBairro(\'' + termoBusca + '\')" style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer;">+ Cadastrar "' + termoBusca + '"</button>' +
+            '</div>'
             : '<div style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum bairro cadastrado.</div>';
-        
+
         container.innerHTML = msg;
         return;
     }
@@ -3228,19 +3231,19 @@ async function excluirBairro(id, nome) {
 
 async function vincularBairroArea(bairroId, novaAreaId) {
     var area_id = novaAreaId === "" ? null : novaAreaId;
-    
+
     // Atualização otimista (UI instantânea)
-    var bairroIdx = globalBairros.findIndex(function(b) { return b.id === bairroId; });
+    var bairroIdx = globalBairros.findIndex(function (b) { return b.id === bairroId; });
     var oldAreaId = null;
-    
+
     if (bairroIdx !== -1) {
         oldAreaId = globalBairros[bairroIdx].area_id;
         globalBairros[bairroIdx].area_id = area_id;
-        
+
         // Re-ordenar e renderizar instantaneamente
-        globalBairros.sort(function(a, b) {
-            var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
-            var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+        globalBairros.sort(function (a, b) {
+            var areaA = globalAreas.find(function (area) { return area.id === a.area_id; });
+            var areaB = globalAreas.find(function (area) { return area.id === b.area_id; });
 
             var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
             var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
@@ -3248,7 +3251,7 @@ async function vincularBairroArea(bairroId, novaAreaId) {
             if (numA !== numB) return numA - numB;
             return String(a.nome).localeCompare(String(b.nome));
         });
-        
+
         renderizarListaBairros();
         renderizarAreasDemanda();
         inicializarMapaLeaflet();
@@ -3261,15 +3264,15 @@ async function vincularBairroArea(bairroId, novaAreaId) {
             .from('bairros')
             .update({ area_id: area_id })
             .eq('id', bairroId);
-            
+
         if (error) throw error;
-        
+
         // Após salvar, buscar silenciosamente para garantir sincronia (sem piscar tela)
         var { data } = await supabaseClient.from('bairros').select('*').order('nome', { ascending: true });
         if (data) {
-            data.sort(function(a, b) {
-                var areaA = globalAreas.find(function(area) { return area.id === a.area_id; });
-                var areaB = globalAreas.find(function(area) { return area.id === b.area_id; });
+            data.sort(function (a, b) {
+                var areaA = globalAreas.find(function (area) { return area.id === a.area_id; });
+                var areaB = globalAreas.find(function (area) { return area.id === b.area_id; });
 
                 var numA = areaA ? (parseInt(String(areaA.nome).replace(/\D/g, ''), 10) || 0) : 999999;
                 var numB = areaB ? (parseInt(String(areaB.nome).replace(/\D/g, ''), 10) || 0) : 999999;
@@ -3345,6 +3348,17 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
             .order('created_at', { ascending: false });
 
         const todosRegs = (regProd || []).concat(regCP || []);
+
+        // Buscar cargo do fiscal para exibir no relatório
+        const { data: perfilFiscal } = await supabaseClient
+            .from('profiles')
+            .select('role')
+            .eq('id', fiscalId)
+            .maybeSingle();
+        const cargoFiscal = perfilFiscal?.role || 'Fiscal';
+        const tituloFiscalRelatorio = (cargoFiscal.toLowerCase().includes('meio') && cargoFiscal.toLowerCase().includes('ambiente'))
+            ? 'Fiscal de Meio Ambiente'
+            : 'Fiscal de Posturas';
 
         // Filtrar registros omitindo pontuação 0
         const registrosFiltrados = todosRegs.filter(r => (r.pontuacao || 0) !== 0);
@@ -3583,7 +3597,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
                             <div>
                                 <p style="margin: 0;">_________________________________________</p>
                                 <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
-                                <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+                                <p style="margin: 2px 0 0 0;">${tituloFiscalRelatorio}</p>
                             </div>
                             <div>
                                 <p style="margin: 0;">_________________________________________</p>
@@ -3639,7 +3653,7 @@ async function abrirRelatorioFiscal(fiscalId, nomeFiscal) {
         window.tarefasStatusFiscal = tarefasStatus;
         window.modoGraficoDocsFiscal = 'mes';
         // Delay para garantir que o DOM esteja estável e dimensões calculadas (especialmente no mobile)
-        requestAnimationFrame(function() {
+        requestAnimationFrame(function () {
             renderizarGraficosFiscal(docPorTipoMes, tarefasStatus);
         });
 
@@ -3694,11 +3708,11 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
     if (canvasPizza && typeof Chart !== 'undefined' && Object.keys(dadosDoc).length > 0) {
         // Destruir gráfico anterior se existir (tanto em window quanto no canvas)
         if (window.graficoPizzaDocsFiscal) {
-            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch (e) { }
             window.graficoPizzaDocsFiscal = null;
         }
         if (canvasPizza.chartInstance) {
-            try { canvasPizza.chartInstance.destroy(); } catch(e) {}
+            try { canvasPizza.chartInstance.destroy(); } catch (e) { }
             canvasPizza.chartInstance = null;
         }
 
@@ -3751,7 +3765,7 @@ function renderizarGraficosFiscal(docPorTipo, tarefasStatus) {
         });
     } else if (canvasPizza) {
         if (window.graficoPizzaDocsFiscal) {
-            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch (e) { }
             window.graficoPizzaDocsFiscal = null;
         }
         // Desenhar mensagem amigável quando não há dados
@@ -3894,11 +3908,11 @@ function fecharRelatorioGerente() {
         var canvasColunas = document.getElementById('grafico-colunas-tarefas');
 
         if (window.graficoPizzaDocsFiscal) {
-            try { window.graficoPizzaDocsFiscal.destroy(); } catch(e) {}
+            try { window.graficoPizzaDocsFiscal.destroy(); } catch (e) { }
             window.graficoPizzaDocsFiscal = null;
         }
         if (canvasPizza && canvasPizza.chartInstance) {
-            try { canvasPizza.chartInstance.destroy(); } catch(e) {}
+            try { canvasPizza.chartInstance.destroy(); } catch (e) { }
             canvasPizza.chartInstance = null;
         }
         if (canvasColunas && canvasColunas.chartInstance) {
@@ -3981,11 +3995,18 @@ function abrirFormNovoFiscal() {
         + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Nome Completo</label>'
         + '<input type="text" id="novo-fiscal-nome" placeholder="Nome do fiscal" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
-        + '<div style="margin-bottom:20px;">'
+        + '<div style="margin-bottom:14px;">'
         + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Matr\u00edcula</label>'
         + '<input type="text" id="novo-fiscal-matricula" placeholder="Matr\u00edcula" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         + '</div>'
-        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Cargo: <strong>Fiscal</strong> | Senha padr\u00e3o: <strong>123456</strong></p>'
+        + '<div style="margin-bottom:20px;">'
+        + '<label style="display:block;font-weight:600;margin-bottom:4px;color:#334155;">Cargo</label>'
+        + '<select id="novo-fiscal-cargo" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;">'
+        + '<option value="Fiscal de Posturas">Fiscal de Posturas</option>'
+        + '<option value="Fiscal de Meio Ambiente">Fiscal de Meio Ambiente</option>'
+        + '</select>'
+        + '</div>'
+        + '<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Senha padr\u00e3o: <strong>123456</strong></p>'
         + '<div id="msg-novo-fiscal" style="margin-bottom:12px;font-size:13px;"></div>'
         + '<button onclick="salvarNovoFiscal()" id="btn-salvar-novo-fiscal" style="width:100%;padding:12px;background:#10b981;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Cadastrar Fiscal</button>'
         + '</div>';
@@ -4009,6 +4030,7 @@ async function salvarNovoFiscal() {
     var cpfRaw = document.getElementById('novo-fiscal-cpf').value.replace(/\D/g, '');
     var nome = document.getElementById('novo-fiscal-nome').value.trim();
     var matricula = document.getElementById('novo-fiscal-matricula').value.trim();
+    var cargo = document.getElementById('novo-fiscal-cargo').value;
     var msgEl = document.getElementById('msg-novo-fiscal');
     var btnSalvar = document.getElementById('btn-salvar-novo-fiscal');
 
@@ -4074,7 +4096,7 @@ async function salvarNovoFiscal() {
                 full_name: nome,
                 cpf: cpfRaw,
                 matricula: matricula,
-                role: 'Fiscal de Posturas'
+                role: cargo
             }, { onConflict: 'id' });
 
         if (profileErr) throw profileErr;
@@ -4350,8 +4372,8 @@ async function carregarDadosGerencia() {
 
         processos.forEach(p => {
             // Contagem dos Cards
-            if (p.categoria_id === '1.2') { totalAI++; }
-            else if (p.categoria_id === '1.1') { totalNP++; }
+            if (p.categoria_id === '1.2' || p.categoria_id === '1.2.MA') { totalAI++; }
+            else if (p.categoria_id === '1.1' || p.categoria_id === '1.9') { totalNP++; }
             else { totalOutros++; }
 
             // Cruzamento Geográfico: Buscar campos de bairro (NPs e AIs geralmente registram Bairro)
@@ -4908,7 +4930,7 @@ async function atualizarRotacaoInteligente() {
         confirmButtonText: 'Sim, continuar',
         cancelButtonText: 'Cancelar'
     });
-    
+
     if (!result.isConfirmed) return;
 
     // 1. Snapshot do estado atual p/ localStorage (Backup)
@@ -4918,13 +4940,13 @@ async function atualizarRotacaoInteligente() {
     // Função auxiliar para calcular distância (Haversine) em km
     function calcDist(p1, p2) {
         if (!p1 || !p2) return Infinity;
-        var R = 6371; 
+        var R = 6371;
         var dLat = (p2.lat - p1.lat) * Math.PI / 180;
         var dLon = (p2.lng - p1.lng) * Math.PI / 180;
-        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     // 2. Calcular pesos e obter coordenadas espaciais
@@ -4935,7 +4957,7 @@ async function atualizarRotacaoInteligente() {
             Object.keys(cont.denuncias).forEach(t => pesoDenuncias += cont.denuncias[t]);
         }
         let pesoTotal = cont.np + cont.ai + pesoDenuncias;
-        
+
         let coord = null;
         if (b.latitude && b.longitude) {
             coord = { lat: parseFloat(b.latitude), lng: parseFloat(b.longitude) };
@@ -4962,7 +4984,7 @@ async function atualizarRotacaoInteligente() {
                 }
             }
         }
-        
+
         return {
             id: b.id,
             nome: b.nome,
@@ -4978,20 +5000,20 @@ async function atualizarRotacaoInteligente() {
 
     let nAreas = globalAreas.length;
     let areasBalanca = globalAreas.map(a => ({ id: a.id, pesoTotal: 0, bairrosAtribuidos: [], centro: null }));
-    
+
     // Separa bairros com e sem coordenadas
     let bairrosComCoord = bairrosComGeo.filter(b => b.coord !== null);
     let bairrosSemCoord = bairrosComGeo.filter(b => b.coord === null);
-    
+
     let pesoTotalCoord = bairrosComCoord.reduce((acc, b) => acc + b.peso, 0);
 
     // Se houver bairros com coordenadas suficientes, usamos Bissecção Ortogonal Recursiva (K-D Tree adaptada)
     if (bairrosComCoord.length >= nAreas) {
-        
+
         function orthogonalBisection(bairrosSubset, areasSubset) {
             // Condição de parada
             if (areasSubset.length === 0) return;
-            
+
             if (areasSubset.length === 1) {
                 // Atribui todos os bairros restantes para a única área
                 let a = areasSubset[0];
@@ -5007,7 +5029,7 @@ async function atualizarRotacaoInteligente() {
             // Determinar a "caixa" (bounding box) dos bairros atuais para saber se é mais largo ou mais alto
             let minLat = Infinity, maxLat = -Infinity;
             let minLng = Infinity, maxLng = -Infinity;
-            
+
             bairrosSubset.forEach(b => {
                 if (b.coord.lat < minLat) minLat = b.coord.lat;
                 if (b.coord.lat > maxLat) maxLat = b.coord.lat;
@@ -5018,7 +5040,7 @@ async function atualizarRotacaoInteligente() {
             // Considera a variação (Lat é Norte-Sul, Lng é Leste-Oeste)
             let diffLat = maxLat - minLat;
             let diffLng = maxLng - minLng;
-            
+
             // Vamos cortar pelo eixo que tiver maior espalhamento
             let cortarPorLat = diffLat > diffLng;
 
@@ -5038,19 +5060,19 @@ async function atualizarRotacaoInteligente() {
             // Desliza a régua até atingir a meta de peso
             let splitIndex = 0;
             let accWeight = 0;
-            
+
             for (let i = 0; i < bairrosSubset.length; i++) {
                 let b = bairrosSubset[i];
-                
+
                 let erroSemBairro = Math.abs(accWeight - targetWeight1);
                 let erroComBairro = Math.abs((accWeight + b.peso) - targetWeight1);
-                
+
                 // Se adicionar esse bairro nos afasta mais da meta do que se parar agora, então cortamos
                 if (accWeight > 0 && erroComBairro > erroSemBairro) {
                     splitIndex = i;
                     break;
                 }
-                
+
                 accWeight += b.peso;
                 splitIndex = i + 1;
             }
@@ -5073,7 +5095,7 @@ async function atualizarRotacaoInteligente() {
 
         // Dispara o algoritmo recursivo
         orthogonalBisection(bairrosComCoord, areasBalanca);
-        
+
     } else {
         // Fallback: Se não tem coordenadas suficientes, joga tudo pro ZigZag
         bairrosSemCoord = bairrosComGeo;
@@ -5082,17 +5104,17 @@ async function atualizarRotacaoInteligente() {
     // Alocar os Bairros SEM Coordenadas usando ZigZag nas áreas atuais (balanceando os pesos)
     if (bairrosSemCoord.length > 0) {
         bairrosSemCoord.sort((a, b) => b.peso - a.peso);
-        
+
         // Ordena as áreas pela que tem MENOS peso atualmente para priorizá-las
         areasBalanca.sort((a, b) => a.pesoTotal - b.pesoTotal);
-        
+
         let idxArea = 0;
         let direcao = 1;
-        
+
         for (let b of bairrosSemCoord) {
             areasBalanca[idxArea].bairrosAtribuidos.push(b.id);
             areasBalanca[idxArea].pesoTotal += b.peso;
-            
+
             idxArea += direcao;
             if (idxArea >= nAreas) {
                 idxArea = nAreas - 1;
@@ -5237,7 +5259,7 @@ async function mostrarSelecaoFiscais() {
         var { data: fiscais, error } = await supabaseClient
             .from('profiles')
             .select('id, full_name, role')
-            .in('role', ['fiscal', 'Fiscal', 'Fiscal de Posturas', 'fiscal de posturas', 'Fiscal de Postura', 'fiscal de postura'])
+            .in('role', ['fiscal', 'Fiscal', 'Fiscal de Posturas', 'fiscal de posturas', 'Fiscal de Postura', 'fiscal de postura', 'Fiscal de Meio Ambiente', 'fiscal de meio ambiente'])
             .order('full_name', { ascending: true });
 
         if (error) throw error;
@@ -6324,8 +6346,8 @@ async function carregarHierarquiaCompletaSecretario() {
             }
             // EQUIPE DE REGULARIZAÇÃO AMBIENTAL
             else if (roleNorm.includes('agronomo') || roleNorm.includes('agrônomo') ||
-                     roleNorm.includes('engenheiro') || roleNorm.includes('engenheira') ||
-                     roleNorm.includes('analista') || roleNorm.includes('auxiliar')) {
+                roleNorm.includes('engenheiro') || roleNorm.includes('engenheira') ||
+                roleNorm.includes('analista') || roleNorm.includes('auxiliar')) {
                 equipeAmbiental.push(f);
             }
         });
@@ -6347,33 +6369,33 @@ async function carregarHierarquiaCompletaSecretario() {
 
         // Criar árvore visual hierárquica com linhas de conexão
         var html = '<div style="display: flex; flex-direction: column; align-items: center; width: 100%; padding: 0px 5px; position: relative; font-size: 12px; background: transparent; box-sizing: border-box;">';
-        
+
         // ===== NÍVEL 1: SECRETÁRIO =====
         html += '<div style="text-align: center; position: relative; z-index: 2;">';
         html += '<div style="display: inline-block; background: #1e3a5f; color: white; padding: 5px 14px; border-radius: 16px; font-size: 10px; font-weight: 700;">SEMAC</div>';
         html += '</div>';
-        
+
         // Linha vertical Secretaria -> Diretores
         html += '<div style="width: 2px; height: 15px; background: #1e3a5f; margin: 0 auto;"></div>';
-        
+
         // ===== NÍVEL 2: DIRETORES E CARGOS =====
         html += '<div style="display: flex; justify-content: center; gap: 60px; width: 100%; margin-top: 5px; flex-wrap: wrap; align-items: flex-start;">';
-        
+
         // === DIRETOR DE MEIO AMBIENTE ===
         html += '<div style="display: flex; flex-direction: column; align-items: center;">';
         html += '<span style="background: #7c3aed; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) DE MEIO AMBIENTE</span>';
         diretoresMA.forEach(function (d) { html += renderizarCardArvore(d, '#7c3aed', 'diretor'); });
         if (diretoresMA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) de Meio Ambiente\')" style="margin-top: 10px; background: #7c3aed15; border: 1px dashed #7c3aed; color: #7c3aed; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
-        
+
         // Linha vertical saindo do Diretor MA
         html += '<div style="width: 2px; height: 10px; background: #7c3aed; margin: 8px 0 0 0;"></div>';
-        
+
         // Wrapper que contém a linha horizontal + as duas colunas (largura = conteúdo)
         html += '<div style="display: flex; flex-direction: column; align-items: stretch;">';
         html += '<div style="width: 100%; height: 2px; background: #7c3aed; margin: 0 0 4px 0;"></div>';
         html += '<div style="display: flex; justify-content: center; gap: 65px; align-items: flex-start;">';
-        
+
         // Gerência de Posturas
         html += '<div class="arvore-coluna-gp" style="display: flex; flex-direction: column; align-items: center; width: 290px; flex: 0 0 auto;">';
         html += '<span style="background: #0c3e2b; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA POSTURAS</span>';
@@ -6381,7 +6403,7 @@ async function carregarHierarquiaCompletaSecretario() {
         gerentesPosturas.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#0c3e2b', 'gerente_posturas'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Posturas\')" style="margin-top: 8px; background: #0c3e2b15; border: 1px dashed #0c3e2b; color: #0c3e2b; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
-        
+
         // Fiscais
         if (fiscais.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #b45309; margin: 4px 0 2px 0;"></div>';
@@ -6390,9 +6412,16 @@ async function carregarHierarquiaCompletaSecretario() {
             fiscais.forEach(function (f) { html += renderizarCardArvoreCompacto(f, '#b45309', 'fiscal'); });
             html += '</div>';
         }
-        html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Posturas\')" style="margin-top: 8px; background: #b4530915; border: 1px dashed #b45309; color: #b45309; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
+        html += '<div style="position: relative; margin-top: 8px;">';
+        html += '<button id="btn-novo-fiscais" onclick="toggleMenuFiscais()" style="background: #b4530915; border: 1px dashed #b45309; color: #b45309; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo ▼</button>';
+        html += '<div id="menu-fiscais" style="display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); background: white; border: 1px solid #b45309; border-radius: 5px; padding: 3px; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Posturas\')">Fiscal de Posturas</div>';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Fiscal de Meio Ambiente\')">Fiscal de M. Ambiente</div>';
+        html += '<div style="padding: 3px 6px; cursor: pointer; font-size: 9px; white-space: nowrap;" onclick="abrirFormNovoFuncionarioPorCargo(\'Administrativo de Posturas\')">Administrativo</div>';
         html += '</div>';
-        
+        html += '</div>';
+        html += '</div>';
+
         // Gerência Ambiental
         html += '<div class="arvore-coluna-ga" style="display: flex; flex-direction: column; align-items: center; width: 340px; flex: 0 0 auto;">';
         html += '<span style="background: #1e3a5f; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700; margin-top: 4px;">GERÊNCIA AMBIENTAL</span>';
@@ -6400,14 +6429,14 @@ async function carregarHierarquiaCompletaSecretario() {
         gerentesAmbiental.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#1e3a5f', 'gerente_ambiental'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente de Regularização Ambiental\')" style="margin-top: 8px; background: #1e3a5f15; border: 1px dashed #1e3a5f; color: #1e3a5f; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
-        
+
         // Linha horizontal conectando EQUIPE e CONSÓRCIO
         html += '<div style="width: 2px; height: 10px; background: #1e3a5f; margin: 4px 0 0 0;"></div>';
         html += '<div style="width: calc(100% + 40px); height: 2px; background: #1e3a5f; margin: 0 0 4px -10px;"></div>';
-        
+
         // Container lado a lado: EQUIPE RA | CONSÓRCIO + ANALISTAS
         html += '<div style="display: flex; justify-content: center; gap: 20px; width: 100%; align-items: flex-start;">';
-        
+
         // Coluna da esquerda: EQUIPE RA
         html += '<div class="arvore-coluna-equipe-ra" style="display: flex; flex-direction: column; align-items: center; width: 210px; flex: 0 0 auto;">';
         html += '<span style="background: #065f46; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">EQUIPE (' + equipeAmbiental.length + ')</span>';
@@ -6427,7 +6456,7 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>';
         html += '</div>';
         html += '</div>'; // Fim coluna EQUIPE RA
-        
+
         // Coluna da direita: CONSÓRCIO + ANALISTAS
         html += '<div class="arvore-coluna-consorcio" style="display: flex; flex-direction: column; align-items: center; width: 130px; flex: 0 0 auto;">';
         html += '<span style="background: #d97706; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700; margin-top: 4px;">CONSÓRCIO (' + consorcios.length + ')</span>';
@@ -6437,7 +6466,7 @@ async function carregarHierarquiaCompletaSecretario() {
             html += '</div>';
         }
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Consórcio\')" style="margin-top: 8px; background: #d9770615; border: 1px dashed #d97706; color: #d97706; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
-        
+
         // Analistas do Consórcio
         if (analistasConsorcio.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #f59e0b; margin: 4px 0 2px 0;"></div>';
@@ -6448,27 +6477,27 @@ async function carregarHierarquiaCompletaSecretario() {
         }
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Analista do Consórcio\')" style="margin-top: 8px; background: #f59e0b15; border: 1px dashed #f59e0b; color: #f59e0b; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
         html += '</div>'; // Fim coluna CONSÓRCIO
-        
+
         html += '</div>'; // Fim container lado a lado (Equipe + Consorcio)
         html += '</div>'; // Fim GA
         html += '</div>'; // Fim flex GP+GA
         html += '</div>'; // Fim wrapper (linha horizontal + colunas)
         html += '</div>'; // Fim Diretor MA
-        
+
         // === DIRETOR CUIDADO ANIMAL ===
         html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 220px; flex: 0 0 auto;">';
         html += '<span style="background: #db2777; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 6px;">DIRETOR(A) CUIDADO ANIMAL</span>';
         diretoresCA.forEach(function (d) { html += renderizarCardArvore(d, '#db2777', 'diretor_ca'); });
         if (diretoresCA.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Diretor(a) do Cuidado Animal\')" style="margin-top: 10px; background: #db277715; border: 1px dashed #db2777; color: #db2777; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
-        
+
         html += '<div style="width: 2px; height: 15px; background: #db2777; margin: 8px 0 0 0;"></div>';
         html += '<span style="background: #be185d; color: white; padding: 2px 8px; border-radius: 8px; font-size: 8px; font-weight: 700;">GERENTE CA</span>';
         html += '<div style="display: flex; flex-direction: column; gap: 12px; width: 100%; margin-top: 4px;">';
         gerentesCuidadoAnimal.forEach(function (g) { html += renderizarCardArvoreCompacto(g, '#be185d', 'gerente_ca'); });
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Gerente do Cuidado Animal\')" style="margin-top: 8px; background: #be185d15; border: 1px dashed #be185d; color: #be185d; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
-        
+
         if (equipeCuidadoAnimal.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #c026d3; margin: 4px 0 2px 0;"></div>';
             html += '<span style="background: #c026d3; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">COORD. (' + equipeCuidadoAnimal.length + ')</span>';
@@ -6478,12 +6507,12 @@ async function carregarHierarquiaCompletaSecretario() {
         }
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Coordenador(a) do Cuidado Animal\')" style="margin-top: 8px; background: #c026d315; border: 1px dashed #c026d3; color: #c026d3; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo</button>';
         html += '</div>';
-        
+
         html += '</div>'; // Fim nível 2 (apenas diretores e hierarquia)
-        
+
         // ===== CARGOS ESPECIAIS (RH/ADM, JURÍDICO e SEC DO SEC) - EMBAIXO DE TUDO =====
         html += '<div style="display: flex; justify-content: center; gap: 40px; width: 100%; margin-top: 25px; padding-top: 20px; border-top: 1px dashed #cbd5e1; flex-wrap: wrap;">';
-        
+
         // === RH / ADM ===
         html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 160px;">';
         html += '<span style="background: #0d9488; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">RH / ADM</span>';
@@ -6492,7 +6521,7 @@ async function carregarHierarquiaCompletaSecretario() {
         if (equipeRH.length === 0) html += '<div style="padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 11px;">Nenhum</div>';
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Agente de Administração\')" style="margin-top: 10px; background: #0d948815; border: 1px dashed #0d9488; color: #0d9488; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
-        
+
         if (estagiariosRH.length > 0) {
             html += '<div style="width: 2px; height: 10px; background: #0d9488; margin: 4px 0 2px 0;"></div>';
             html += '<span style="background: #0d9488; color: white; padding: 2px 6px; border-radius: 6px; font-size: 7px; font-weight: 700;">ESTAGIÁRIOS (' + estagiariosRH.length + ')</span>';
@@ -6503,7 +6532,7 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Estagiário do Agente de Administração\')" style="margin-top: 8px; background: #0d948815; border: 1px dashed #0d9488; color: #0d9488; padding: 3px 8px; border-radius: 5px; font-size: 9px; cursor: pointer;">+ Novo Estagiário</button>';
 
         html += '</div>';
-        
+
         // === JURÍDICO ===
         html += '<div style="display: flex; flex-direction: column; align-items: center; min-width: 160px;">';
         html += '<span style="background: #4f46e5; color: white; padding: 3px 10px; border-radius: 10px; font-size: 9px; font-weight: 700; margin-bottom: 8px;">JURÍDICO</span>';
@@ -6523,9 +6552,9 @@ async function carregarHierarquiaCompletaSecretario() {
         html += '</div>';
         html += '<button onclick="abrirFormNovoFuncionarioPorCargo(\'Secretário(a) do Secretário(a)\')" style="margin-top: 10px; background: #e11d4815; border: 1px dashed #e11d48; color: #e11d48; padding: 4px 12px; border-radius: 6px; font-size: 10px; cursor: pointer;">+ Novo</button>';
         html += '</div>';
-        
+
         html += '</div>'; // Fim cargos especiais
-        
+
         html += '</div>'; // Fim container
 
         console.log("DEBUG - HTML gerado para hierarquia (comprimento):", html.length);
@@ -6625,21 +6654,21 @@ function renderizarCardArvoreCompacto(funcionario, cor, tipo) {
 function renderizarCardArvoreMini(funcionario, cor, tipo) {
     var nomeAbreviado = (funcionario.full_name || 'Sem Nome');
     if (nomeAbreviado.length > 10) nomeAbreviado = nomeAbreviado.substring(0, 9) + '...';
-    
+
     var html = '<div style="background: transparent; border-radius: 8px; padding: 6px 8px; border: 1px solid ' + cor + '; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\'" onmouseout="this.style.background=\'transparent\'" onclick="mostrarTarefasFuncionario(\'' + funcionario.id + '\', \'' + (funcionario.full_name || 'Sem nome').replace(/'/g, "\\'") + '\', \'' + (funcionario.role || 'Sem cargo').replace(/'/g, "\\'") + '\')" title="' + (funcionario.full_name || 'Sem Nome') + '">';
-    
+
     // Avatar mini
     if (funcionario.avatar_url) {
         html += '<img src="' + funcionario.avatar_url + '" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid ' + cor + ';">';
     } else {
         html += '<div style="width: 20px; height: 20px; border-radius: 50%; background: ' + cor + '; display: flex; align-items: center; justify-content: center; font-size: 9px; color: white; font-weight: 600;">' + (funcionario.full_name ? funcionario.full_name.charAt(0).toUpperCase() : 'U') + '</div>';
     }
-    
+
     // Info mini
     html += '<div style="flex: 1; min-width: 0; overflow: hidden;">';
     html += '<div style="font-weight: 600; color: #1e293b; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">' + nomeAbreviado + '</div>';
     html += '</div>';
-    
+
     html += '</div>';
     return html;
 }
@@ -6651,9 +6680,30 @@ function toggleMenuEquipeRA() {
         if (menu.style.display === 'none' || menu.style.display === '') {
             menu.style.display = 'block';
             // Fechar ao clicar fora
-            setTimeout(function() {
+            setTimeout(function () {
                 document.addEventListener('click', function closeMenu(e) {
                     if (!e.target.closest('#btn-novo-equipe-ra') && !e.target.closest('#menu-equipe-ra')) {
+                        menu.style.display = 'none';
+                        document.removeEventListener('click', closeMenu);
+                    }
+                });
+            }, 100);
+        } else {
+            menu.style.display = 'none';
+        }
+    }
+}
+
+// Função para toggle do menu dropdown dos Fiscais
+function toggleMenuFiscais() {
+    var menu = document.getElementById('menu-fiscais');
+    if (menu) {
+        if (menu.style.display === 'none' || menu.style.display === '') {
+            menu.style.display = 'block';
+            // Fechar ao clicar fora
+            setTimeout(function () {
+                document.addEventListener('click', function closeMenu(e) {
+                    if (!e.target.closest('#btn-novo-fiscais') && !e.target.closest('#menu-fiscais')) {
                         menu.style.display = 'none';
                         document.removeEventListener('click', closeMenu);
                     }
@@ -6738,7 +6788,7 @@ async function carregarResumoTarefasSecretario() {
 
     // Garantir que as variáveis globais de hierarquia estejam carregadas para resolver o getTaskPath
     if (typeof carregarModuloTarefas === 'function') {
-        try { await carregarModuloTarefas(); } catch(e) { console.error('Erro ao inicializar módulos de tarefas em background:', e); }
+        try { await carregarModuloTarefas(); } catch (e) { console.error('Erro ao inicializar módulos de tarefas em background:', e); }
     }
 
     try {
@@ -6766,7 +6816,7 @@ async function carregarResumoTarefasSecretario() {
     }
 }
 
-window.renderizarResumoTarefasSecretario = function() {
+window.renderizarResumoTarefasSecretario = function () {
     var container = document.getElementById('secretario-resumo-tarefas');
     if (!container) return;
 
@@ -6777,7 +6827,7 @@ window.renderizarResumoTarefasSecretario = function() {
 
     var filtro = window.secretarioFiltroAtual;
 
-    var getCardStyle = function(f, baseBg, baseBorder, textColor) {
+    var getCardStyle = function (f, baseBg, baseBorder, textColor) {
         if (filtro === f || (filtro === 'todas' && f === 'none')) {
             return `text-align: center; padding: 16px; background: ${baseBg}; border: 2px solid ${textColor}; border-radius: 10px; cursor: pointer; transform: scale(1.02); transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);`;
         }
@@ -6799,7 +6849,7 @@ window.renderizarResumoTarefasSecretario = function() {
                 <div style="font-weight: 600; color: #1e293b; font-size: 14px;">${tituloLista}:</div>
                 ${filtro !== 'todas' ? '<button onclick="setFiltroResumoSecretario(\'todas\')" style="background:none; border:none; color:#64748b; font-size:12px; cursor:pointer; text-decoration:underline;">Ver todas</button>' : ''}
              </div>`;
-             
+
     html += '<div style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin;">';
 
     var listaFiltrada = tarefas;
@@ -6811,7 +6861,7 @@ window.renderizarResumoTarefasSecretario = function() {
         html += '<div style="padding:15px; text-align:center; color:#94a3b8; font-size:13px; background:#f8fafc; border-radius:8px;">Nenhuma tarefa encontrada neste filtro.</div>';
     }
 
-    var getTaskPath = function(task) {
+    var getTaskPath = function (task) {
         var c = task.criado_por;
         if (typeof idsEquipeAmbientalGlobal !== 'undefined' && idsEquipeAmbientalGlobal.includes(c)) return 'Tarefas > Reg. Ambiental';
         if (typeof idsEquipeCAGlobal !== 'undefined' && idsEquipeCAGlobal.includes(c)) return 'Tarefas > Cuidado Animal';
@@ -6820,7 +6870,7 @@ window.renderizarResumoTarefasSecretario = function() {
         if (typeof idsJuridicoGlobal !== 'undefined' && idsJuridicoGlobal.includes(c)) return 'Tarefas > Interface Jurídica';
         if (typeof idsRHGlobal !== 'undefined' && idsRHGlobal.includes(c)) return 'Tarefas > Recursos Humanos';
         if (typeof idsDiretoresGlobal !== 'undefined' && idsDiretoresGlobal.includes(c)) return 'Tarefas > Direção';
-        
+
         var reps = task.tarefa_responsaveis || [];
         for (var i = 0; i < reps.length; i++) {
             var r = reps[i].user_id;
@@ -6860,7 +6910,7 @@ window.renderizarResumoTarefasSecretario = function() {
     container.innerHTML = html;
 };
 
-window.setFiltroResumoSecretario = function(filtro) {
+window.setFiltroResumoSecretario = function (filtro) {
     window.secretarioFiltroAtual = filtro;
     window.renderizarResumoTarefasSecretario();
 }
@@ -6881,13 +6931,16 @@ async function carregarGraficoDocumentosSecretario() {
             '1.5': 'Relatório',
             '1.6': 'Protocolo',
             '1.7': 'Réplica',
-            '1.8': 'Certidão'
+            '1.8': 'Certidão',
+            '1.9': 'Auto Fiscalização',
+            '1.2.MA': 'Auto Infração Ambiental',
+            '11': 'Dívida Ativa'
         };
 
         // Contar por categoria usando count (evita limite de 1000 do Supabase)
         var contagem = {};
         var totalDocs = 0;
-        var categoriasCP = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8'];
+        var categoriasCP = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8', '1.9', '11'];
 
         for (var i = 0; i < categoriasCP.length; i++) {
             var cat = categoriasCP[i];
@@ -8159,7 +8212,7 @@ async function abrirEstatisticasFuncionario(userId, nome, cargo) {
     modal.id = modalId;
     modal.className = 'modal-overlay ativo';
     modal.style.cssText = 'background:rgba(0,0,0,0.7);';
-    modal.onclick = function(e) {
+    modal.onclick = function (e) {
         if (e.target === modal) {
             modal.remove();
         }
@@ -8409,10 +8462,10 @@ async function carregarEstatisticasFuncionario(userId, nome, cargo) {
         renderizarGrafico('grafico-estatisticas-eventos', statsEventos, 'lista-eventos-estatisticas', todasEventosLista);
     }, 100);
 
-    // Se o usuário logado for Secretário(a) e o funcionário for Fiscal de Posturas, mostrar relatório de produtividade
+    // Se o usuário logado for Secretário(a) e o funcionário for Fiscal de Posturas ou Fiscal de Meio Ambiente, mostrar relatório de produtividade
     var cargoUsuario = (window.userRoleGlobal || '');
     var ehSecretario = cargoUsuario.includes('Secretário') || cargoUsuario.includes('Secretária');
-    if (ehSecretario && cargo && (cargo.includes('Fiscal de Posturas') || cargo === 'Fiscal')) {
+    if (ehSecretario && cargo && (cargo.includes('Fiscal de Posturas') || cargo.includes('Fiscal de Meio Ambiente') || cargo === 'Fiscal')) {
         try {
             await adicionarRelatorioFiscalNasEstatisticas(userId, nome);
         } catch (err) {
@@ -8669,7 +8722,7 @@ function renderizarGraficoPizzaDocsEstatisticas(docPorTipo) {
     }
 
     if (window.graficoPizzaDocsFiscalEstatisticas) {
-        try { window.graficoPizzaDocsFiscalEstatisticas.destroy(); } catch (e) {}
+        try { window.graficoPizzaDocsFiscalEstatisticas.destroy(); } catch (e) { }
         window.graficoPizzaDocsFiscalEstatisticas = null;
     }
 
@@ -9211,11 +9264,22 @@ async function executarDesativarFuncionarioArvoreComTransferencia(funcionarioId)
     }
 }
 
-// Abre modal combinado com Estatísticas (esquerda) e Relatório de Produtividade (direita) para Fiscais de Posturas
+// Abre modal combinado com Estatísticas (esquerda) e Relatório de Produtividade (direita) para Fiscais
 async function abrirEstatisticasComRelatorioFiscal(fiscalId, nomeFiscal) {
     var modalId = 'modal-estatisticas-relatorio-fiscal';
     var existente = document.getElementById(modalId);
     if (existente) existente.remove();
+
+    // Buscar cargo do fiscal para badge e cor
+    var { data: perfilFiscal } = await supabaseClient
+        .from('profiles')
+        .select('role')
+        .eq('id', fiscalId)
+        .maybeSingle();
+    var cargoFiscal = perfilFiscal?.role || 'Fiscal';
+    var isFiscalMeioAmbiente = cargoFiscal.toLowerCase().includes('meio') && cargoFiscal.toLowerCase().includes('ambiente');
+    var badgeTexto = isFiscalMeioAmbiente ? 'Fiscal de Meio Ambiente' : 'Fiscal de Posturas';
+    var badgeCor = isFiscalMeioAmbiente ? '#0ea5e9' : '#b45309';
 
     var modal = document.createElement('div');
     modal.id = modalId;
@@ -9227,7 +9291,7 @@ async function abrirEstatisticasComRelatorioFiscal(fiscalId, nomeFiscal) {
         + '<div style="padding:30px;">'
         + '<div style="text-align:center;margin-bottom:24px;">'
         + '<h2 style="margin:0 0 8px 0;color:#1e293b;font-size:22px;">' + nomeFiscal + '</h2>'
-        + '<span style="background:#b45309;color:white;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;">Fiscal de Posturas</span>'
+        + '<span style="background:' + badgeCor + ';color:white;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;">' + badgeTexto + '</span>'
         + '</div>'
         + '<div style="display:flex;gap:20px;flex-wrap:wrap;">'
         // Coluna da Esquerda - Estatísticas de Tarefas
@@ -9540,7 +9604,7 @@ async function carregarRelatorioProdutividadeParaFiscal(fiscalId, nomeFiscal) {
 
 function construirLookupAreas() {
     areasPorId = {};
-    globalAreas.forEach(function(a) {
+    globalAreas.forEach(function (a) {
         areasPorId[a.id] = a;
     });
 }
@@ -9629,12 +9693,12 @@ function inicializarMapaLeaflet() {
 
     // Evento global de clique no mapa: identifica o layer pela posição do clique
     // (não depende do DOM, usa coordenadas internas do Leaflet)
-    mapaGeograficoInstance.on('click', function(e) {
+    mapaGeograficoInstance.on('click', function (e) {
         var layerPoint = e.layerPoint;
 
         // 1. Verificar marcadores (círculos) — _containsPoint verifica distância ao centro
         var marcadorClicado = null;
-        Object.keys(marcadoresBairrosMapa).forEach(function(id) {
+        Object.keys(marcadoresBairrosMapa).forEach(function (id) {
             var m = marcadoresBairrosMapa[id];
             if (m._containsPoint && m._containsPoint(layerPoint)) {
                 marcadorClicado = m;
@@ -9648,7 +9712,7 @@ function inicializarMapaLeaflet() {
         // 2. Verificar polígonos — _containsPoint verifica point-in-polygon
         var poligonoClicado = null;
         if (window.poligonosPorBairroId) {
-            Object.keys(window.poligonosPorBairroId).forEach(function(id) {
+            Object.keys(window.poligonosPorBairroId).forEach(function (id) {
                 var p = window.poligonosPorBairroId[id];
                 if (p._containsPoint && p._containsPoint(layerPoint)) {
                     poligonoClicado = p;
@@ -9672,15 +9736,15 @@ function inicializarMapaLeaflet() {
     carregarPoligonoMunicipio();
 }
 
-window.toggleSidebarMapa = function() {
+window.toggleSidebarMapa = function () {
     // Bloquear no mobile
     if (window.innerWidth <= 768) return;
-    
+
     const sidebar = document.getElementById('sidebar-bairros-mapa');
     const content = document.getElementById('sidebar-content-mapa');
     const title = document.getElementById('sidebar-title-mapa');
     const icon = document.getElementById('icon-toggle-sidebar');
-    
+
     if (sidebar.style.width === '300px' || !sidebar.style.width) {
         sidebar.style.width = '45px';
         content.style.opacity = '0';
@@ -9694,14 +9758,14 @@ window.toggleSidebarMapa = function() {
         title.style.display = 'block';
         icon.innerHTML = '<polyline points="15 18 9 12 15 6"></polyline>';
     }
-    
+
     setTimeout(() => { if (mapaGeograficoInstance) mapaGeograficoInstance.invalidateSize(); }, 300);
 };
 
-window.toggleLegendaMapa = function() {
+window.toggleLegendaMapa = function () {
     const content = document.getElementById('legend-content-mapa');
     const icon = document.getElementById('icon-toggle-legend');
-    
+
     if (content.style.display !== 'none') {
         content.style.display = 'none';
         icon.innerHTML = '<polyline points="18 15 12 9 6 15"></polyline>';
@@ -9711,7 +9775,7 @@ window.toggleLegendaMapa = function() {
     }
 };
 
-window.toggleDestaqueAreaMapa = function(areaId) {
+window.toggleDestaqueAreaMapa = function (areaId) {
     const idx = areasDestacadasMapa.indexOf(areaId);
     if (idx > -1) {
         areasDestacadasMapa.splice(idx, 1);
@@ -9724,7 +9788,7 @@ window.toggleDestaqueAreaMapa = function(areaId) {
         const el = document.getElementById('legend-item-area-' + id);
         if (!el) return;
         const textSpan = el.querySelector('span:nth-child(2)');
-        
+
         if (areasDestacadasMapa.length === 0 || areasDestacadasMapa.includes(id)) {
             el.style.opacity = '1';
             if (textSpan) textSpan.style.fontWeight = areasDestacadasMapa.length > 0 ? '600' : 'normal';
@@ -9751,10 +9815,10 @@ window.toggleDestaqueAreaMapa = function(areaId) {
 
     // Ajustar polígonos GeoJSON — ocultar completamente se área não selecionada
     if (window.poligonosPorBairroId) {
-        Object.keys(window.poligonosPorBairroId).forEach(function(bairroId) {
+        Object.keys(window.poligonosPorBairroId).forEach(function (bairroId) {
             var layer = window.poligonosPorBairroId[bairroId];
             if (!layer) return;
-            var bairro = globalBairros.find(function(b) { return b.id === bairroId; });
+            var bairro = globalBairros.find(function (b) { return b.id === bairroId; });
             var bAreaId = (bairro && bairro.area_id) || 'null';
             var ativo = areasDestacadasMapa.length === 0 || areasDestacadasMapa.includes(bAreaId);
             if (ativo) {
@@ -9775,20 +9839,20 @@ function renderizarListaBairrosMapa(filtro = '') {
     if (!lista) return;
 
     let bairros = globalBairros.filter(b => b.nome.toLowerCase().includes(filtro.toLowerCase()));
-    
+
     if (areasDestacadasMapa.length > 0) {
         bairros = bairros.filter(b => areasDestacadasMapa.includes(b.area_id || 'null'));
     }
-    
+
     lista.innerHTML = bairros.map(b => {
         const temCoord = b.latitude && b.longitude;
         const cor = temCoord ? '#10b981' : '#ef4444';
         const ativo = bairroSelecionadoParaMapa && bairroSelecionadoParaMapa.id === b.id;
-        
+
         const areaInfo = globalAreas.find(a => a.id === b.area_id);
         const areaNome = areaInfo ? areaInfo.nome : 'Sem Área';
         const areaCor = b.area_id ? mapaCoresAreas[b.area_id] : '#94a3b8';
-        
+
         return `
             <div onclick="selecionarBairroMapa('${b.id}')" style="padding: 10px; border: 1px solid ${ativo ? '#3b82f6' : '#e2e8f0'}; background: ${ativo ? '#eff6ff' : 'white'}; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px;">
                 <div style="width: 8px; height: 8px; background: ${cor}; border-radius: 50%; flex-shrink: 0;"></div>
@@ -9808,7 +9872,7 @@ function renderizarListaBairrosMapa(filtro = '') {
 function selecionarBairroMapa(id) {
     bairroSelecionadoParaMapa = globalBairros.find(b => b.id === id);
     renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
-    
+
     if (bairroSelecionadoParaMapa && mapaGeograficoInstance) {
         // Se o bairro tem polígono, fazer fitBounds para mostrar as ruas
         var poligono = window.poligonosPorBairroId[id];
@@ -9820,12 +9884,12 @@ function selecionarBairroMapa(id) {
             if (poligono.openPopup) poligono.openPopup();
             return;
         }
-        
+
         // Sem polígono: zoom no ponto com nível de rua
         if (bairroSelecionadoParaMapa.latitude) {
             mapaGeograficoInstance.setView([bairroSelecionadoParaMapa.latitude, bairroSelecionadoParaMapa.longitude], 17);
         }
-        
+
         // Abrir popup do marcador (se ainda estiver visível)
         var marcador = marcadoresBairrosMapa[id];
         if (marcador && camadaMarcadoresMapa && camadaMarcadoresMapa.hasLayer(marcador)) {
@@ -9850,7 +9914,7 @@ function plotarBairrosNoMapa() {
         if (b.latitude && b.longitude) {
             const area = areasPorId[b.area_id];
             const corPonto = area ? mapaCoresAreas[area.id] : "#94a3b8";
-            
+
             const marker = L.circleMarker([b.latitude, b.longitude], {
                 radius: 8,
                 fillColor: corPonto,
@@ -9868,12 +9932,12 @@ function plotarBairrosNoMapa() {
                 </div>
             `;
             marker.bindPopup(popupContent);
-            
+
             // Handler de clique direto no marcador (Leaflet)
-            marker.on('click', function(e) {
+            marker.on('click', function (e) {
                 marker.openPopup();
             });
-            
+
             if (camadaMarcadoresMapa) {
                 camadaMarcadoresMapa.addLayer(marker);
             } else {
@@ -9907,13 +9971,13 @@ async function confirmarPosicaoBairro(lat, lng) {
             if (error) throw error;
 
             Swal.fire({ icon: 'success', title: 'Localização Salva!', timer: 1500, showConfirmButton: false });
-            
+
             bairroSelecionadoParaMapa.latitude = lat;
             bairroSelecionadoParaMapa.longitude = lng;
-            
+
             // Desselecionar bairro para evitar cliques acidentais
             bairroSelecionadoParaMapa = null;
-            
+
             plotarBairrosNoMapa();
             renderizarListaBairrosMapa(document.getElementById('busca-bairro-mapa').value);
         } catch (err) {
@@ -9978,14 +10042,14 @@ async function carregarPoligonosGeoJSON() {
 
 function carregarPoligonoMunicipio() {
     if (!mapaGeograficoInstance) return;
-    
+
     // Usar variável global do script JS (evita CORS em file://)
     var geojson = (typeof geojsonMunicipioDivinopolis !== 'undefined') ? geojsonMunicipioDivinopolis : null;
     if (!geojson || !geojson.features || !geojson.features.length) return;
-    
+
     var feature = geojson.features[0];
     var geomType = feature.geometry.type;
-    
+
     var style = {
         fillColor: '#e2e8f0',
         color: '#94a3b8',
@@ -9994,10 +10058,10 @@ function carregarPoligonoMunicipio() {
         fillOpacity: 0.15,
         dashArray: '5, 5'
     };
-    
+
     if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
         L.geoJSON(feature, { style: style }).addTo(mapaGeograficoInstance);
-        
+
         // Ajustar o view para os bounds do município
         var layer = L.geoJSON(feature);
         var bounds = layer.getBounds();
@@ -10012,7 +10076,7 @@ function renderizarPoligonosGeoJSON(geojson) {
 
     // Mapear nomes de bairros normalizados para objetos do banco
     var bairrosPorNomeNorm = {};
-    globalBairros.forEach(function(b) {
+    globalBairros.forEach(function (b) {
         var nomeNorm = normalizarNomeBairroGeo(b.nome);
         bairrosPorNomeNorm[nomeNorm] = b;
     });
@@ -10035,7 +10099,7 @@ function renderizarPoligonosGeoJSON(geojson) {
         'nucleocomerciallevindopaulapereira': 'nucleolppereira'
     };
     window.aliasesBairrosGeo = aliasesBairrosGeo;
-    Object.keys(aliasesBairrosGeo).forEach(function(geoNome) {
+    Object.keys(aliasesBairrosGeo).forEach(function (geoNome) {
         var csvNome = aliasesBairrosGeo[geoNome];
         if (bairrosPorNomeNorm[csvNome] && !bairrosPorNomeNorm[geoNome]) {
             bairrosPorNomeNorm[geoNome] = bairrosPorNomeNorm[csvNome];
@@ -10089,7 +10153,7 @@ function renderizarPoligonosGeoJSON(geojson) {
     };
 
     var geojsonLayerBairros = L.geoJSON(geojson, {
-        style: function(feature) {
+        style: function (feature) {
             var nomeFeature = (feature.properties && feature.properties.name) || '';
             var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
             var bairro = bairrosPorNomeNorm[nomeNorm];
@@ -10105,7 +10169,7 @@ function renderizarPoligonosGeoJSON(geojson) {
                 fillOpacity: 0.45
             };
         },
-        onEachFeature: function(feature, layer) {
+        onEachFeature: function (feature, layer) {
             var nomeFeature = (feature.properties && feature.properties.name) || 'Bairro';
             var nomeNorm = normalizarNomeBairroGeo(nomeFeature);
             var bairro = bairrosPorNomeNorm[nomeNorm];
@@ -10120,20 +10184,20 @@ function renderizarPoligonosGeoJSON(geojson) {
                 </div>
             `;
             layer.bindPopup(popupContentPoly, { offset: L.point(0, 80) });
-            
+
             // Handler de clique direto no polígono (Leaflet)
-            layer.on('click', function(e) {
+            layer.on('click', function (e) {
                 layer.openPopup();
             });
-            
+
             if (bairro) {
                 bairrosComPoligono[bairro.id] = true;
                 poligonosPorBairroId[bairro.id] = layer;
-                
+
                 // Ocultar marcadores de bairros filhos (prolongamentos/sub-bairros sem polígono próprio)
                 var nomeBairroNorm = normalizarNomeBairroGeo(bairro.nome);
                 var filhos = bairrosFilhosDoPoligono[nomeBairroNorm] || [];
-                filhos.forEach(function(filhoNomeNorm) {
+                filhos.forEach(function (filhoNomeNorm) {
                     var filho = bairrosPorNomeNorm[filhoNomeNorm];
                     if (filho) {
                         bairrosComPoligono[filho.id] = true;
@@ -10143,9 +10207,9 @@ function renderizarPoligonosGeoJSON(geojson) {
             }
         }
     });
-    
+
     // Adicionar layers individuais à camada (não a FeatureGroup inteira)
-    geojsonLayerBairros.eachLayer(function(layer) {
+    geojsonLayerBairros.eachLayer(function (layer) {
         camadaPoligonosMapa.addLayer(layer);
     });
 
@@ -10154,7 +10218,7 @@ function renderizarPoligonosGeoJSON(geojson) {
     window.bairroPaiPorFilhoId = bairroPaiPorFilhoId;
 
     // Remover marcadores de bairros que já possuem polígono (o polígono já representa visualmente)
-    Object.keys(marcadoresBairrosMapa).forEach(function(bairroId) {
+    Object.keys(marcadoresBairrosMapa).forEach(function (bairroId) {
         if (bairrosComPoligono[bairroId]) {
             var marker = marcadoresBairrosMapa[bairroId];
             if (marker && camadaMarcadoresMapa) {
@@ -10184,11 +10248,11 @@ window.filtrarBairrosMapa = filtrarBairrosMapa;
 window.selecionarBairroMapa = selecionarBairroMapa;
 
 // Busca de endereço/rua via Nominatim
-window.buscarEnderecoNoMapa = async function() {
+window.buscarEnderecoNoMapa = async function () {
     var input = document.getElementById('busca-endereco-mapa');
     if (!input || !input.value.trim()) return;
     var query = input.value.trim() + ', Divinópolis, Minas Gerais, Brasil';
-    
+
     try {
         var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(query) + '&format=json&limit=1&countrycodes=br&viewbox=-44.99,-20.06,-44.78,-20.24&bounded=1';
         var res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
@@ -10201,15 +10265,15 @@ window.buscarEnderecoNoMapa = async function() {
         var lat = parseFloat(result.lat);
         var lon = parseFloat(result.lon);
         var displayName = result.display_name.split(',')[0];
-        
+
         if (mapaGeograficoInstance) {
             mapaGeograficoInstance.setView([lat, lon], 18);
-            
+
             // Remover marcador anterior de busca se existir
             if (window._marcadorBuscaEndereco) {
                 mapaGeograficoInstance.removeLayer(window._marcadorBuscaEndereco);
             }
-            
+
             var marker = L.marker([lat, lon]).addTo(mapaGeograficoInstance);
             marker.bindPopup('<b>' + displayName + '</b><br><span style="font-size:12px;color:#64748b;">' + result.display_name + '</span>').openPopup();
             window._marcadorBuscaEndereco = marker;

@@ -265,6 +265,11 @@ async function carregarDadosIniciais() {
             window.userNameGlobal = perfil ? perfil.full_name || '' : '';
             console.log("DEBUG - window.userRoleGlobal:", window.userRoleGlobal);
 
+            // Re-renderiza as categorias de produtividade conforme o cargo recém-carregado
+            if (typeof renderizarCategorias === 'function') {
+                renderizarCategorias();
+            }
+
             // Carregar notificações
             carregarNotificacoes();
 
@@ -431,7 +436,7 @@ async function carregarDadosIniciais() {
 
             // Verificação flexível para Fiscal (qualquer variante)
             var roleLowerFiscal = (userRole || '').toLowerCase();
-            if (roleLowerFiscal === 'fiscal' || roleLowerFiscal.includes('fiscal') && roleLowerFiscal.includes('postura')) {
+            if (roleLowerFiscal === 'fiscal' || (roleLowerFiscal.includes('fiscal') && roleLowerFiscal.includes('postura')) || (roleLowerFiscal.includes('fiscal') && roleLowerFiscal.includes('meio') && roleLowerFiscal.includes('ambiente'))) {
                 var fOpts2 = document.getElementById('fiscal-options');
                 if (fOpts2) fOpts2.style.display = 'block';
                 var hc = document.getElementById('home-produtividade-container');
@@ -479,7 +484,7 @@ async function carregarDadosIniciais() {
 
             // Controle de visibilidade do botão "Fechamento Anual"
             // Apenas Fiscal e Administrativo de Postura NÃO devem ver o botão
-            var isFiscal = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
+            var isFiscal = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura')) || (roleLower.includes('fiscal') && roleLower.includes('meio') && roleLower.includes('ambiente'));
             var btnFechamento = document.getElementById('btn-fechamento-anual');
             if (btnFechamento) {
                 // Mostra o botão apenas se NÃO for Fiscal e NÃO for Admin de Postura

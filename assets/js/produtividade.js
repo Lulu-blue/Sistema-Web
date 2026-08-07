@@ -128,6 +128,41 @@ const CATEGORIAS = [
         ]
     },
     {
+        id: '1.2.MA',
+        nome: 'Controle Processual: Auto de Infração Ambiental',
+        pontos: 5,
+        destaque: true,
+        campos: [
+            { nome: 'tipo_documento_referencia', label: 'Tipo de Documento de Referência', tipo: 'select', obrigatorio: false, opcoes: ['Auto de Fiscalização', 'REDS/Boletim de Ocorrência'] },
+            { nome: 'numero_documento_referencia', label: 'Nº do Documento de Referência', tipo: 'text', obrigatorio: false, condicional: { campo: 'tipo_documento_referencia', valor_diferente: '' } },
+            { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
+            { nome: 'nome', label: 'Nome do(a) autuado(a)', tipo: 'text', obrigatorio: true },
+            { nome: 'cpf_contribuinte', label: 'CNPJ/CPF', tipo: 'text', obrigatorio: true },
+            { nome: 'rua_autuado', label: 'Rua do autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'numero_autuado', label: 'Número', tipo: 'text', obrigatorio: false },
+            { nome: 'bairro_autuado', label: 'Bairro do autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'municipio_autuado', label: 'Município', tipo: 'text', obrigatorio: true },
+            { nome: 'cep_autuado', label: 'CEP', tipo: 'text', obrigatorio: true },
+            { nome: 'rua_imovel', label: 'Rua do imóvel / local da autuação', tipo: 'text', obrigatorio: true },
+            { nome: 'numero_imovel', label: 'Número', tipo: 'text', obrigatorio: false },
+            { nome: 'bairro', label: 'Bairro do Imóvel', tipo: 'select_bairro', obrigatorio: true },
+            { nome: 'cep_imovel', label: 'CEP do imóvel', tipo: 'text', obrigatorio: true },
+            { nome: 'inscricao', label: 'Inscrição', tipo: 'text', obrigatorio: false },
+            { nome: 'data', label: 'Data da infração', tipo: 'date', obrigatorio: false },
+            { nome: 'hora_infracao', label: 'Hora da infração', tipo: 'text', obrigatorio: false },
+            { nome: 'reincidente', label: 'Reincidente?', tipo: 'select', obrigatorio: false, opcoes: ['Sim', 'Não'] },
+            { nome: 'irregularidades', label: 'Descrição/Fato Constitutivo da infração', tipo: 'textarea', obrigatorio: true },
+            { nome: 'dispositivos', label: 'Dispositivo(s) legal(is) transgredido(s)', tipo: 'textarea', obrigatorio: true },
+            { nome: 'penalidades', label: 'Penalidade(s)', tipo: 'textarea', obrigatorio: true },
+            { nome: 'prazo_defesa', label: 'Prazo para defesa (dias)', tipo: 'number', obrigatorio: true },
+            { nome: 'tem_testemunhas', label: 'Tem testemunhas?', tipo: 'select', obrigatorio: true, opcoes: ['Não', 'Sim'] },
+            { nome: 'nome_testemunha_1', label: 'Nome da testemunha 1', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'cpf_testemunha_1', label: 'CPF da testemunha 1', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'nome_testemunha_2', label: 'Nome da testemunha 2', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'cpf_testemunha_2', label: 'CPF da testemunha 2', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } }
+        ]
+    },
+    {
         id: '1.3',
         nome: 'Controle Processual: Aviso de Recebimento (AR)',
         pontos: 10,
@@ -157,6 +192,26 @@ const CATEGORIAS = [
         destaque: true,
         campos: [
             { nome: 'atendimento', label: 'Para o atendimento...', tipo: 'textarea', obrigatorio: true }
+        ]
+    },
+    {
+        id: '1.5.MA',
+        nome: 'Controle Processual: Relatório / Meio Ambiente',
+        pontos: 10,
+        destaque: true,
+        campos: [
+            { nome: 'rua_imovel', label: 'Rua do imóvel', tipo: 'text', obrigatorio: true },
+            { nome: 'numero_imovel', label: 'Número', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro do Imóvel', tipo: 'select_bairro', obrigatorio: true },
+            { nome: 'cep_imovel', label: 'CEP', tipo: 'text', obrigatorio: true },
+            { nome: 'inscricao', label: 'Inscrição', tipo: 'text', obrigatorio: false },
+            { nome: 'origem_tipo', label: 'Origem', tipo: 'select', opcoes: ['Protocolo', 'Denúncia', 'Comunicação Interna'], obrigatorio: false },
+            { nome: 'origem_numero', label: 'Número da Origem', tipo: 'text', obrigatorio: false, condicional: { campo: 'origem_tipo', valor_diferente: '' } },
+            { nome: 'assunto', label: 'Assunto', tipo: 'text', obrigatorio: true },
+            { nome: 'data_vistoria', label: 'Data da Vistoria', tipo: 'date', obrigatorio: true },
+            { nome: 'hora_vistoria', label: 'Hora da Vistoria', tipo: 'time', obrigatorio: true },
+            { nome: 'verificacao', label: 'Em vistoria, verificamos', tipo: 'textarea', obrigatorio: true },
+            { nome: 'imagens_legenda', label: 'Imagens e Legendas', tipo: 'imagens_com_legenda', obrigatorio: false }
         ]
     },
     {
@@ -196,6 +251,36 @@ const CATEGORIAS = [
             { nome: 'data_defesa', label: 'Prazo para Defesa até', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'data_vistoria', label: 'Vistoria realizada dia', tipo: 'date', obrigatorio: true, ignorarNoBanco: true },
             { nome: 'obrigacao', label: 'Obrigação não cumprida', tipo: 'text', obrigatorio: true, ignorarNoBanco: true }
+        ]
+    },
+    {
+        id: '1.9',
+        nome: 'Controle Processual: Auto de Fiscalização/Meio Ambiente',
+        pontos: 5,
+        destaque: true,
+        campos: [
+            { nome: 'nome', label: 'Nome do(a) autuado(a)', tipo: 'text', obrigatorio: true },
+            { nome: 'cpf_contribuinte', label: 'CNPJ/CPF', tipo: 'text', obrigatorio: true },
+            { nome: 'rua_autuado', label: 'Rua do autuado', tipo: 'text', obrigatorio: true },
+            { nome: 'numero_autuado', label: 'Número', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro_autuado', label: 'Bairro', tipo: 'text', obrigatorio: true },
+            { nome: 'municipio_autuado', label: 'Município', tipo: 'text', obrigatorio: true },
+            { nome: 'cep_autuado', label: 'CEP', tipo: 'text', obrigatorio: true },
+            { nome: 'rua_imovel', label: 'Rua do imóvel', tipo: 'text', obrigatorio: true },
+            { nome: 'numero_imovel', label: 'Número', tipo: 'text', obrigatorio: true },
+            { nome: 'bairro', label: 'Bairro do Imóvel', tipo: 'select_bairro', obrigatorio: true },
+            { nome: 'cep_imovel', label: 'CEP', tipo: 'text', obrigatorio: true },
+            { nome: 'inscricao', label: 'Inscrição', tipo: 'text', obrigatorio: false },
+            { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
+            { nome: 'irregularidades', label: 'Irregularidades Constatadas', tipo: 'textarea', obrigatorio: true },
+            { nome: 'dispositivos', label: 'Dispositivo(s) legal(is) transgredido(s)', tipo: 'textarea', obrigatorio: true },
+            { nome: 'penalidades', label: 'Penalidades previstas no', tipo: 'text', obrigatorio: true },
+            { nome: 'prazo_defesa', label: 'Prazo para defesa (dias)', tipo: 'number', obrigatorio: true },
+            { nome: 'tem_testemunhas', label: 'Tem testemunhas?', tipo: 'select', obrigatorio: true, opcoes: ['Não', 'Sim'] },
+            { nome: 'nome_testemunha_1', label: 'Nome da testemunha 1', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'cpf_testemunha_1', label: 'CPF da testemunha 1', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'nome_testemunha_2', label: 'Nome da testemunha 2', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } },
+            { nome: 'cpf_testemunha_2', label: 'CPF da testemunha 2', tipo: 'text', obrigatorio: false, condicional: { campo: 'tem_testemunhas', valor: 'Sim' } }
         ]
     },
     // === CATEGORIAS GERAIS (1° a 29°) ===
@@ -516,12 +601,15 @@ function obterIdVisual(categoriaId) {
     const mapa = {
         '1.1': '16.1',
         '1.2': '16.2',
+        '1.2.MA': '16.2',
         '1.3': '16.3',
         '1.4': '16.4',
         '1.5': '16.5',
+        '1.5.MA': '16.5',
         '1.6': '16.6',
         '1.7': '6.1',
         '1.8': '6.2',
+        '1.9': '16.7',
         '2': '1',
         '3': '2',
         '4': '3',
@@ -561,6 +649,34 @@ async function carregarBairrosSistema() {
 let categoriaAtual = null;
 let rascunhoDocumento = null; // { id, numero_sequencial, categoria_id, campos }
 
+// --- HELPERS DE CARGO ---
+function getUserRole() {
+    return (window.userRoleGlobal || '').toLowerCase().trim();
+}
+
+function isFiscalDeMeioAmbiente() {
+    const role = getUserRole();
+    return role.includes('fiscal') && role.includes('meio') && role.includes('ambiente');
+}
+
+function isFiscalDePosturas() {
+    const role = getUserRole();
+    return role === 'fiscal' || (role.includes('fiscal') && role.includes('postura'));
+}
+
+function isCargoGerencialOuSuperior() {
+    const role = getUserRole();
+    return role.includes('gerente') || role.includes('diretor') || role.includes('secretário') || role.includes('secretario') || role.includes('administrador') || role.includes('administrativo');
+}
+
+function obterTituloFiscal() {
+    const role = getUserRole();
+    if (role.includes('meio') && role.includes('ambiente')) {
+        return 'Fiscal de Meio Ambiente';
+    }
+    return 'Fiscal de Posturas';
+}
+
 // --- RENDERIZAR BOTÕES DE CATEGORIAS ---
 function renderizarCategorias() {
     const grid = document.getElementById('categorias-grid');
@@ -568,7 +684,46 @@ function renderizarCategorias() {
 
     grid.innerHTML = '';
 
-    const destaques = CATEGORIAS.filter(c => c.destaque);
+    const role = getUserRole();
+    const fiscalMA = isFiscalDeMeioAmbiente();
+    const fiscalPosturas = isFiscalDePosturas();
+    const gerencial = isCargoGerencialOuSuperior();
+
+    const destaques = CATEGORIAS.filter(c => {
+        if (!c.destaque) return false;
+        // Regras de visibilidade por cargo
+        if (c.id === '1.2.MA' || c.id === '1.5.MA') {
+            // Só aparece para Fiscal de Meio Ambiente ou cargos gerenciais+
+            return fiscalMA || gerencial;
+        }
+        if (c.id === '1.2' || c.id === '1.5') {
+            // Não aparece para Fiscal de Meio Ambiente
+            if (fiscalMA) return false;
+            return true;
+        }
+        if (c.id === '1.9') {
+            // Apenas Fiscal de Meio Ambiente ou cargos gerenciais+
+            return fiscalMA || gerencial;
+        }
+        return true;
+    }).sort((a, b) => {
+        const idA = obterIdVisual(a.id);
+        const idB = obterIdVisual(b.id);
+
+        // Ordem dos grupos no Controle Processual: 16.x primeiro, depois 6.x, depois 10
+        const grupoA = parseInt(idA, 10);
+        const grupoB = parseInt(idB, 10);
+        const ordemGrupos = [16, 6, 10];
+        const idxGrupoA = ordemGrupos.indexOf(grupoA);
+        const idxGrupoB = ordemGrupos.indexOf(grupoB);
+
+        if (idxGrupoA !== idxGrupoB) {
+            return idxGrupoA - idxGrupoB;
+        }
+
+        // Dentro do mesmo grupo, ordena numericamente
+        return parseFloat(idA) - parseFloat(idB);
+    });
     const normais = CATEGORIAS.filter(c => !c.destaque);
 
     // Seção: Controle Processual
@@ -597,13 +752,20 @@ function renderizarCategorias() {
     });
 }
 
+function obterNomeExibicaoCategoria(cat) {
+    if (cat.id === '1.2.MA') {
+        return 'Controle Processual: Auto de Infração';
+    }
+    return cat.nome;
+}
+
 function criarCard(cat) {
     const card = document.createElement('div');
     card.className = cat.destaque ? 'categoria-card categoria-destaque' : 'categoria-card';
     card.onclick = () => abrirFormulario(cat);
     card.innerHTML = `
         ${cat.icone ? `<div class="card-icon">${cat.icone}</div>` : ''}
-        <div class="card-title">${obterIdVisual(cat.id)}° - ${cat.nome}</div>
+        <div class="card-title">${obterIdVisual(cat.id)}° - ${obterNomeExibicaoCategoria(cat)}</div>
         <div class="card-pontos">${cat.pontos} pts ${cat.por_hora ? 'por hora' : 'por unidade'}</div>
     `;
     return card;
@@ -618,7 +780,7 @@ function abrirFormulario(categoria) {
     const titulo = document.getElementById('modal-titulo');
     const corpo = document.getElementById('modal-campos');
 
-    titulo.textContent = categoria.nome;
+    titulo.textContent = obterNomeExibicaoCategoria(categoria);
     corpo.innerHTML = '';
     window.arquivoWordSubmissao = null; // Zera anexo em memória ao abrir novo form
 
@@ -645,8 +807,62 @@ function abrirFormulario(categoria) {
     }
 
     // Campo especial para categoria 1.1 nos primeiros 7 dias do mês
-    if (categoria.id === '1.1' && estaNosPrimeiros7Dias()) {
+    if ((categoria.id === '1.1' || categoria.id === '1.9') && estaNosPrimeiros7Dias()) {
         adicionarCampoDataRegistrada(corpo, null, false);
+    }
+
+    // Configuração exclusiva Fiscais de Meio Ambiente para 1.4 Ofício e 1.5.MA Relatório
+    const roleLower = (window.userRoleGlobal || '').toLowerCase();
+    if ((categoria.id === '1.4' || categoria.id === '1.5.MA') && roleLower.includes('fiscal') && roleLower.includes('meio ambiente')) {
+        const divExtra = document.createElement('div');
+        divExtra.className = 'campo-grupo';
+        divExtra.style.background = 'rgba(59, 130, 246, 0.1)';
+        divExtra.style.padding = '15px';
+        divExtra.style.borderRadius = '10px';
+        divExtra.style.border = '1px dashed #3b82f6';
+        divExtra.style.marginBottom = '20px';
+
+        divExtra.innerHTML = `
+            <label style="color: #1d4ed8; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom:10px;">
+                Fiscais de Meio Ambiente Adicionais (Assinatura e Pontuação)
+            </label>
+            <div id="loading-fiscais-ma" style="font-size:12px; color:#64748b;">Carregando fiscais...</div>
+            <div id="container-fiscais-ma" style="display:none; flex-direction:column; gap:8px;"></div>
+        `;
+        corpo.appendChild(divExtra);
+
+        supabaseClient.from('profiles').select('id, full_name, cpf, matricula')
+            .ilike('role', '%fiscal%meio ambiente%')
+            .eq('ativo', true)
+            .then(res => {
+                const fiscais = (res.data || []).filter(f => f.id !== window.userIdGlobal);
+                document.getElementById('loading-fiscais-ma').style.display = 'none';
+                const cont = document.getElementById('container-fiscais-ma');
+                cont.style.display = 'grid';
+                cont.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+                cont.style.gap = '10px';
+
+                if (fiscais.length === 0) {
+                    cont.innerHTML = '<span style="font-size:12px;">Nenhum outro fiscal encontrado.</span>';
+                    return;
+                }
+
+                // Helper para evitar quebra de aspas duplas no HTML
+                const escapeAttr = (str) => (str || '').replace(/"/g, '&quot;');
+
+                fiscais.forEach(f => {
+                    const chkId = `chk-fiscal-${f.id}`;
+                    cont.innerHTML += `
+                        <label for="${chkId}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:white; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; transition:all 0.2s; user-select:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#cbd5e1'">
+                            <input type="checkbox" id="${chkId}" class="cb-fiscal-extra-ma" value="${f.id}" data-nome="${escapeAttr(f.full_name)}" data-cpf="${escapeAttr(f.cpf)}" data-matricula="${escapeAttr(f.matricula)}" style="width:18px; height:18px; cursor:pointer; accent-color:#3b82f6; flex-shrink:0;">
+                            <div style="display:flex; flex-direction:column; overflow:hidden;">
+                                <span style="font-weight:600; color:#1e293b; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeAttr(f.full_name)}</span>
+                                <span style="font-size:11px; color:#64748b;">CPF: ${escapeAttr(f.cpf) || '---'}</span>
+                            </div>
+                        </label>
+                    `;
+                });
+            });
     }
 
     // Gerar campos dinamicamente
@@ -695,7 +911,7 @@ function abrirFormulario(categoria) {
                 </div>
             `;
         } else if (campo.tipo === 'select_bairro') {
-            let opcoesListHTML = `<div class="dropdown-search" style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
+            let opcoesListHTML = `<div class="dropdown-search" style="padding: 7px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
             opcoesListHTML += `<div id="lista-bairros-${campo.nome}" class="bairros-container" style="max-height: 200px; overflow-y: auto;">`;
 
             if (bairrosSistema.length > 0) {
@@ -703,11 +919,11 @@ function abrirFormulario(categoria) {
                     opcoesListHTML += `<div class="dropdown-item dropdown-bairro-item" onclick="selecionarOpcao('${campo.nome}', '${bairro.replace(/'/g, "\\'")}')">${bairro}</div>`;
                 });
             } else {
-                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 10px;">Carregando bairros...</div>`;
+                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 7px;">Carregando bairros...</div>`;
             }
             opcoesListHTML += `</div>`;
 
-            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 10px; white-space: normal; line-height: 1.4;">
+            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 7px; white-space: normal; line-height: 1.4;">
                 ⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.
             </div>`;
 
@@ -735,6 +951,13 @@ function abrirFormulario(categoria) {
                     </div>
                 </div>
             `;
+        } else if (campo.tipo === 'imagens_com_legenda') {
+            inputHTML = `
+                <div id="container-imagens-legenda" style="display: flex; flex-direction: column; gap: 10px;">
+                    <button type="button" onclick="adicionarCampoImagemLegenda()" style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: bold; font-size: 13px;">+ Adicionar Imagem e Legenda</button>
+                    <div id="lista-imagens-legenda" style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px;"></div>
+                </div>
+            `;
         } else {
             let extraAttr = '';
             if (campo.nome === 'cpf' || campo.nome === 'cpf_contribuinte') {
@@ -747,6 +970,16 @@ function abrirFormulario(categoria) {
             <label for="campo-${campo.nome}">${campo.label} ${campo.obrigatorio ? '*' : ''}</label>
             ${inputHTML}
         `;
+
+        if (campo.condicional) {
+            grupo.dataset.condicionalCampo = campo.condicional.campo;
+            if (campo.condicional.valor_diferente !== undefined) {
+                grupo.dataset.condicionalDiferente = campo.condicional.valor_diferente;
+            } else {
+                grupo.dataset.condicionalValor = campo.condicional.valor;
+            }
+            grupo.style.display = 'none';
+        }
 
         if (campo.agrupar) {
             let containerAgrupador = document.getElementById(`grupo-${campo.agrupar}`);
@@ -825,13 +1058,16 @@ function abrirFormulario(categoria) {
     if (categoria.id === '1.2') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorAutoInfracao();
+    } else if (categoria.id === '1.2.MA') {
+        btnSalvarForm.textContent = 'Gerar Documento';
+        btnSalvarForm.onclick = () => abrirEditorAutoInfracaoAmbiental();
     } else if (categoria.id === '11') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorDividaAtiva();
     } else if (categoria.id === '1.4') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorOficio();
-    } else if (categoria.id === '1.5') {
+    } else if (categoria.id === '1.5' || categoria.id === '1.5.MA') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorRelatorio();
     } else if (categoria.id === '1.7') {
@@ -840,12 +1076,43 @@ function abrirFormulario(categoria) {
     } else if (categoria.id === '1.8') {
         btnSalvarForm.textContent = 'Gerar Documento';
         btnSalvarForm.onclick = () => abrirEditorCertidao();
+    } else if (categoria.id === '1.9') {
+        btnSalvarForm.textContent = 'Gerar Documento';
+        btnSalvarForm.onclick = () => abrirEditorAutoFiscalizacaoMeioAmbiente();
     } else {
         btnSalvarForm.textContent = 'Salvar';
         btnSalvarForm.onclick = () => salvarRegistro();
     }
 
+    aplicarCamposCondicionais();
     overlay.classList.add('ativo');
+}
+
+function aplicarCamposCondicionais() {
+    const corpo = document.getElementById('modal-campos');
+    if (!corpo) return;
+
+    const gruposCondicionais = corpo.querySelectorAll('[data-condicional-campo]');
+    gruposCondicionais.forEach(grupo => {
+        const campoNome = grupo.dataset.condicionalCampo;
+        const valorEsperado = grupo.dataset.condicionalValor;
+        const input = document.getElementById(`campo-${campoNome}`);
+        if (!input) return;
+
+        const atualizar = () => {
+            let mostrar = false;
+            if (grupo.dataset.condicionalDiferente !== undefined) {
+                mostrar = input.value !== grupo.dataset.condicionalDiferente;
+            } else {
+                mostrar = input.value === valorEsperado;
+            }
+            grupo.style.display = mostrar ? 'block' : 'none';
+        };
+
+        input.addEventListener('change', atualizar);
+        // Dispara uma vez para refletir valor inicial (edição)
+        atualizar();
+    });
 }
 
 // --- FECHAR MODAL ---
@@ -982,7 +1249,7 @@ async function salvarEdicaoRegistro() {
         }
 
         let dataRegistradaManual = null;
-        if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
+        if ((categoriaAtual.id === '1.1' || categoriaAtual.id === '1.9') && estaNosPrimeiros7Dias()) {
             const inputDataManual = document.getElementById('campo-data_registrada_manual');
             if (inputDataManual && inputDataManual.value) {
                 dataRegistradaManual = new Date(inputDataManual.value).toISOString();
@@ -2032,7 +2299,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
     // Campo especial: data registrada manual (categoria 1.1, primeiros 7 dias)
     let dataRegistradaManual = null;
-    if (categoriaAtual.id === '1.1' && estaNosPrimeiros7Dias()) {
+    if ((categoriaAtual.id === '1.1' || categoriaAtual.id === '1.9') && estaNosPrimeiros7Dias()) {
         const inputDataManual = document.getElementById('campo-data_registrada_manual');
         if (inputDataManual && inputDataManual.value) {
             dataRegistradaManual = new Date(inputDataManual.value).toISOString();
@@ -2134,7 +2401,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
                 // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Certidão, Dívida Ativa)
                 let numeroSeq = null;
-                const categoriasAutoNum = ['1.2', '1.4', '1.5', '1.7', '1.8', '11'];
+                const categoriasAutoNum = ['1.2', '1.2.MA', '1.4', '1.5', '1.5.MA', '1.7', '1.8', '11'];
                 if (categoriasAutoNum.includes(categoriaAtual.id)) {
                     numeroSeq = await gerarNumeroSequencial(categoriaAtual.id);
                     numeroSeqRollback = numeroSeq;
@@ -2159,11 +2426,16 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
 
                 // AUTOMÁTICO: Gerar a categoria 14 (Notificação Preliminar expedidos - id visual 13) - 20 pts
                 if (categoriaAtual.id === '1.1' && !error) {
-                    const hoje = new Date();
-                    const ano = hoje.getFullYear();
-                    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-                    const dia = String(hoje.getDate()).padStart(2, '0');
-                    const dataAtual = `${ano}-${mes}-${dia}`;
+                    let dataAtual;
+                    if (dataRegistradaManual) {
+                        dataAtual = dataRegistradaManual.split('T')[0];
+                    } else {
+                        const hoje = new Date();
+                        const ano = hoje.getFullYear();
+                        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+                        const dia = String(hoje.getDate()).padStart(2, '0');
+                        dataAtual = `${ano}-${mes}-${dia}`;
+                    }
 
                     const startsWithAI = campos.n_notificacao && campos.n_notificacao.toUpperCase().startsWith('AI');
 
@@ -2215,12 +2487,17 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 }
 
                 // AUTOMÁTICO: Gerar a categoria 16 (Autos de Infração expedidos - id visual 15) - 30 pts
-                if (categoriaAtual.id === '1.2' && !error) {
-                    const hoje = new Date();
-                    const ano = hoje.getFullYear();
-                    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-                    const dia = String(hoje.getDate()).padStart(2, '0');
-                    const dataAtual = `${ano}-${mes}-${dia}`;
+                if ((categoriaAtual.id === '1.2' || categoriaAtual.id === '1.2.MA') && !error) {
+                    let dataAtual;
+                    if (dataRegistradaManual) {
+                        dataAtual = dataRegistradaManual.split('T')[0];
+                    } else {
+                        const hoje = new Date();
+                        const ano = hoje.getFullYear();
+                        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+                        const dia = String(hoje.getDate()).padStart(2, '0');
+                        dataAtual = `${ano}-${mes}-${dia}`;
+                    }
 
                     const campos16 = {
                         n_auto: numeroSeq || '',
@@ -2242,6 +2519,42 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         pontos += 30; // Para mostrar os 35 pontos no alerta de sucesso
                     } else {
                         console.error('Erro ao gerar Autos de Infração expedidos (16):', err16);
+                    }
+                }
+
+                // AUTOMÁTICO: Gerar a categoria 14 (Notificação Preliminar expedidos - id visual 13) - 20 pts para Auto de Fiscalização
+                if (categoriaAtual.id === '1.9' && !error) {
+                    let dataAtual;
+                    if (dataRegistradaManual) {
+                        dataAtual = dataRegistradaManual.split('T')[0];
+                    } else {
+                        const hoje = new Date();
+                        const ano = hoje.getFullYear();
+                        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+                        const dia = String(hoje.getDate()).padStart(2, '0');
+                        dataAtual = `${ano}-${mes}-${dia}`;
+                    }
+
+                    const campos14 = {
+                        n_notificacao: numeroSeq || '',
+                        descricao: campos.irregularidades || 'Expedição Automática',
+                        data: dataAtual
+                    };
+
+                    const { error: err14 } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert({
+                            user_id: user.id,
+                            categoria_id: '14',
+                            categoria_nome: 'Notificação Preliminar expedidos',
+                            pontuacao: 20,
+                            campos: campos14
+                        });
+
+                    if (!err14) {
+                        pontos += 20; // Para mostrar os 25 pontos no alerta de sucesso
+                    } else {
+                        console.error('Erro ao gerar Notificação Preliminar expedidos (14) via AF:', err14);
                     }
                 }
             } else {
@@ -2339,8 +2652,10 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 } else {
                     alert('Registros salvos com sucesso!\n\n• Notificação Preliminar (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
                 }
-            } else if (categoriaAtual.id === '1.2') {
+            } else if (categoriaAtual.id === '1.2' || categoriaAtual.id === '1.2.MA') {
                 alert('Registros salvos com sucesso!\n\n• Auto de Infração (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
+            } else if (categoriaAtual.id === '1.9') {
+                alert('Registros salvos com sucesso!\n\n• Auto de Fiscalização (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
             } else {
                 alert('Registro salvo com sucesso! (' + pontos + ' pontos)');
             }
@@ -2791,17 +3106,17 @@ function editarRegistro() {
                     <button type="button" class="btn-add-outro" onclick="adicionarOpcaoCustom('${catDef.id}', '${campo.nome}')">Adicionar</button>
                 </div>`;
         } else if (campo.tipo === 'select_bairro') {
-            let opcoesListHTML = `<div class="dropdown-search" style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
+            let opcoesListHTML = `<div class="dropdown-search" style="padding: 7px; border-bottom: 1px solid #eee; background-color: #f8fafc;"><input type="text" id="search-${campo.nome}" placeholder="Pesquisar bairro..." oninput="filtrarBairros('${campo.nome}')" onclick="event.stopPropagation()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem;"></div>`;
             opcoesListHTML += `<div id="lista-bairros-${campo.nome}" class="bairros-container" style="max-height: 200px; overflow-y: auto;">`;
             if (bairrosSistema.length > 0) {
                 bairrosSistema.forEach(bairro => {
                     opcoesListHTML += `<div class="dropdown-item dropdown-bairro-item" onclick="selecionarOpcao('${campo.nome}', '${bairro.replace(/'/g, "\\'")}')">${bairro}</div>`;
                 });
             } else {
-                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 10px;">Carregando bairros...</div>`;
+                opcoesListHTML += `<div class="dropdown-item text-muted" style="padding: 7px;">Carregando bairros...</div>`;
             }
             opcoesListHTML += `</div>`;
-            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 10px; white-space: normal; line-height: 1.4;">⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.</div>`;
+            opcoesListHTML += `<div class="dropdown-item dropdown-aviso" style="background-color: #fff3cd; color: #856404; font-size: 0.85rem; border-top: 1px solid #ffeeba; cursor: default; padding: 7px; white-space: normal; line-height: 1.4;">⚠️ Caso não encontre o bairro desejado, avise o Gerente de Posturas para adicioná-lo no sistema.</div>`;
             inputHTML = `
                 <input type="hidden" id="campo-${campo.nome}" value="${valorAtual}">
                 <div class="dropdown-custom" id="dropdown-${campo.nome}">
@@ -2828,6 +3143,16 @@ function editarRegistro() {
             <label for="campo-${campo.nome}">${campo.label} ${campo.obrigatorio ? '*' : ''}</label>
             ${inputHTML}
         `;
+
+        if (campo.condicional) {
+            grupo.dataset.condicionalCampo = campo.condicional.campo;
+            if (campo.condicional.valor_diferente !== undefined) {
+                grupo.dataset.condicionalDiferente = campo.condicional.valor_diferente;
+            } else {
+                grupo.dataset.condicionalValor = campo.condicional.valor;
+            }
+            grupo.style.display = 'none';
+        }
 
         if (campo.agrupar) {
             let containerAgrupador = document.getElementById(`grupo-${campo.agrupar}`);
@@ -2892,7 +3217,7 @@ function editarRegistro() {
     });
 
     // Campo especial para categoria 1.1 nos primeiros 7 dias do mês (edição)
-    if (catDef.id === '1.1' && estaNosPrimeiros7Dias()) {
+    if ((catDef.id === '1.1' || catDef.id === '1.9') && estaNosPrimeiros7Dias()) {
         adicionarCampoDataRegistrada(corpo, reg.created_at, true);
     }
 
@@ -2908,6 +3233,7 @@ function editarRegistro() {
         btnSalvarForm.setAttribute('onclick', 'salvarEdicaoRegistro()');
     }
 
+    aplicarCamposCondicionais();
     overlay.classList.add('ativo');
 }
 
@@ -3061,6 +3387,37 @@ function removerOpcaoCustom(catId, campoNome, valor) {
     const categoria = CATEGORIAS.find(c => c.id === catId);
     if (categoria) abrirFormulario(categoria);
 }
+// --- GERENCIAMENTO DE IMAGENS COM LEGENDA ---
+let contadorImagensLegenda = 0;
+window.adicionarCampoImagemLegenda = function() {
+    contadorImagensLegenda++;
+    const container = document.getElementById('lista-imagens-legenda');
+    if (!container) return;
+
+    const div = document.createElement('div');
+    div.className = 'item-imagem-legenda';
+    div.id = `item-imagem-legenda-${contadorImagensLegenda}`;
+    div.style = 'display: flex; flex-direction: column; gap: 8px; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; background: #f8fafc; position: relative;';
+
+    div.innerHTML = `
+        <button type="button" onclick="removerCampoImagemLegenda(${contadorImagensLegenda})" style="position: absolute; top: 5px; right: 5px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-weight: bold; font-size: 11px; display: flex; align-items: center; justify-content: center;" title="Remover">✕</button>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 12px; font-weight: 600;">Selecione a Imagem *</label>
+            <input type="file" class="imagem-arquivo" accept="image/*" required style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 12px; font-weight: 600;">Legenda da Imagem *</label>
+            <input type="text" class="imagem-legenda" placeholder="Ex: Vista frontal do imóvel..." required style="padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px;">
+        </div>
+    `;
+    container.appendChild(div);
+};
+
+window.removerCampoImagemLegenda = function(id) {
+    const el = document.getElementById(`item-imagem-legenda-${id}`);
+    if (el) el.remove();
+};
+
 // --- NUMERAÇÃO SEQUENCIAL AUTOMÁTICA ---
 async function gerarNumeroSequencial(categoriaId) {
     const anoAtual = new Date().getFullYear(); // ex: 2026
@@ -3081,7 +3438,7 @@ async function gerarNumeroSequencial(categoriaId) {
 }
 
 // --- HISTÓRICO GERAL (SUB-ABAS) ---
-let subAbaAtual = '1.1';
+let subAbaAtual = 'np-af';
 let registrosGeralAtual = []; // Cache para filtro
 
 function mudarSubAbaCP(categoriaId, btnEl) {
@@ -3113,7 +3470,37 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     // Exibir/Ocultar painel de filtros extras de AI
     const painelAI = document.getElementById('filtros-extras-ai');
     if (painelAI) {
-        painelAI.style.display = (categoriaId === '1.2') ? 'block' : 'none';
+        painelAI.style.display = (categoriaId === '1.2' || categoriaId === '1.2.MA' || categoriaId === 'ai-ma') ? 'block' : 'none';
+    }
+
+    // Exibir/Ocultar painel de filtro AI/MA
+    const painelAIMA = document.getElementById('filtro-ai-ma-container');
+    if (painelAIMA) {
+        painelAIMA.style.display = (categoriaId === 'ai-ma') ? 'block' : 'none';
+        const selectFiltroAIMA = document.getElementById('filtro-ai-ma');
+        if (selectFiltroAIMA && categoriaId !== subAbaAtual) {
+            selectFiltroAIMA.value = 'todos'; // reseta se trocou pra aba
+        }
+    }
+
+    // Exibir/Ocultar painel de filtro Relatório/MA
+    const painelRelatorioMA = document.getElementById('filtro-relatorio-ma-container');
+    if (painelRelatorioMA) {
+        painelRelatorioMA.style.display = (categoriaId === 'relatorio-ma') ? 'block' : 'none';
+        const selectFiltroRelatorioMA = document.getElementById('filtro-relatorio-ma');
+        if (selectFiltroRelatorioMA && categoriaId !== subAbaAtual) {
+            selectFiltroRelatorioMA.value = 'todos';
+        }
+    }
+
+    // Exibir/Ocultar painel de filtro NP/AF
+    const painelNPAF = document.getElementById('filtro-np-af-container');
+    if (painelNPAF) {
+        painelNPAF.style.display = (categoriaId === 'np-af') ? 'block' : 'none';
+        const selectFiltroNPAF = document.getElementById('filtro-np-af');
+        if (selectFiltroNPAF && categoriaId !== subAbaAtual) {
+            selectFiltroNPAF.value = 'todos'; // reseta se trocou pra aba
+        }
     }
 
     atualizarIndicadorFiltro();
@@ -3165,7 +3552,36 @@ async function carregarHistoricoGeral(categoriaId) {
 
     // Categoria
     if (categoriaId !== 'todos') {
-        query = query.eq('categoria_id', categoriaId);
+        if (categoriaId === 'np-af') {
+            const filtroNPAF = document.getElementById('filtro-np-af')?.value || 'todos';
+            if (filtroNPAF === '1.1') {
+                query = query.eq('categoria_id', '1.1');
+            } else if (filtroNPAF === '1.9') {
+                query = query.eq('categoria_id', '1.9');
+            } else {
+                query = query.in('categoria_id', ['1.1', '1.9']);
+            }
+        } else if (categoriaId === 'ai-ma') {
+            const filtroAIMA = document.getElementById('filtro-ai-ma')?.value || 'todos';
+            if (filtroAIMA === '1.2') {
+                query = query.eq('categoria_id', '1.2');
+            } else if (filtroAIMA === '1.2.MA') {
+                query = query.eq('categoria_id', '1.2.MA');
+            } else {
+                query = query.in('categoria_id', ['1.2', '1.2.MA']);
+            }
+        } else if (categoriaId === 'relatorio-ma') {
+            const filtroRelatorioMA = document.getElementById('filtro-relatorio-ma')?.value || 'todos';
+            if (filtroRelatorioMA === '1.5') {
+                query = query.eq('categoria_id', '1.5');
+            } else if (filtroRelatorioMA === '1.5.MA') {
+                query = query.eq('categoria_id', '1.5.MA');
+            } else {
+                query = query.in('categoria_id', ['1.5', '1.5.MA']);
+            }
+        } else {
+            query = query.eq('categoria_id', categoriaId);
+        }
     }
 
     // Filtro por Fiscal
@@ -3179,8 +3595,8 @@ async function carregarHistoricoGeral(categoriaId) {
             .lte('created_at', `${anoSelecionado}-12-31T23:59:59`);
     }
 
-    // Filtros específicos para Auto de Infração (categoria 1.2)
-    if (categoriaId === '1.2') {
+    // Filtros específicos para Auto de Infração (categoria 1.2, 1.2.MA ou ai-ma)
+    if (categoriaId === '1.2' || categoriaId === '1.2.MA' || categoriaId === 'ai-ma') {
         const notificacaoVal = (document.getElementById('busca-notificacao-ai')?.value || '').trim();
         const loteVal = (document.getElementById('busca-lote-ai')?.value || '').trim();
         const zonaVal = (document.getElementById('busca-zona-ai')?.value || '').trim();
@@ -3272,7 +3688,7 @@ async function carregarHistoricoGeral(categoriaId) {
     }
 
     // Reclassificação inteligente: NP com número de AI → tratados como AI
-    if (categoriaId === '1.1') {
+    if (categoriaId === '1.1' || categoriaId === 'np-af') {
         todosOsRegistros = todosOsRegistros.filter(r => !pareceAutoDeInfracaoNP(r));
     } else if (categoriaId === '1.2') {
         // Buscar registros de NP que são na verdade AI (má classificação no banco)
@@ -3458,13 +3874,13 @@ function atualizarIndicadorFiltro() {
     const enderecoVal = document.getElementById('busca-endereco-ai');
 
     const temFiltro = (inputFiscal && inputFiscal.value.trim()) ||
-                      (selectBairro && selectBairro.value) ||
-                      (selectAno && selectAno.value) ||
-                      (notificacaoVal && notificacaoVal.value.trim()) ||
-                      (loteVal && loteVal.value.trim()) ||
-                      (zonaVal && zonaVal.value.trim()) ||
-                      (quadraVal && quadraVal.value.trim()) ||
-                      (enderecoVal && enderecoVal.value.trim());
+        (selectBairro && selectBairro.value) ||
+        (selectAno && selectAno.value) ||
+        (notificacaoVal && notificacaoVal.value.trim()) ||
+        (loteVal && loteVal.value.trim()) ||
+        (zonaVal && zonaVal.value.trim()) ||
+        (quadraVal && quadraVal.value.trim()) ||
+        (enderecoVal && enderecoVal.value.trim());
 
     btn.innerHTML = temFiltro
         ? 'Filtro <span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;"></span>'
@@ -3502,11 +3918,11 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     const container = document.getElementById('historico-geral-lista');
     // Usar nova hierarquia de permissões: Gerente, Diretor e Secretário podem ver anexos
     const roleLower = (window.userRoleGlobal || '').toLowerCase();
-    const isFiscalPosturas = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
+    const isFiscal = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura')) || (roleLower.includes('fiscal') && roleLower.includes('meio') && roleLower.includes('ambiente'));
     const isGerenteAdministrativo = isGerenteOuSuperior(window.userRoleGlobal) || roleLower.includes('administrativo') || roleLower.includes('administrador');
 
     // Todos (Fiscais, Gerentes e Admins) podem ver a coluna
-    const podeVerAnexos = isGerenteAdministrativo || isFiscalPosturas;
+    const podeVerAnexos = isGerenteAdministrativo || isFiscal;
 
     const inputFiscal = document.getElementById('busca-fiscal-geral');
     const termoFiscal = inputFiscal ? inputFiscal.value.trim() : '';
@@ -3602,7 +4018,8 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 case '1.2': nomeCategoria = 'Controle Processual: Auto Infração'; break;
                 case '1.3': nomeCategoria = 'Controle Processual: AR'; break;
                 case '1.4': nomeCategoria = 'Controle Processual: Ofício'; break;
-                case '1.5': nomeCategoria = 'Controle Processual: Relatório de Vistoria'; break;
+                case '1.5': 
+                case '1.5.MA': nomeCategoria = 'Controle Processual: Relatório de Vistoria'; break;
                 case '1.6': nomeCategoria = 'Controle Processual: Protocolo'; break;
                 case '1.7': nomeCategoria = 'Réplica'; break;
                 case '1.8': nomeCategoria = 'Certidão'; break;
@@ -3651,7 +4068,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             }
 
             let rowAttributes = '';
-            if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id)) {
+            if (['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(reg.categoria_id)) {
                 rowAttributes = ` style="background:${bgColor}; cursor:pointer; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
             } else {
                 rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
@@ -3675,7 +4092,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 let anexoHTML = '';
 
                 const pertenceLogado = pertenceAoFiscalLogado(reg);
-                const temPermissaoAnexo = isGerenteAdministrativo || (isFiscalPosturas && pertenceLogado);
+                const temPermissaoAnexo = isGerenteAdministrativo || (isFiscal && pertenceLogado);
 
                 if (temPermissaoAnexo) {
                     if (temAnexo) {
@@ -3727,7 +4144,16 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
         return;
     }
 
-    const categoria = CATEGORIAS.find(c => c.id === categoriaId);
+    let categoria = CATEGORIAS.find(c => c.id === categoriaId);
+    if (!categoria && categoriaId === 'np-af') {
+        categoria = CATEGORIAS.find(c => c.id === '1.1');
+    }
+    if (!categoria && categoriaId === 'ai-ma') {
+        categoria = CATEGORIAS.find(c => c.id === '1.2');
+    }
+    if (!categoria && categoriaId === 'relatorio-ma') {
+        categoria = CATEGORIAS.find(c => c.id === '1.5');
+    }
     if (!categoria) return;
 
     // Colunas: Nº (se tiver), campos da categoria + Fiscal + Data
@@ -3737,6 +4163,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
     if (temNumero) headerHTML += '<th class="col-curta" style="min-width: 95px;">N°</th>';
     categoria.campos.forEach(campo => {
         if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
+            if ((categoriaId === 'np-af' || categoriaId === '1.1') && campo.nome === 'n_notificacao') return;
             const cls = classeColunaHistorico(campo.label);
             headerHTML += `<th${cls ? ` class="${cls}"` : ''}>${renderizarTh(campo.label)}</th>`;
         }
@@ -3782,18 +4209,44 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
         }
 
         let rowAttributes = '';
-        if (['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoria.id)) {
+        if (['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(categoria.id) || categoriaId === 'np-af' || categoriaId === 'ai-ma' || categoriaId === 'relatorio-ma') {
             rowAttributes = ` style="background:${bgColor}; cursor:pointer; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'" onclick="if(event.target.tagName !== 'BUTTON') abrirDetalhesAdminHist('${reg.id}')" title="Clique para mais detalhes"`;
         } else {
             rowAttributes = ` style="background:${bgColor}; transition: background 0.2s;" onmouseover="this.dataset.baseBg='${bgColor}'; this.style.background='${hoverColor}'" onmouseout="this.style.background=this.dataset.baseBg || '${bgColor}'"`;
         }
         bodyHTML += `<tr${rowAttributes}>`;
         if (temNumero) {
-            const numExibido = reg.numero_sequencial || (pareceAutoDeInfracaoNP(reg) && reg.campos && reg.campos.n_notificacao) || '-';
+            let numExibido = '-';
+            if (reg.categoria_id === '1.1') {
+                numExibido = 'NP ' + (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
+            } else if (reg.categoria_id === '1.9') {
+                numExibido = 'AF ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.2.MA') {
+                numExibido = 'MA-AI ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.2') {
+                numExibido = 'AI ' + (reg.numero_sequencial || (pareceAutoDeInfracaoNP(reg) && reg.campos && reg.campos.n_notificacao) || '-');
+            } else if (reg.categoria_id === '1.3') {
+                numExibido = 'AR ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.4') {
+                numExibido = 'OF ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.5' || reg.categoria_id === '1.5.MA') {
+                numExibido = 'RV ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.6') {
+                numExibido = 'PROT ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.7') {
+                numExibido = 'REP ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '1.8') {
+                numExibido = 'CERT ' + (reg.numero_sequencial || '-');
+            } else if (reg.categoria_id === '11') {
+                numExibido = 'DA ' + (reg.numero_sequencial || '-');
+            } else {
+                numExibido = reg.numero_sequencial || (pareceAutoDeInfracaoNP(reg) && reg.campos && reg.campos.n_notificacao) || '-';
+            }
             bodyHTML += renderizarTd(numExibido, 'col-curta');
         }
         categoria.campos.forEach(campo => {
             if (campo.tipo !== 'date' && campo.tipo !== 'file' && !campo.ignorarNoBanco) {
+                if ((categoriaId === 'np-af' || categoriaId === '1.1') && campo.nome === 'n_notificacao') return;
                 const cls = classeColunaHistorico(campo.label);
                 bodyHTML += renderizarTd(reg.campos[campo.nome] || '-', cls);
             }
@@ -3814,7 +4267,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
             let anexoHTML = '';
 
             const pertenceLogado = pertenceAoFiscalLogado(reg);
-            const temPermissaoAnexo = isGerenteAdministrativo || (isFiscalPosturas && pertenceLogado);
+            const temPermissaoAnexo = isGerenteAdministrativo || (isFiscal && pertenceLogado);
 
             if (temPermissaoAnexo) {
                 if (temAnexo) {
@@ -4151,7 +4604,7 @@ async function abrirDetalhesAdminHist(id) {
         if (isDono) {
             htmlCampos += `<div style="margin-top:20px; border-top:1px dashed #cbd5e1; padding-top:16px;">`;
 
-            if (reg.categoria_id !== '1.2') {
+            if (reg.categoria_id !== '1.2' && reg.categoria_id !== '1.2.MA') {
                 htmlCampos += `
                 <h4 style="margin-bottom:12px; color:#8b5cf6; font-size:15px;">Dilação de Prazo</h4>
                 <p style="font-size:11px; color:#64748b; margin-bottom:8px; margin-top:0;">Caso queira dilatar o prazo de vencimento, informe a nova data abaixo. A data original será preservada no histórico.</p>
@@ -4481,7 +4934,7 @@ async function salvarDetalhesHist(id) {
         }
     }
 
-    const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(reg.categoria_id);
+    const isDestaque = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(reg.categoria_id);
     const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
 
     let pontosAdicionadosAutom = false;
@@ -4597,7 +5050,7 @@ async function excluirRegistroHistGeral(id, categoriaId) {
             return;
         }
 
-        const isDestaque = ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '11'].includes(categoriaId);
+        const isDestaque = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(categoriaId) || categoriaId === 'np-af' || categoriaId === 'ai-ma' || categoriaId === 'relatorio-ma';
         const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
 
         // Devolver número sequencial se existir (AI, Dívida Ativa, Ofício, etc)
@@ -4779,6 +5232,10 @@ async function abrirRelatorio() {
         .maybeSingle();
 
     const nomeFiscal = perfil?.full_name || 'Fiscal';
+    const roleFiscal = (window.userRoleGlobal || '').toLowerCase();
+    const tituloFiscal = roleFiscal.includes('meio') && roleFiscal.includes('ambiente')
+        ? 'Fiscal de Meio Ambiente'
+        : 'Fiscal de Posturas';
 
     const dataAtual = new Date();
     let anoRelatorio = dataAtual.getFullYear();
@@ -4814,10 +5271,22 @@ async function abrirRelatorio() {
     // Agrupar registros por categoria
     const porCategoria = {};
     registrosFiltrados.forEach(r => {
-        if (!porCategoria[r.categoria_id]) {
-            porCategoria[r.categoria_id] = { nome: r.categoria_nome, registros: [] };
+        let catIdGrupo = r.categoria_id;
+        // Previne erro caso categoria_nome venha nulo/undefined do banco (muito comum no controle_processual)
+        let catNomeGrupo = r.categoria_nome || (CATEGORIAS.find(c => c.id === catIdGrupo)?.nome) || ('Categoria ' + catIdGrupo);
+
+        if (catIdGrupo === '1.9') {
+            catIdGrupo = '1.1';
+            catNomeGrupo = 'Notificações / AF';
         }
-        porCategoria[r.categoria_id].registros.push(r);
+        if (catIdGrupo === '1.1' && typeof catNomeGrupo === 'string' && !catNomeGrupo.includes('AF')) {
+            catNomeGrupo = 'Notificações / AF';
+        }
+
+        if (!porCategoria[catIdGrupo]) {
+            porCategoria[catIdGrupo] = { nome: catNomeGrupo, registros: [] };
+        }
+        porCategoria[catIdGrupo].registros.push(r);
     });
 
     const pontuacaoTotal = registrosFiltrados.reduce((s, r) => s + r.pontuacao, 0);
@@ -4828,7 +5297,7 @@ async function abrirRelatorio() {
         const catDef = CATEGORIAS.find(c => c.id === catId);
 
         const temNumero = cat.registros.some(r => r.numero_sequencial);
-        const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco) || [];
+        const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco && !( (catId === '1.1' || catId === '1.9') && c.nome === 'n_notificacao' )) || [];
 
         let headerCols = '';
         if (temNumero) headerCols += '<th style="min-width: 95px;">N°</th>';
@@ -4838,8 +5307,15 @@ async function abrirRelatorio() {
 
         let linhas = cat.registros.map(r => {
             let tds = '';
-            if (temNumero) tds += `<td contenteditable="true">${r.numero_sequencial || '-'}</td>`;
-            tds += camposDef.map(c => `<td contenteditable="true">${r.campos[c.nome] || '-'}</td>`).join('');
+            if (temNumero) {
+                let numExibido = '-';
+                if (r.categoria_id === '1.1') numExibido = 'NP ' + (r.numero_sequencial || (r.campos && r.campos.n_notificacao) || '-');
+                else if (r.categoria_id === '1.9') numExibido = 'AF ' + (r.numero_sequencial || '-');
+                else if (r.categoria_id === '1.2.MA') numExibido = 'MA-AI ' + (r.numero_sequencial || '-');
+                else numExibido = r.numero_sequencial || (r.campos && r.campos.n_notificacao) || '-';
+                tds += `<td contenteditable="true">${numExibido}</td>`;
+            }
+            tds += camposDef.map(c => `<td contenteditable="true">${(r.campos && r.campos[c.nome]) || '-'}</td>`).join('');
             const dataFormatada = obterDataReal(r).toLocaleDateString('pt-BR');
             tds += `<td contenteditable="true">${dataFormatada}</td>`;
             tds += `<td contenteditable="true">${r.pontuacao}</td>`;
@@ -4878,7 +5354,7 @@ async function abrirRelatorio() {
                         <div>
                             <p style="margin: 0;">_________________________________________</p>
                             <p style="margin: 5px 0 0 0;"><strong><span contenteditable="true">${nomeFiscal}</span></strong></p>
-                            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+                            <p style="margin: 2px 0 0 0;">${tituloFiscal}</p>
                         </div>
                         <div>
                             <p style="margin: 0;">_________________________________________</p>
@@ -5289,7 +5765,7 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
     if (updateError) throw updateError;
 
     // AUTOMÁTICO: Gerar a categoria 16 (Autos de Infração expedidos - id visual 15) - 30 pts
-    if (rascunhoDocumento.categoria_id === '1.2') {
+    if (rascunhoDocumento.categoria_id === '1.2' || rascunhoDocumento.categoria_id === '1.2.MA') {
         const hoje = new Date();
         const ano = hoje.getFullYear();
         const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -5346,8 +5822,89 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
         }
     }
 
+    // AUTOMÁTICO: Lançar pontuação para Fiscais de Meio Ambiente adicionais (Via RPC para contornar RLS)
+    if (rascunhoDocumento.categoria_id === '1.4' && camposAtualizados.fiscais_adicionais && camposAtualizados.fiscais_adicionais.length > 0) {
+        for (const fiscalExtra of camposAtualizados.fiscais_adicionais) {
+            // 1. Criar registro de Ofício (1.4 - 10 pts) em registros_produtividade via RPC (Evita duplicar no histórico geral)
+            const camposOficioExtra = { ...camposAtualizados, n_oficio: rascunhoDocumento.numero_sequencial, fiscal_nome_original: fiscalExtra.nome };
+            
+            const { error: errCpExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
+                p_tabela: 'registros_produtividade',
+                p_user_id: fiscalExtra.id,
+                p_categoria_id: '1.4',
+                p_categoria_nome: catDef ? catDef.nome : 'Documento',
+                p_pontuacao: pontos,
+                p_campos: camposOficioExtra
+            });
+            if (errCpExtra) {
+                console.error(`Erro ao salvar Ofício (1.4) para ${fiscalExtra.nome}:`, errCpExtra);
+                alert(`Aviso: O sistema não conseguiu salvar a pontuação do Ofício para o fiscal ${fiscalExtra.nome}. É necessário rodar o script SQL liberado. Motivo: ${errCpExtra.message}`);
+            }
+
+            // 2. Criar registro de Elaboração de Ofícios (8 - 15 pts) em registros_produtividade via RPC
+            const hoje = new Date();
+            const dataAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+            
+            const { error: errProdExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
+                p_tabela: 'registros_produtividade',
+                p_user_id: fiscalExtra.id,
+                p_categoria_id: '8',
+                p_categoria_nome: 'Elaboração de Ofícios',
+                p_pontuacao: 15,
+                p_campos: {
+                    n_oficio: rascunhoDocumento.numero_sequencial || '',
+                    descricao: camposAtualizados.assunto || 'Expedição Automática',
+                    data: dataAtual
+                }
+            });
+            if (errProdExtra) {
+                console.error(`Erro ao salvar Elaboração (8) para ${fiscalExtra.nome}:`, errProdExtra);
+            }
+        }
+    }
+
+    // AUTOMÁTICO: Lançar pontuação para Fiscais de Meio Ambiente adicionais (Via RPC para contornar RLS) para Relatório de Vistoria (1.5.MA)
+    if (rascunhoDocumento.categoria_id === '1.5.MA' && camposAtualizados.fiscais_adicionais && camposAtualizados.fiscais_adicionais.length > 0) {
+        for (const fiscalExtra of camposAtualizados.fiscais_adicionais) {
+            // 1. Criar registro de Relatório (1.5.MA - 10 pts) em registros_produtividade via RPC
+            const camposRelatorioExtra = { ...camposAtualizados, n_relatorio: rascunhoDocumento.numero_sequencial, fiscal_nome_original: fiscalExtra.nome };
+            
+            const { error: errCpExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
+                p_tabela: 'registros_produtividade',
+                p_user_id: fiscalExtra.id,
+                p_categoria_id: '1.5.MA',
+                p_categoria_nome: catDef ? catDef.nome : 'Documento',
+                p_pontuacao: pontos,
+                p_campos: camposRelatorioExtra
+            });
+            if (errCpExtra) {
+                console.error(`Erro ao salvar Relatório (1.5.MA) para ${fiscalExtra.nome}:`, errCpExtra);
+            }
+
+            // 2. Criar registro de Elaboração de Relatório (7 - 50 pts) em registros_produtividade via RPC
+            const hoje = new Date();
+            const dataAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+            
+            const { error: errProdExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
+                p_tabela: 'registros_produtividade',
+                p_user_id: fiscalExtra.id,
+                p_categoria_id: '7',
+                p_categoria_nome: 'Elaboração de Certidão de Arquivamento e Relatório Fiscal',
+                p_pontuacao: 50,
+                p_campos: {
+                    tipo: 'Relatório Fiscal',
+                    descricao: rascunhoDocumento.numero_sequencial || '',
+                    data: dataAtual
+                }
+            });
+            if (errProdExtra) {
+                console.error(`Erro ao salvar Elaboração de Relatório (7) para ${fiscalExtra.nome}:`, errProdExtra);
+            }
+        }
+    }
+
     // AUTOMÁTICO: Gerar a categoria 7 (Elaboração de Certidão de Arquivamento e Relatório Fiscal - id visual 6°) - 50 pts
-    if (rascunhoDocumento.categoria_id === '1.5') {
+    if (rascunhoDocumento.categoria_id === '1.5' || rascunhoDocumento.categoria_id === '1.5.MA') {
         const hoje = new Date();
         const ano = hoje.getFullYear();
         const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -5406,6 +5963,50 @@ async function cancelarRascunhoDocumento() {
         console.error('Erro ao excluir rascunho:', e);
     }
 }
+
+// --- HELPERS DE MANIPULAÇÃO XML/DOCX ---
+function escapeXml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function textoDoParagrafo(paragrafo) {
+    if (!paragrafo) return '';
+    return (paragrafo.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [])
+        .map(tag => tag.replace(/<[^>]+>/g, ''))
+        .join('');
+}
+
+function substituirTextoParagrafo(paragrafo, novoTexto) {
+    if (!paragrafo) return paragrafo;
+    const textoAtual = textoDoParagrafo(paragrafo);
+    if (textoAtual === '') return paragrafo;
+
+    const textoEscapado = escapeXml(novoTexto);
+    // Localiza a primeira ocorrência de <w:t...>...</w:t> com texto real
+    return paragrafo.replace(
+        /(<w:t(?:\s+xml:space="preserve")?\s*>)([^<]*)(<\/w:t>)/,
+        (match, abertura, conteudo, fechamento) => {
+            // Preserva o atributo xml:space="preserve" se houver
+            return abertura + textoEscapado + fechamento;
+        }
+    );
+}
+
+function removerParagrafo(paragrafo) {
+    return '';
+}
+
+function encontrarParagrafos(doc, predicado) {
+    const paragrafos = doc.match(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g) || [];
+    return paragrafos.filter(p => predicado(textoDoParagrafo(p), p));
+}
+
 
 // --- GERADOR DE AUTO DE INFRAÇÃO (WYSIWYG) ---
 async function abrirEditorAutoInfracao() {
@@ -5563,7 +6164,7 @@ async function abrirEditorAutoInfracao() {
                 <p style="margin: 5px 0 0 0; margin-right: 170px;">
                     <strong>${nomeFiscal}</strong><br>
                     Matrícula: ${matriculaFiscal}<br>
-                    Fiscal de Posturas
+                    ${obterTituloFiscal()}
                 </p>
             </div>
         </div>
@@ -5607,6 +6208,637 @@ async function abrirEditorAutoInfracao() {
     }
 }
 
+// --- GERADOR DE AUTO DE INFRAÇÃO AMBIENTAL (DOCX) ---
+async function abrirEditorAutoInfracaoAmbiental() {
+    if (!categoriaAtual) return;
+
+    const campos = {};
+    let todosPreenchidos = true;
+    let primeiroInvalido = null;
+
+    categoriaAtual.campos.forEach(campo => {
+        if (campo.tipo === 'file') return;
+        const input = document.getElementById(`campo-${campo.nome}`);
+        let valor = input ? input.value.trim() : '';
+
+        let isObrigatorio = campo.obrigatorio;
+
+        // numero_documento_referencia só é obrigatório quando há tipo selecionado
+        if (campo.nome === 'numero_documento_referencia') {
+            const tipoRef = document.getElementById('campo-tipo_documento_referencia');
+            isObrigatorio = tipoRef && tipoRef.value.trim() !== '';
+        }
+
+        if (isObrigatorio && !valor) {
+            todosPreenchidos = false;
+            if (input) {
+                input.style.borderColor = '#ef4444';
+                if (!primeiroInvalido) primeiroInvalido = input;
+            }
+        } else if (input) {
+            input.style.borderColor = '#e2e8f0';
+        }
+        campos[campo.nome] = valor || '';
+    });
+
+    if (!todosPreenchidos) {
+        alert('Preencha os dados obrigatórios do Auto de Infração Ambiental antes de gerar o documento.');
+        if (primeiroInvalido) primeiroInvalido.focus();
+        return;
+    }
+
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvarForm ? btnSalvarForm.textContent : 'Gerar Documento';
+    if (btnSalvarForm) {
+        btnSalvarForm.textContent = 'Carregando...';
+        btnSalvarForm.disabled = true;
+    }
+
+    let numSequencial = null;
+    try {
+        numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
+
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
+
+        // Dados do fiscal logado
+        const { data: { user } } = await getAuthUser();
+        let nomeFiscal = 'Nome do Fiscal';
+        let matriculaFiscal = 'XXXXXXXX';
+        if (user) {
+            const { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('full_name, matricula')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
+        }
+
+        const hoje = new Date();
+        const diaHoje = String(hoje.getDate()).padStart(2, '0');
+        const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
+        const anoHoje = hoje.getFullYear();
+        const dataAssinatura = `${diaHoje}/${mesHoje}/${anoHoje}`;
+
+        const dataPartes = campos.data ? campos.data.split('-') : ['', '', ''];
+        const dataFormatada = campos.data ? `${dataPartes[2]}/${dataPartes[1]}/${dataPartes[0]}` : '';
+
+        const imgBase64 = typeof CABECALHO_AUTO_FISCALIZACAO_BASE64 !== 'undefined'
+            ? CABECALHO_AUTO_FISCALIZACAO_BASE64
+            : await obterBase64Cabecalho();
+
+        const enderecoAutuadoStr = `${campos.rua_autuado || ''}${campos.rua_autuado && campos.numero_autuado ? ', ' : ''}${campos.numero_autuado || ''}`;
+        const enderecoImovelStr = `${campos.rua_imovel || ''}${campos.rua_imovel && campos.numero_imovel ? ', ' : ''}${campos.numero_imovel || ''}`;
+
+        let htmlAssinaturas = '';
+        if (campos.tem_testemunhas === 'Sim') {
+            htmlAssinaturas = `
+            <br><br>
+            <p align="center" style="margin: 0;">
+                ________________________________________________<br>
+                ${nomeFiscal}<br>
+                Matrícula: ${matriculaFiscal}
+            </p>
+            <br><br>
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td width="50%" align="center" valign="top">
+                        ____________________________________<br>
+                        Testemunha 1<br>
+                        ${campos.nome_testemunha_1 || ''}<br>
+                        CPF: ${campos.cpf_testemunha_1 || ''}
+                    </td>
+                    <td width="50%" align="center" valign="top">
+                        ____________________________________<br>
+                        Testemunha 2<br>
+                        ${campos.nome_testemunha_2 || ''}<br>
+                        CPF: ${campos.cpf_testemunha_2 || ''}
+                    </td>
+                </tr>
+            </table>
+            <br><br>`;
+        } else {
+            htmlAssinaturas = `
+            <br><br>
+            <p align="center" style="margin: 0;">
+                ________________________________________________<br>
+                ${nomeFiscal}<br>
+                Matrícula: ${matriculaFiscal}
+            </p>
+            <br><br>`;
+        }
+
+        const htmlPreview = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
+        
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">AUTO DE INFRAÇÃO- N°${numSequencial}</p>
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">Fiscalização Ambiental</p>
+        <p align="right" style="margin: 0;">Divinópolis - MG &nbsp;&nbsp; ${dataAssinatura}</p>
+        <br>
+        
+        ${campos.tipo_documento_referencia ? `
+        <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black; margin-bottom: 20px;">
+            <tr>
+                <td width="50%" style="border: 1px solid black; padding: 8px;">Processo Administrativo n° ${campos.processo_administrativo || ''}</td>
+                <td width="50%" style="border: 1px solid black; padding: 8px;">${campos.tipo_documento_referencia} - Nº ${campos.numero_documento_referencia || ''}</td>
+            </tr>
+        </table>` : `
+        <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black; margin-bottom: 20px;">
+            <tr>
+                <td style="border: 1px solid black; padding: 8px;">Processo Administrativo n° ${campos.processo_administrativo || ''}</td>
+            </tr>
+        </table>`}
+        
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Informações do Autuado</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 8px;">Nome do(a) autuado(a): ${campos.nome}</td>
+                <td style="border: 1px solid black; padding: 8px;">CNPJ/CPF: ${campos.cpf_contribuinte}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Endereço: ${enderecoAutuadoStr}</td>
+                <td style="border: 1px solid black; padding: 7px;">Bairro: ${campos.bairro_autuado}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Município: ${campos.municipio_autuado}</td>
+                <td style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_autuado}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Local da Autuação</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Endereço: ${enderecoImovelStr}</td>
+                <td style="border: 1px solid black; padding: 7px;">Bairro: ${campos.bairro}</td>
+            </tr>
+            <tr>
+                ${campos.inscricao ? `
+                <td width="50%" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel}</td>
+                <td width="50%" style="border: 1px solid black; padding: 7px;">Inscrição: ${campos.inscricao}</td>
+                ` : `
+                <td colspan="2" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel}</td>
+                `}
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Informações da Infração</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            ${(campos.data || campos.hora_infracao) ? `
+            <tr>
+                ${campos.data ? `<td ${campos.hora_infracao ? 'width="50%"' : 'colspan="2"'} style="border: 1px solid black; padding: 7px;">Data: ${dataFormatada}</td>` : ''}
+                ${campos.hora_infracao ? `<td ${campos.data ? 'width="50%"' : 'colspan="2"'} style="border: 1px solid black; padding: 7px;">Hora: ${campos.hora_infracao}</td>` : ''}
+            </tr>` : ''}
+            ${campos.reincidente ? `
+            <tr>
+                <td colspan="2" style="border: 1px solid black; padding: 7px;">Reincidente ? ${campos.reincidente}</td>
+            </tr>` : ''}
+            <tr>
+                <td colspan="2" style="border: 1px solid black; padding: 7px; text-align: justify;">Descrição/Fato Constitutivo da infração: ${campos.irregularidades || ''}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Dispositivo(s) legal(is) transgredido(s):</strong></p>
+        <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse;">
+            <tr>
+                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">${campos.dispositivos || ''}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>PENALIDADE(S):</strong></p>
+        <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">${campos.penalidades || ''}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Processo Administrativo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste. A defesa e documentos deverão ser encaminhados pelo link:<br>
+        <a href="https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200" target="_blank" style="color: blue; text-decoration: none;">https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200</a></p>
+
+        <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
+
+        ${htmlAssinaturas}
+
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black; margin-top: 40px;">
+            <tr>
+                <td width="75%" valign="top" style="border: 1px solid black; padding: 7px;">
+                    <p style="margin: 0;">Assinatura do Autuado:</p>
+                    <br><br><br>
+                </td>
+                <td width="25%" valign="top" style="border: 1px solid black; padding: 7px;">
+                    <p style="margin: 0;">Ciente em:</p>
+                    <br><br>
+                    <p style="margin: 0; text-align: center;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</p>
+                </td>
+            </tr>
+        </table>
+        
+        <p align="center" style="margin-top: 50px;">Divinópolis - MG</p>
+        `;
+
+        const editor = document.getElementById('editor-texto');
+        if (editor) editor.innerHTML = htmlPreview;
+
+        // Abre o modal do editor
+        const modal = document.getElementById('modal-editor-documento');
+        if (modal) modal.style.display = 'flex';
+
+    } catch (error) {
+        console.error('Erro ao gerar Auto de Infração Ambiental:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
+        alert('Ocorreu um erro ao gerar o Auto de Infração Ambiental: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+        if (btnSalvarForm) {
+            btnSalvarForm.textContent = oldTexto;
+            btnSalvarForm.disabled = false;
+        }
+    }
+}
+
+// --- GERADOR DE AUTO DE FISCALIZAÇÃO / MEIO AMBIENTE (WYSIWYG) ---
+async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
+    if (!categoriaAtual) return;
+    const campos = {};
+    let todosPreenchidos = true;
+
+    categoriaAtual.campos.forEach(campo => {
+        if (campo.tipo === 'file') return;
+        const input = document.getElementById(`campo-${campo.nome}`);
+        let valor = input ? input.value.trim() : '';
+
+        if (campo.obrigatorio && !valor) {
+            todosPreenchidos = false;
+            if (input) input.style.borderColor = '#ef4444';
+        } else if (input) {
+            input.style.borderColor = '#e2e8f0';
+        }
+        campos[campo.nome] = valor || '';
+    });
+
+    if (!todosPreenchidos) {
+        alert(`Preencha os dados obrigatórios do Auto de Fiscalização / Meio Ambiente antes de gerar o documento.`);
+        return;
+    }
+
+    const btnSalvarForm = document.querySelector('#modal-produtividade .btn-salvar');
+    const oldTexto = btnSalvarForm ? btnSalvarForm.textContent : 'Gerar Documento';
+    if (btnSalvarForm) {
+        btnSalvarForm.textContent = 'Carregando...';
+        btnSalvarForm.disabled = true;
+    }
+
+    let numSequencial = null;
+    try {
+        numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
+
+        const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
+        rascunhoDocumento = {
+            id: rascunho.id,
+            numero_sequencial: rascunho.numero_sequencial,
+            categoria_id: categoriaAtual.id,
+            campos: campos
+        };
+
+        const { data: { user } } = await getAuthUser();
+        let nomeFiscal = 'Nome do Fiscal';
+        let matriculaFiscal = 'XXXXXXXX';
+        if (user) {
+            const { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('full_name, matricula')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
+        }
+
+        const imgBase64 = typeof CABECALHO_AUTO_FISCALIZACAO_BASE64 !== 'undefined'
+            ? CABECALHO_AUTO_FISCALIZACAO_BASE64
+            : await obterBase64Cabecalho();
+
+        const hoje = new Date();
+        const diaHoje = String(hoje.getDate()).padStart(2, '0');
+        const mesHoje = String(hoje.getMonth() + 1).padStart(2, '0');
+        const anoHoje = hoje.getFullYear();
+        const dataAssinatura = `${diaHoje}/${mesHoje}/${anoHoje}`;
+
+        const enderecoAutuadoStr = `${campos.rua_autuado || ''}${campos.rua_autuado && campos.numero_autuado ? ', ' : ''}${campos.numero_autuado || ''}`;
+        const enderecoImovelStr = `${campos.rua_imovel || ''}${campos.rua_imovel && campos.numero_imovel ? ', ' : ''}${campos.numero_imovel || ''}`;
+
+        let htmlAssinaturas = '';
+        if (campos.tem_testemunhas === 'Sim') {
+            htmlAssinaturas = `
+            <br><br>
+            <p align="center" style="margin: 0;">
+                ________________________________________________<br>
+                ${nomeFiscal}<br>
+                Matrícula: ${matriculaFiscal}
+            </p>
+            <br><br>
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td width="50%" align="center" valign="top">
+                        ____________________________________<br>
+                        Testemunha 1<br>
+                        ${campos.nome_testemunha_1 || ''}<br>
+                        CPF: ${campos.cpf_testemunha_1 || ''}
+                    </td>
+                    <td width="50%" align="center" valign="top">
+                        ____________________________________<br>
+                        Testemunha 2<br>
+                        ${campos.nome_testemunha_2 || ''}<br>
+                        CPF: ${campos.cpf_testemunha_2 || ''}
+                    </td>
+                </tr>
+            </table>
+            <br><br>`;
+        } else {
+            htmlAssinaturas = `
+            <br><br>
+            <p align="center" style="margin: 0;">
+                ________________________________________________<br>
+                ${nomeFiscal}<br>
+                Matrícula: ${matriculaFiscal}
+            </p>
+            <br><br>`;
+        }
+
+        const htmlTemplate = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
+        
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">AUTO DE FISCALIZAÇÃO- N°${numSequencial}</p>
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">Fiscalização Ambiental</p>
+        <p align="right" style="margin: 0;">Divinópolis - MG &nbsp;&nbsp; ${dataAssinatura}</p>
+        
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Informações do Autuado</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 8px;">Nome do(a) autuado(a): ${campos.nome}</td>
+                <td style="border: 1px solid black; padding: 8px;">CNPJ/CPF: ${campos.cpf_contribuinte}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Endereço: ${enderecoAutuadoStr}</td>
+                <td style="border: 1px solid black; padding: 7px;">Bairro: ${campos.bairro_autuado}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Município: ${campos.municipio_autuado}</td>
+                <td style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_autuado}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Local da Autuação</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Endereço: ${enderecoImovelStr}</td>
+                <td style="border: 1px solid black; padding: 7px;">Bairro: ${campos.bairro}</td>
+            </tr>
+            <tr>
+                ${campos.inscricao ? `
+                <td width="50%" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel}</td>
+                <td width="50%" style="border: 1px solid black; padding: 7px;">Inscrição: ${campos.inscricao}</td>
+                ` : `
+                <td colspan="2" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel}</td>
+                `}
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Irregularidades Constatadas:</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 7px; text-align: justify;">${campos.irregularidades}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Dispositivo(s) legal(is) transgredido(s):</strong></p>
+        <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse;">
+            <tr>
+                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">${campos.dispositivos}</td>
+            </tr>
+        </table>
+
+        <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse; margin-top: 20px;">
+            <tr>
+                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">O não cumprimento do presente auto de fiscalização, sujeitará o infrator às penalidades previstas no <strong>${campos.penalidades}</strong>.</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Processo Administrativo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste. A defesa e documentos deverão ser encaminhados pelo link:<br>
+        <a href="https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200" target="_blank" style="color: blue; text-decoration: none;">https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200</a></p>
+
+        <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
+
+        ${htmlAssinaturas}
+
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black; margin-top: 40px;">
+            <tr>
+                <td width="75%" valign="top" style="border: 1px solid black; padding: 7px;">
+                    <p style="margin: 0;">Assinatura do Autuado:</p>
+                    <br><br><br>
+                </td>
+                <td width="25%" valign="top" style="border: 1px solid black; padding: 7px;">
+                    <p style="margin: 0;">Ciente em:</p>
+                    <br><br>
+                    <p style="margin: 0; text-align: center;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</p>
+                </td>
+            </tr>
+        </table>
+        
+        <p align="center" style="margin-top: 50px;">Divinópolis - MG</p>
+        `;
+
+        const editor = document.getElementById('editor-texto');
+        editor.innerHTML = htmlTemplate;
+
+        document.getElementById('modal-produtividade').classList.remove('ativo');
+        document.getElementById('modal-editor-documento').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Erro ao preparar documento:', error);
+        if (numSequencial && categoriaAtual && categoriaAtual.id) {
+            try {
+                await supabaseClient.rpc('devolver_numero_sequencial', {
+                    p_numero: numSequencial.toString(),
+                    p_categoria_id: categoriaAtual.id.toString(),
+                    p_ano: new Date().getFullYear()
+                });
+            } catch (e) { }
+        }
+        alert('Ocorreu um erro ao gerar o documento. O número sequencial foi revertido. Tente novamente.');
+    } finally {
+        if (btnSalvarForm) {
+            btnSalvarForm.textContent = oldTexto;
+            btnSalvarForm.disabled = false;
+        }
+    }
+}
+
+// --- GERADOR DE DOCX (AUTO DE FISCALIZACAO AMBIENTAL) ---
+async function gerarDocxAutoFiscalizacaoAmbiental(campos, numSequencial, nomeFiscal, matriculaFiscal, dataAssinatura) {
+    const base64 = typeof MODELO_AUTO_INFRACAO_AMBIENTAL_BASE64 !== 'undefined' ? MODELO_AUTO_INFRACAO_AMBIENTAL_BASE64 : '';
+    if (!base64) throw new Error('Modelo DOCX para Auto de Fiscalização Ambiental não encontrado.');
+
+    const zip = await JSZip.loadAsync(base64, { base64: true });
+    let docXml = await zip.file('word/document.xml').async('string');
+
+    // Mudar "Auto de Infração" para "Auto de Fiscalização"
+    docXml = docXml.replace(/AUTO DE INFRAÇÃO/g, 'AUTO DE FISCALIZAÇÃO');
+    docXml = docXml.replace(/Auto de Infração/g, 'Auto de Fiscalização');
+    docXml = docXml.replace(/auto de infração/g, 'auto de fiscalização');
+
+    let dataInfracaoFormatada = '';
+    if (campos.data) {
+        const p = campos.data.split('-');
+        if (p.length === 3) dataInfracaoFormatada = `${p[2]}/${p[1]}/${p[0]}`;
+    }
+
+    const enderecoAutuado = `${campos.rua_autuado || ''}${campos.numero_autuado ? ', ' + campos.numero_autuado : ''}`;
+    const enderecoImovel = `${campos.rua_imovel || ''}${campos.numero_imovel ? ', ' + campos.numero_imovel : ''}`;
+
+    let textoReferencia = '';
+    if (campos.tipo_documento_referencia) {
+        const numRef = campos.numero_documento_referencia || '';
+        textoReferencia = `${campos.tipo_documento_referencia}${numRef ? ' nº ' + numRef : ''}`;
+    }
+
+    const processo = campos.processo_administrativo || '';
+    const prazoDefesa = campos.prazo_defesa || '20';
+
+    let idxEndereco = 0;
+    let idxBairro = 0;
+    let idxCep = 0;
+    let paragrafoTestemunha1 = '';
+
+    docXml = docXml.replace(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g, (match) => {
+        const texto = textoDoParagrafo(match);
+
+        if (texto.trim() === 'Endereço:' || texto === 'Endereço: ') {
+            idxEndereco++;
+            const novo = idxEndereco === 1 ? `Endereço: ${enderecoAutuado}` : `Endereço: ${enderecoImovel}`;
+            return substituirTextoParagrafo(match, novo);
+        }
+        if (texto.trim() === 'Bairro:' || texto === 'Bairro: ') {
+            idxBairro++;
+            const novo = idxBairro === 1 ? `Bairro: ${campos.bairro_autuado || ''}` : `Bairro: ${campos.bairro || ''}`;
+            return substituirTextoParagrafo(match, novo);
+        }
+        if (texto.trim() === 'CEP:' || texto === 'CEP: ') {
+            idxCep++;
+            const novo = idxCep === 1 ? `CEP: ${campos.cep_autuado || ''}` : `CEP: ${campos.cep_imovel || ''}`;
+            return substituirTextoParagrafo(match, novo);
+        }
+        if (texto.includes('N°XXXX/20XX')) {
+            return substituirTextoParagrafo(match, texto.replace('N°XXXX/20XX', `N°${numSequencial}`));
+        }
+        if (texto.includes('XX/XX/20XX')) {
+            return substituirTextoParagrafo(match, texto.replace('XX/XX/20XX', dataAssinatura));
+        }
+        if (texto.includes('Processo Administrativo n°')) {
+            return substituirTextoParagrafo(match, `Processo Administrativo n° ${processo}`);
+        }
+        if (texto.includes('Auto de Fiscalização xxxx (Campo Opcional)')) {
+            return substituirTextoParagrafo(match, textoReferencia || texto);
+        }
+        if (texto.includes('Nome do(a) autuado(a):')) {
+            return substituirTextoParagrafo(match, `Nome do(a) autuado(a): ${campos.nome || ''}`);
+        }
+        if (texto.includes('CNPJ/CPF:')) {
+            return substituirTextoParagrafo(match, `CNPJ/CPF: ${campos.cpf_contribuinte || ''}`);
+        }
+        if (texto.includes('Município:')) {
+            return substituirTextoParagrafo(match, `Município: ${campos.municipio_autuado || ''}`);
+        }
+        if (texto.includes('Inscrição:')) {
+            if (!campos.inscricao) return removerParagrafo(match);
+            return substituirTextoParagrafo(match, `Inscrição: ${campos.inscricao}`);
+        }
+        if (texto === 'Data:' || texto === 'Data: ') {
+            if (!campos.data) return removerParagrafo(match);
+            return substituirTextoParagrafo(match, `Data: ${dataInfracaoFormatada}`);
+        }
+        if (texto === 'Hora:' || texto === 'Hora: ') {
+            if (!campos.hora_infracao) return removerParagrafo(match);
+            return substituirTextoParagrafo(match, `Hora: ${campos.hora_infracao}`);
+        }
+        if (texto.includes('Reincidente')) {
+            if (!campos.reincidente) return removerParagrafo(match);
+            return substituirTextoParagrafo(match, `Reincidente: ${campos.reincidente}`);
+        }
+        if (texto.includes('Descrição/Fato Constitutivo')) {
+            return substituirTextoParagrafo(match, `Descrição/Fato Constitutivo da infração: ${campos.irregularidades || ''}`);
+        }
+        if (texto.includes('Dispositivo(s) legal(is) transgredido(s)')) {
+            return substituirTextoParagrafo(match, `Dispositivo(s) legal(is) transgredido(s): ${campos.dispositivos || ''}`);
+        }
+        if (texto.includes('PENALIDADE(S)')) {
+            return substituirTextoParagrafo(match, `PENALIDADE(S): ${campos.penalidades || ''}`);
+        }
+        if (texto.includes('prazo máximo de')) {
+            let novo = texto.replace(/Processo Administrativo n°\s*XXXX/, `Processo Administrativo n° ${processo}`);
+            novo = novo.replace(/(\d+)\s*dias/, `${prazoDefesa} dias`);
+            return substituirTextoParagrafo(match, novo);
+        }
+        if (texto.includes('Testemunha 1 NOME')) {
+            if (campos.tem_testemunhas !== 'Sim') return removerParagrafo(match);
+            paragrafoTestemunha1 = match;
+            return substituirTextoParagrafo(match, `Testemunha 1 ${campos.nome_testemunha_1 || ''}`);
+        }
+        if (texto.includes('CPF :')) {
+            if (campos.tem_testemunhas !== 'Sim') return removerParagrafo(match);
+            return substituirTextoParagrafo(match, `CPF: ${campos.cpf_testemunha_1 || ''}`);
+        }
+        if (texto === 'NOME') {
+            return substituirTextoParagrafo(match, nomeFiscal || '');
+        }
+        if (texto.includes('Matrícula')) {
+            return substituirTextoParagrafo(match, `Matrícula: ${matriculaFiscal || ''}`);
+        }
+        return match;
+    });
+
+    if (campos.tem_testemunhas === 'Sim' && paragrafoTestemunha1 && (campos.nome_testemunha_2 || campos.cpf_testemunha_2)) {
+        const pTestemunha2 = substituirTextoParagrafo(paragrafoTestemunha1, `Testemunha 2 ${campos.nome_testemunha_2 || ''}`);
+        const pCpf1 = encontrarParagrafos(docXml, t => t.includes('CPF:'));
+        if (pCpf1.length > 0) {
+            const ultimoCpf = pCpf1[pCpf1.length - 1];
+            const pCpf2 = substituirTextoParagrafo(ultimoCpf, `CPF: ${campos.cpf_testemunha_2 || ''}`);
+            docXml = docXml.replace(ultimoCpf, ultimoCpf + pTestemunha2 + pCpf2);
+        } else {
+            docXml = docXml.replace(paragrafoTestemunha1, paragrafoTestemunha1 + pTestemunha2);
+        }
+    }
+
+    zip.file('word/document.xml', docXml);
+    return await zip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+}
+
 // --- GERADOR DE OFÍCIO (WYSIWYG) ---
 async function abrirEditorOficio() {
     if (!categoriaAtual) return;
@@ -5627,6 +6859,16 @@ async function abrirEditorOficio() {
         }
         campos[campo.nome] = valor || '';
     });
+
+    const extraCheckboxes = document.querySelectorAll('.cb-fiscal-extra-ma:checked');
+    if (extraCheckboxes.length > 0) {
+        campos.fiscais_adicionais = Array.from(extraCheckboxes).map(cb => ({
+            id: cb.value,
+            nome: cb.getAttribute('data-nome'),
+            cpf: cb.getAttribute('data-cpf'),
+            matricula: cb.getAttribute('data-matricula')
+        }));
+    }
 
     if (!todosPreenchidos) {
         alert('Preencha os dados obrigatórios do Ofício antes de gerar o documento.');
@@ -5679,7 +6921,7 @@ async function abrirEditorOficio() {
 
         // 2. Prepara HTML do Documento
         const imgBase64 = await obterBase64Cabecalho();
-        const htmlTemplate = `
+        let htmlTemplate = `
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
             <tr>
                 <td align="center">
@@ -5714,14 +6956,34 @@ async function abrirEditorOficio() {
         <p style="margin-bottom: 40px;">
             Atenciosamente,
         </p>
-
-        <div style="margin-top: 60px; text-align: center;">
-            <p style="margin: 0;">_________________________________________</p>
-            <p style="margin: 5px 0 0 0;"><strong>${nomeFiscal}</strong></p>
-            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
-            <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
-        </div>
     `;
+
+        const todosFiscais = [
+            { nome: nomeFiscal, cargo: obterTituloFiscal(), matricula: matriculaFiscal },
+            ...(campos.fiscais_adicionais || []).map(f => ({ nome: f.nome, cargo: 'Fiscal de Meio Ambiente', matricula: f.matricula || 'XXXXXXXX' }))
+        ];
+
+        let assinaturasHtml = '';
+        for (let i = 0; i < todosFiscais.length; i += 3) {
+            const rowFiscais = todosFiscais.slice(i, i + 3);
+            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center;"><tr>';
+            rowFiscais.forEach(f => {
+                assinaturasHtml += `
+                    <td align="center" style="width: 33%; vertical-align: top; padding: 0 5px; text-align: center;">
+                        <p align="center" style="margin: 0; text-align: center;">_________________________________</p>
+                        <p align="center" style="margin: 5px 0 0 0; text-align: center;"><strong>${f.nome}</strong></p>
+                        <p align="center" style="margin: 2px 0 0 0; text-align: center;">${f.cargo}</p>
+                        <p align="center" style="margin: 2px 0 0 0; text-align: center;">Matrícula: ${f.matricula}</p>
+                    </td>
+                `;
+            });
+            for (let j = rowFiscais.length; j < 3; j++) {
+                assinaturasHtml += '<td style="width: 33%;"></td>';
+            }
+            assinaturasHtml += '</tr></table>';
+        }
+        
+        htmlTemplate += assinaturasHtml;
 
         // 3. Exibe Modal
         const editor = document.getElementById('editor-texto');
@@ -5759,7 +7021,7 @@ async function abrirEditorRelatorio() {
     let todosPreenchidos = true;
 
     categoriaAtual.campos.forEach(campo => {
-        if (campo.tipo === 'file') return;
+        if (campo.tipo === 'file' || campo.tipo === 'imagens_com_legenda') return;
         const input = document.getElementById(`campo-${campo.nome}`);
         let valor = input ? input.value.trim() : '';
 
@@ -5771,6 +7033,36 @@ async function abrirEditorRelatorio() {
         }
         campos[campo.nome] = valor || '';
     });
+
+    const extraCheckboxes = document.querySelectorAll('.cb-fiscal-extra-ma:checked');
+    if (extraCheckboxes.length > 0) {
+        campos.fiscais_adicionais = Array.from(extraCheckboxes).map(cb => ({
+            id: cb.value,
+            nome: cb.getAttribute('data-nome'),
+            cpf: cb.getAttribute('data-cpf'),
+            matricula: cb.getAttribute('data-matricula')
+        }));
+    }
+
+    // Coleta imagens com legenda (lê como base64)
+    campos.imagensExtras = [];
+    const itensImg = document.querySelectorAll('.item-imagem-legenda');
+    for (const item of itensImg) {
+        const fileInput = item.querySelector('.imagem-arquivo');
+        const legendaInput = item.querySelector('.imagem-legenda');
+        if (fileInput && fileInput.files && fileInput.files[0] && legendaInput && legendaInput.value) {
+            const file = fileInput.files[0];
+            const base64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+            campos.imagensExtras.push({
+                base64: base64,
+                legenda: legendaInput.value.trim()
+            });
+        }
+    }
 
     if (!todosPreenchidos) {
         alert('Preencha os dados obrigatórios do Relatório antes de gerar o documento.');
@@ -5787,7 +7079,7 @@ async function abrirEditorRelatorio() {
     let numSequencial = null;
     try {
         // Gera número sequencial online e cria rascunho no banco para reservar o número
-        numSequencial = await gerarNumeroSequencial('1.5');
+        numSequencial = await gerarNumeroSequencial(categoriaAtual.id);
 
         // Salva rascunho sem pontuação e sem anexo (reserva o número)
         const rascunho = await criarRascunhoControleProcessual(campos, categoriaAtual.id, numSequencial);
@@ -5821,7 +7113,67 @@ async function abrirEditorRelatorio() {
         const dataFormatada = `${String(diaHoje).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${anoHoje}`;
 
         const imgBase64 = await obterBase64Cabecalho();
-        const htmlTemplate = `
+        let htmlTemplate = '';
+
+        if (categoriaAtual.id === '1.5.MA') {
+            const enderecoImovelStr = `${campos.rua_imovel || ''}${campos.rua_imovel && campos.numero_imovel ? ', ' : ''}${campos.numero_imovel || ''}`;
+            const dataAssinatura = `${String(diaHoje).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${anoHoje}`;
+
+            let imagensExtrasHtml = '';
+            if (campos.imagensExtras && campos.imagensExtras.length > 0) {
+                imagensExtrasHtml += '<div style="margin-top: 30px; text-align: center; font-size: 0;">';
+                campos.imagensExtras.forEach(img => {
+                    imagensExtrasHtml += `
+                    <div style="display: inline-block; width: 48%; margin: 1%; vertical-align: top; font-size: 12pt;">
+                        <img src="${img.base64}" title="Clique para redimensionar" onclick="const p = prompt('Largura da imagem (ex: 100% para linha inteira, 48% para lado a lado):', this.parentElement.style.width); if(p) this.parentElement.style.width = p;" style="max-width: 100%; height: auto; border: 1px solid #ccc; display: block; margin: 0 auto; cursor: pointer;">
+                        <p style="font-size: 11pt; margin-top: 10px; font-style: italic;">${img.legenda}</p>
+                    </div>`;
+                });
+                imagensExtrasHtml += '</div>';
+            }
+
+            let dataVistoriaFmt = campos.data_vistoria ? campos.data_vistoria.split('-').reverse().join('/') : 'XX/XX/XXXX';
+            let horaVistoriaFmt = campos.hora_vistoria || '__:__';
+
+            htmlTemplate = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+            <tr>
+                <td align="center">
+                    <img src="${imgBase64}" width="650" style="width: 490pt; height: auto; display: block;">
+                </td>
+            </tr>
+        </table>
+        
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">RELATÓRIO FISCAL N°${numSequencial}</p>
+        <p align="center" style="font-weight: bold; font-size: 14pt; margin: 0;">Fiscalização Ambiental</p>
+        <p align="right" style="margin: 0;">Divinópolis - MG &nbsp;&nbsp; ${dataAssinatura}</p>
+        
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Local da Autuação</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 7px;">Endereço: ${enderecoImovelStr}</td>
+                <td style="border: 1px solid black; padding: 7px;">Bairro: ${campos.bairro || ''}</td>
+            </tr>
+            <tr>
+                ${campos.inscricao ? `
+                <td width="50%" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel || ''}</td>
+                <td width="50%" style="border: 1px solid black; padding: 7px;">Inscrição: ${campos.inscricao || ''}</td>
+                ` : `
+                <td colspan="2" style="border: 1px solid black; padding: 7px;">CEP: ${campos.cep_imovel || ''}</td>
+                `}
+            </tr>
+        </table>
+
+        ${campos.origem_tipo ? `<p style="margin-top: 20px; text-align: justify;"><strong>${campos.origem_tipo}${campos.origem_numero ? ' N°' : ''}: </strong> ${campos.origem_numero || ''}</p>` : ''}
+        
+        <p style="margin-top: 10px; text-align: justify;"><strong>Assunto: </strong> ${campos.assunto || ''}</p>
+
+        <p style="margin-top: 20px; text-align: justify;">Em atendimento à denúncia acima descrita, estivemos no local no dia ${dataVistoriaFmt}, às ${horaVistoriaFmt}h para averiguar a situação. Em vistoria, verificamos ${campos.verificacao || ''}</p>
+        
+        ${imagensExtrasHtml}
+            `;
+        } else {
+            htmlTemplate = `
         <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
             <tr>
                 <td align="center">
@@ -5854,14 +7206,34 @@ async function abrirEditorRelatorio() {
             <p style="margin: 0;"></p>
             <p style="margin: 0;">${dataPorExtenso}</p>
         </div>
-
-        <div style="margin-top: 60px; text-align: center;">
-            <p style="margin: 0;">_________________________________________</p>
-            <p style="margin: 5px 0 0 0;"><strong>${nomeFiscal}</strong></p>
-            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
-            <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
-        </div>
     `;
+        }
+
+        const todosFiscais = [
+            { nome: nomeFiscal, cargo: obterTituloFiscal(), matricula: matriculaFiscal },
+            ...(campos.fiscais_adicionais || []).map(f => ({ nome: f.nome, cargo: 'Fiscal de Meio Ambiente', matricula: f.matricula || 'XXXXXXXX' }))
+        ];
+
+        let assinaturasHtml = '';
+        for (let i = 0; i < todosFiscais.length; i += 3) {
+            const rowFiscais = todosFiscais.slice(i, i + 3);
+            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center;"><tr>';
+            rowFiscais.forEach(f => {
+                assinaturasHtml += `
+                    <td align="center" style="width: 33%; vertical-align: top; padding: 0 5px; text-align: center;">
+                        <p align="center" style="margin: 0; text-align: center;">_________________________________</p>
+                        <p align="center" style="margin: 5px 0 0 0; text-align: center;"><strong>${f.nome}</strong></p>
+                        <p align="center" style="margin: 2px 0 0 0; text-align: center;">${f.cargo}</p>
+                        <p align="center" style="margin: 2px 0 0 0; text-align: center;">Matrícula: ${f.matricula}</p>
+                    </td>
+                `;
+            });
+            for (let j = rowFiscais.length; j < 3; j++) {
+                assinaturasHtml += '<td style="width: 33%;"></td>';
+            }
+            assinaturasHtml += '</tr></table>';
+        }
+        htmlTemplate += assinaturasHtml;
 
         // 3. Exibe Modal
         const editor = document.getElementById('editor-texto');
@@ -6146,7 +7518,7 @@ async function abrirEditorCertidao() {
         <div style="text-align: center; margin-top: 60px;">
             <p style="margin: 0;">_________________________________________</p>
             <p style="margin: 5px 0 0 0; font-weight: bold;">${nomeFiscal}</p>
-            <p style="margin: 2px 0 0 0;">Fiscal de Posturas</p>
+            <p style="margin: 2px 0 0 0;">${obterTituloFiscal()}</p>
             <p style="margin: 2px 0 0 0;">Matrícula: ${matriculaFiscal}</p>
         </div>
     `;
@@ -6261,7 +7633,7 @@ async function abrirEditorDividaAtiva() {
         </tr>
 
         <tr>
-            <td style="line-height: 1.5; padding: 10px;">
+            <td style="line-height: 1.5; padding: 7px;">
                 <strong>Autuado(a):</strong> ${campos.nome || ''}
                 <strong>cpf/cnpj:</strong> ${campos.cpf || '_________________'}<br>
                 <strong>Advogado:</strong> ${campos.advogado || 'Não Apresentou'}</strong><br>
@@ -6270,7 +7642,7 @@ async function abrirEditorDividaAtiva() {
         </tr>
 
         <tr>
-            <td style="padding: 10px; font-weight: bold;">
+            <td style="padding: 7px; font-weight: bold;">
                 Data de Geração: ${new Date().toLocaleDateString('pt-BR')}<br>
                 Agente Fiscal Responsável: ${nomeFiscal} - Matrícula: ${matriculaFiscal}
             </td>
@@ -6332,10 +7704,13 @@ async function baixarDocumentoWord() {
         if (catId === '1.2') {
             tipoNome = 'Auto_Infracao';
             catNome = 'Auto de Infração';
+        } else if (catId === '1.9') {
+            tipoNome = 'Auto_Fiscalizacao_MA';
+            catNome = 'Auto de Fiscalização - MA';
         } else if (catId === '1.4') {
             tipoNome = 'Oficio';
             catNome = 'Ofício';
-        } else if (catId === '1.5') {
+        } else if (catId === '1.5' || catId === '1.5.MA') {
             tipoNome = 'Relatorio';
             catNome = 'Relatório Fiscal';
         } else if (catId === '1.7') {
@@ -6350,14 +7725,34 @@ async function baixarDocumentoWord() {
         }
 
         // Adiciona as Metatags da Microsoft Office para interpretar o HTML como Word Nativo
+        let fontStyle = "@page { size: 21cm 29.7cm; margin: 2cm } body { font-family: 'Times New Roman'; font-size: 12pt } table { font-family: 'Times New Roman'; font-size: 12pt }";
+        if (catId === '1.9') {
+            fontStyle = "@page { size: 21cm 29.7cm; margin: 2cm } body { font-family: 'Calibri', sans-serif; font-size: 10pt } table { font-family: 'Calibri', sans-serif; font-size: 10pt } td { font-size: 10pt }";
+        }
+
         const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' " +
             "xmlns:w='urn:schemas-microsoft-com:office:word' " +
             "xmlns='http://www.w3.org/TR/REC-html40'>" +
             "<head><meta charset='utf-8'><title>" + catNome + "</title>" +
-            "<style> @page { size: 21cm 29.7cm; margin: 2cm } body { font-family: 'Times New Roman'; font-size: 12pt } </style>" +
+            "<style> " + fontStyle + " </style>" +
             "</head><body>";
         const footer = "</body></html>";
-        const sourceHTML = header + editor.innerHTML + footer;
+        
+        // Clona para injetar tamanhos reais nas imagens para o MS Word
+        const tempEditor = editor.cloneNode(true);
+        const origImgs = editor.querySelectorAll('img');
+        const cloneImgs = tempEditor.querySelectorAll('img');
+        for(let i=0; i<origImgs.length; i++) {
+            if (origImgs[i].clientWidth > 0) {
+                cloneImgs[i].setAttribute('width', origImgs[i].clientWidth);
+                cloneImgs[i].setAttribute('height', origImgs[i].clientHeight);
+                cloneImgs[i].style.width = origImgs[i].clientWidth + 'px';
+                cloneImgs[i].style.height = origImgs[i].clientHeight + 'px';
+                // Remove restrições de max-width para o Word
+                cloneImgs[i].style.maxWidth = 'none';
+            }
+        }
+        const sourceHTML = header + tempEditor.innerHTML + footer;
 
         // Usa o número do rascunho se existir; senão, gera um novo (compatibilidade com Ofício)
         const numSeqDownload = (rascunhoDocumento && rascunhoDocumento.categoria_id === catId)
@@ -6365,13 +7760,22 @@ async function baixarDocumentoWord() {
             : await gerarNumeroSequencial(catId);
         let nomeArquivo = `${tipoNome}_${numSeqDownload.replace('/', '-')}`;
 
-        // Tratamento para caracteres UTF-8 no Blob MS-WORD
-        const blobDoc = new Blob(['\ufeff', sourceHTML], { type: 'text/html;charset=utf-8' });
+        let blobDoc = null;
+        let extensao = '.doc';
+
+        if (rascunhoDocumento && rascunhoDocumento.blobDocx) {
+            blobDoc = rascunhoDocumento.blobDocx;
+            extensao = '.docx';
+        } else {
+            // Tratamento para caracteres UTF-8 no Blob MS-WORD HTML
+            blobDoc = new Blob(['\ufeff', sourceHTML], { type: 'text/html;charset=utf-8' });
+        }
+
         const url = URL.createObjectURL(blobDoc);
         const fileDownload = document.createElement("a");
         document.body.appendChild(fileDownload);
         fileDownload.href = url;
-        fileDownload.download = `${nomeArquivo}.doc`;
+        fileDownload.download = `${nomeArquivo}${extensao}`;
         fileDownload.click();
         document.body.removeChild(fileDownload);
         URL.revokeObjectURL(url);
@@ -6410,11 +7814,11 @@ async function baixarDocumentoWord() {
         await carregarHistorico(); // atualiza pontuação, gráfico e meta em tempo real
 
         if (usouRascunho) {
-            if (catId === '1.2') {
+            if (catId === '1.2' || catId === '1.2.MA') {
                 alert('Registros salvos com sucesso!\n\n• Auto de Infração (5 pontos)\n• Autos de Infração expedidos (30 pontos)\n\n 35 pontos salvos no total!');
             } else if (catId === '1.4') {
                 alert('Registros salvos com sucesso!\n\n• Ofício (10 pontos)\n• Elaboração de Ofícios (15 pontos)\n\n 25 pontos salvos no total!');
-            } else if (catId === '1.5') {
+            } else if (catId === '1.5' || catId === '1.5.MA') {
                 alert('Registros salvos com sucesso!\n\n• Relatório (10 pontos)\n• Elaboração de Relatório Fiscal (50 pontos)\n\n 60 pontos salvos no total!');
             } else if (catId === '11') {
                 alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${numSeqDownload}`);
@@ -6449,7 +7853,7 @@ async function carregarNPAIHome() {
     const { data: registros, error } = await supabaseClient
         .from('controle_processual')
         .select('*')
-        .in('categoria_id', ['1.1', '1.2'])
+        .in('categoria_id', ['1.1', '1.2', '1.2.MA', '1.9'])
         .eq('user_id', user.id);
 
     if (error || !registros) {
@@ -6608,7 +8012,7 @@ function reordenarModalVencidos(criterio) {
     } else {
         // Modal padrão (AI ou sem NP reclassificados)
         const ordenados = [...registrosModalOriginal].sort(ordenar);
-        const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
+        const tipoDoc = (subAbaAtual === '1.1' || subAbaAtual === 'np-af') ? 'Notificações / AF' : 'Autos de Infração';
         renderizarModalRelatorio(`${tipoDoc} Vencidas`, ordenados, 'vencidos');
     }
 }
@@ -6620,8 +8024,9 @@ function atualizarVisibilidadeBotoesVencidosAtendidos() {
     const role = window.userRoleGlobal || '';
     const roleLower = role.toLowerCase();
     const isFiscalPosturas = roleLower === 'fiscal' || (roleLower.includes('fiscal') && roleLower.includes('postura'));
-    const podeVer = isGerenteOuSuperior(role) || isFiscalPosturas;
-    const abaNPouAI = (subAbaAtual === '1.1' || subAbaAtual === '1.2');
+    const isFiscalMA = roleLower.includes('fiscal') && roleLower.includes('meio') && roleLower.includes('ambiente');
+    const podeVer = isGerenteOuSuperior(role) || isFiscalPosturas || isFiscalMA;
+    const abaNPouAI = (subAbaAtual === '1.1' || subAbaAtual === 'np-af' || subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma');
 
     if (podeVer && abaNPouAI) {
         container.style.display = 'flex';
@@ -6890,8 +8295,8 @@ function renderizarModalVencidosComAI(titulo, comAI, semAI, aisVinculados) {
 
 function usuarioDeveVerApenasSeusRegistros() {
     const role = (window.userRoleGlobal || '').toLowerCase();
-    const isFiscalPosturas = role === 'fiscal' || (role.includes('fiscal') && role.includes('postura'));
-    return isFiscalPosturas && !isGerenteOuSuperior(window.userRoleGlobal);
+    const isFiscal = role.includes('fiscal');
+    return isFiscal && !isGerenteOuSuperior(window.userRoleGlobal);
 }
 
 function pertenceAoFiscalLogado(reg) {
@@ -6928,7 +8333,7 @@ async function abrirModalVencidos() {
     });
 
     // Se for aba NP, verificar se há AIs vinculados às NPs vencidas
-    if (subAbaAtual === '1.1' && vencidos.length > 0) {
+    if ((subAbaAtual === '1.1' || subAbaAtual === 'np-af') && vencidos.length > 0) {
         const numerosNP = vencidos
             .map(r => {
                 let val = r.campos && r.campos.n_notificacao ? r.campos.n_notificacao.trim() : '';
@@ -6968,7 +8373,7 @@ async function abrirModalVencidos() {
         }
     }
 
-    const tipoDoc = subAbaAtual === '1.1' ? 'Notificações Preliminares' : 'Autos de Infração';
+    const tipoDoc = (subAbaAtual === '1.1' || subAbaAtual === 'np-af') ? 'Notificações / AF' : 'Autos de Infração';
     renderizarModalRelatorio(`${tipoDoc} Vencidas`, vencidos, 'vencidos');
 }
 
@@ -6988,7 +8393,7 @@ function abrirModalAtendidos() {
         const resp = reg.campos && reg.campos.resposta_fiscal ? reg.campos.resposta_fiscal.trim() : '';
         if (resp !== '') return true;
 
-        if (subAbaAtual === '1.1') {
+        if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') {
             const venc = reg.campos && reg.campos.data_vencimento ? reg.campos.data_vencimento.trim() : '';
             if (venc) {
                 const partes = venc.split('-');
@@ -7003,7 +8408,7 @@ function abrirModalAtendidos() {
         return false;
     });
 
-    if (subAbaAtual === '1.1') {
+    if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') {
         renderizarModalRespondidosNP(efetivados);
     } else {
         const tipoDoc = 'Autos de Infração';
@@ -7131,8 +8536,8 @@ function renderizarModalPendentes(lista) {
     if (modalExistente) modalExistente.remove();
 
     let tituloPendentes = 'Documentos Pendentes';
-    if (subAbaAtual === '1.1') tituloPendentes = 'Notificações Preliminares Pendentes';
-    else if (subAbaAtual === '1.2') tituloPendentes = 'Autos de Infração Pendentes';
+    if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') tituloPendentes = 'Notificações e AFs Pendentes';
+    else if (subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma') tituloPendentes = 'Autos de Infração Pendentes';
 
     const modal = document.createElement('div');
     modal.id = 'modal-vencidos-atendidos';
@@ -7361,8 +8766,8 @@ function renderizarModalNaoEfetivados(lista) {
     const total = lista.length;
 
     let tituloNaoEfetivados = 'Documentos Não Efetivados';
-    if (subAbaAtual === '1.1') tituloNaoEfetivados = 'Notificação Preliminar Não Efetivada';
-    else if (subAbaAtual === '1.2') tituloNaoEfetivados = 'Auto de Infração Não Efetivado';
+    if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') tituloNaoEfetivados = 'Notificação / AF Não Efetivado';
+    else if (subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma') tituloNaoEfetivados = 'Auto de Infração Não Efetivado';
 
     const modal = document.createElement('div');
     modal.id = 'modal-vencidos-atendidos';
@@ -7419,9 +8824,10 @@ function renderizarModalNaoEfetivados(lista) {
         `;
     };
 
-    let strSemProsseguimento = subAbaAtual === '1.2' ? '🔴 Autos de Infração Devolvidos Ainda Sem Prosseguimento' : '🔴 Notificações Devolvidas Ainda Sem Prosseguimento';
-    let strComProsseguimento = subAbaAtual === '1.2' ? '⏳ Auto de Infração Devolvido Mas Com Prosseguimento' : '⏳ Notificação Devolvida Mas Com Prosseguimento';
-    let strComResposta = subAbaAtual === '1.2' ? '✅ Autos de Infração Devolvidos Que Tiveram Prosseguimento E Já Tiveram Resposta Do Fiscal' : '✅ Notificações Devolvidas Que Tiveram Prosseguimento E Já Tiveram Resposta Do Fiscal';
+    let isAutoInf = subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma';
+    let strSemProsseguimento = isAutoInf ? '🔴 Autos de Infração Devolvidos Ainda Sem Prosseguimento' : '🔴 Notificações Devolvidas Ainda Sem Prosseguimento';
+    let strComProsseguimento = isAutoInf ? '⏳ Auto de Infração Devolvido Mas Com Prosseguimento' : '⏳ Notificação Devolvida Mas Com Prosseguimento';
+    let strComResposta = isAutoInf ? '✅ Autos de Infração Devolvidos Que Tiveram Prosseguimento E Já Tiveram Resposta Do Fiscal' : '✅ Notificações Devolvidas Que Tiveram Prosseguimento E Já Tiveram Resposta Do Fiscal';
 
     let tabelasHTML = '';
     tabelasHTML += montarTabelaNaoEfetivados(semProsseguimento, 'secao-sem-prosseguimento', strSemProsseguimento, '#dc2626', '#fef2f2', 'sem_prosseguimento');
@@ -7857,7 +9263,7 @@ function renderizarModalRelatorio(titulo, registros, tipo) {
         const nome = (reg.campos && reg.campos.nome) || '-';
         const bairro = (reg.campos && reg.campos.bairro) || '-';
         const fiscal = reg.fiscal_nome || '-';
-        const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+        const numSeq = ((subAbaAtual === '1.1' || subAbaAtual === 'np-af') && reg.campos && (reg.numero_sequencial || reg.campos.n_notificacao))
             ? reg.campos.n_notificacao
             : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
         const dataVenc = reg.campos && reg.campos.data_vencimento
@@ -7992,7 +9398,7 @@ async function baixarRelatorioModal(tipoDownload) {
     }
 
     const titulo = tipoModalAtual === 'vencidos' ? 'Relatório de Vencidos' : 'Relatório de Atendidos';
-    const tipoDoc = subAbaAtual === '1.1' ? 'Notificação Preliminar' : 'Auto de Infração';
+    const tipoDoc = (subAbaAtual === '1.1' || subAbaAtual === 'np-af') ? 'Notificação / AF' : 'Auto de Infração';
     const hoje = new Date().toLocaleDateString('pt-BR');
 
     let htmlRelatorio = '';
@@ -8063,7 +9469,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
                 h3 { font-size: 15px; margin-top: 25px; margin-bottom: 10px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
                 table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                th { background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; }
                 td { border: 1px solid #cbd5e1; padding: 8px; }
                 tr:nth-child(even) { background: #f8fafc; }
                 .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
@@ -8128,7 +9534,7 @@ async function baixarRelatorioModal(tipoDownload) {
         </body>
         </html>
         `;
-    } else if (tipoModalAtual === 'vencidos' && subAbaAtual === '1.1') {
+    } else if (tipoModalAtual === 'vencidos' && (subAbaAtual === '1.1' || subAbaAtual === 'np-af')) {
         const comAI = vencidosComAIGlobal || [];
         const semAI = vencidosSemAIGlobal || [];
         const semAIComDilacao = [];
@@ -8190,7 +9596,7 @@ async function baixarRelatorioModal(tipoDownload) {
                 h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
                 h3 { font-size: 15px; margin-top: 25px; margin-bottom: 10px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
                 table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                th { background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; }
                 td { border: 1px solid #cbd5e1; padding: 8px; }
                 tr:nth-child(even) { background: #f8fafc; }
                 .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
@@ -8242,7 +9648,7 @@ async function baixarRelatorioModal(tipoDownload) {
             const nome = (reg.campos && reg.campos.nome) || '-';
             const bairro = (reg.campos && reg.campos.bairro) || '-';
             const fiscal = reg.fiscal_nome || '-';
-            const numSeq = (subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+            const numSeq = ((subAbaAtual === '1.1' || subAbaAtual === 'np-af') && reg.campos && (reg.numero_sequencial || reg.campos.n_notificacao))
                 ? reg.campos.n_notificacao
                 : (reg.numero_sequencial || (reg.campos && reg.campos.n_notificacao) || '-');
             const dataVenc = reg.campos && reg.campos.data_vencimento
@@ -8276,7 +9682,7 @@ async function baixarRelatorioModal(tipoDownload) {
                     h1 { font-size: 18px; margin-bottom: 6px; }
                     h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
                     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                    th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                    th { background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; }
                     td { border: 1px solid #cbd5e1; padding: 8px; }
                     tr:nth-child(even) { background: #f8fafc; }
                     .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
@@ -8308,10 +9714,10 @@ async function baixarRelatorioModal(tipoDownload) {
     } else if (tipoModalAtual === 'pendentes') {
         let tituloPendentes = 'Relatório de Documentos Pendentes';
         let tituloH1 = 'Relatório de Documentos Pendentes';
-        if (subAbaAtual === '1.1') {
+        if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') {
             tituloPendentes = 'Notificações Preliminares Pendentes';
             tituloH1 = 'Relatório de Notificações Preliminares Pendentes';
-        } else if (subAbaAtual === '1.2') {
+        } else if (subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma') {
             tituloPendentes = 'Autos de Infração Pendentes';
             tituloH1 = 'Relatório de Autos de Infração Pendentes';
         }
@@ -8357,13 +9763,13 @@ async function baixarRelatorioModal(tipoDownload) {
         };
 
         const theadHtml = `<tr>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">#</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; min-width: 95px;">N°</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Nome / Identificador</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Fiscal</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Período Pendente</th>
-            <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">AR</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">#</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; min-width: 95px;">N°</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Nome / Identificador</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Fiscal</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Período Pendente</th>
+            <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">AR</th>
         </tr>`;
 
         htmlRelatorio = `
@@ -8377,7 +9783,7 @@ async function baixarRelatorioModal(tipoDownload) {
                     h1 { font-size: 18px; margin-bottom: 6px; }
                     h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
                     table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                    th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                    th { background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; }
                     td { border: 1px solid #cbd5e1; padding: 8px; }
                     tr:nth-child(even) { background: #f8fafc; }
                     .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
@@ -8400,10 +9806,10 @@ async function baixarRelatorioModal(tipoDownload) {
     } else if (tipoModalAtual === 'nao_efetivados') {
         let tituloNaoEfetivados = 'Relatório de Não Efetivados';
         let tituloH1 = 'Relatório de Registros Devolvidos (Não Efetivados)';
-        if (subAbaAtual === '1.1') {
+        if (subAbaAtual === '1.1' || subAbaAtual === 'np-af') {
             tituloNaoEfetivados = 'Notificação Preliminar Não Efetivada';
             tituloH1 = 'Relatório de Notificações Preliminares Não Efetivadas';
-        } else if (subAbaAtual === '1.2') {
+        } else if (subAbaAtual === '1.2' || subAbaAtual === '1.2.MA' || subAbaAtual === 'ai-ma') {
             tituloNaoEfetivados = 'Auto de Infração Não Efetivado';
             tituloH1 = 'Relatório de Autos de Infração Não Efetivados';
         }
@@ -8466,17 +9872,17 @@ async function baixarRelatorioModal(tipoDownload) {
         const htmlTabelaPdf = (titulo, subLista, tipo) => {
             if (subLista.length === 0) return '';
             let theadHtml = `<tr>
-                <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">#</th>
-                <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; min-width: 95px;">N°</th>
-                <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Nome / Identificador</th>
-                <th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Fiscal</th>`;
+                <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">#</th>
+                <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; min-width: 95px;">N°</th>
+                <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Nome / Identificador</th>
+                <th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Fiscal</th>`;
 
             if (tipo === 'sem_prosseguimento') {
-                theadHtml += `<th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th>`;
+                theadHtml += `<th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th>`;
             } else if (tipo === 'com_prosseguimento') {
-                theadHtml += `<th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data de receb. (Admin)</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Venc.</th>`;
+                theadHtml += `<th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data Registrada</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data de receb. (Admin)</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data Venc.</th>`;
             } else if (tipo === 'com_resposta') {
-                theadHtml += `<th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Data Receb.</th><th style="background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1;">Resposta</th>`;
+                theadHtml += `<th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Histórico (Admin)</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Data Receb.</th><th style="background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1;">Resposta</th>`;
             }
             theadHtml += `</tr>`;
 
@@ -8503,7 +9909,7 @@ async function baixarRelatorioModal(tipoDownload) {
                     h2 { font-size: 14px; color: #64748b; margin-bottom: 20px; font-weight: normal; }
                     h3 { font-size: 15px; color: #334155; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; }
                     table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                    th { background: #0f172a; color: white; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                    th { background: #0f172a; color: white; padding: 7px; text-align: left; border: 1px solid #cbd5e1; }
                     td { border: 1px solid #cbd5e1; padding: 8px; }
                     tr:nth-child(even) { background: #f8fafc; }
                     .footer { margin-top: 20px; font-size: 11px; color: #64748b; text-align: right; }
@@ -8565,7 +9971,7 @@ async function baixarRelatorioModal(tipoDownload) {
 
         for (const reg of registrosModalAtual) {
             const anexos = coletarTodosAnexos(reg);
-            const numSeq = ((subAbaAtual === '1.1' && reg.campos && reg.campos.n_notificacao)
+            const numSeq = (((subAbaAtual === '1.1' || subAbaAtual === 'np-af') && reg.campos && (reg.numero_sequencial || reg.campos.n_notificacao))
                 ? reg.campos.n_notificacao
                 : (reg.numero_sequencial || reg.id)).toString().replace(/[\\\\/:*?"<>|]/g, '-');
             for (let i = 0; i < anexos.length; i++) {

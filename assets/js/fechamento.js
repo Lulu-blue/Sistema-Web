@@ -182,7 +182,7 @@ async function executarFechamentoAnual() {
             headers.push("Fiscal", "Data", "Pontos");
 
             // Colunas extras para NP (1.1) e Auto de Infração (1.2)
-            const isNPOuAuto = catId === '1.1' || catId === '1.2';
+            const isNPOuAuto = catId === '1.1' || catId === '1.2' || catId === '1.9';
             if (isNPOuAuto) {
                 headers.push("Data de recebimento pelo proprietário", "Data de Vencimento", "Histórico Administrativo", "Resposta do Fiscal");
             }

@@ -55,6 +55,7 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
 | **Admin** | Acesso total, incluindo gerenciamento de usuários |
 | **Fiscal** | Produtividade, Histórico Pessoal, Histórico Geral, Tarefas |
 | **Fiscal de Posturas** | Mesmas permissões do Fiscal (variação de cargo) |
+| **Fiscal de Meio Ambiente** | Produtividade ambiental, acesso à categoria 1.2.MA (Auto de Infração Ambiental), Tarefas |
 | **Gerente Fiscal** | Histórico Geral, Bairros, visão de gestão de fiscais |
 | **Gerente de Posturas** | Projetos, Bairros, Tarefas, Calendário de Eventos |
 | **Gerente de Regularização Ambiental** | Gestão de equipe ambiental (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares), gestão do Consórcio, Tarefas, Calendário |
@@ -563,8 +564,9 @@ O dashboard foi reorganizado em **layout de duas colunas** para melhor aproveita
 ```text
 Secretário(a) (nível 4)
  ├── Diretor(a) de Meio Ambiente (nível 3)
- │    ├── Gerente de Posturas (nível 2) → Fiscal (nível 1)
+ │    ├── Gerente de Posturas (nível 2) → Fiscal de Posturas (nível 1)
  │    └── Gerente de Regularização Ambiental (nível 2)
+ │         ├── Fiscal de Meio Ambiente (nível 1)
  │         ├── Equipe Ambiental (nível 1)
  │         ├── Consórcio (nível 1)
  │         └── Analista do Consórcio (nível 1)
@@ -891,8 +893,8 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 - **Calendário de Projetos**: Mini-calendário mensal com dias destacados conforme eventos, lista dos 3 próximos eventos e navegação rápida para aba Projetos
 
 ### Gestão Hierárquica Completa
-- Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal, Gerente RA/Equipe Ambiental/Consórcio/Analistas
-- Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal), Verde (Equipe), Âmbar (Consórcio), Âmbar claro (Analistas do Consórcio)
+- Hierarquia visual: Secretário → Diretor → Gerente de Posturas/Fiscal de Posturas, Gerente RA/Fiscal de Meio Ambiente/Equipe Ambiental/Consórcio/Analistas
+- Cores por cargo: Roxo (Diretor), Verde escuro (Ger. Posturas), Azul (Ger. RA), Laranja (Fiscal de Posturas), Azul claro (Fiscal de Meio Ambiente), Verde (Equipe), Âmbar (Consórcio), Âmbar claro (Analistas do Consórcio)
 - Modal combinado para Fiscais: Estatísticas de tarefas + relatório de produtividade lado a lado
 
 ### Nova Hierarquia: Cuidado Animal
@@ -968,7 +970,7 @@ Todas as dependências são mantidas localmente para garantir funcionamento **of
 ## 🆕 Atualizações Recentes (22/04/2026)
 
 ### Relatório de Produtividade do Fiscal no Modal de Estatísticas (Visão do Secretário)
-- **Disponibilidade exclusiva para Secretário(a)**: ao clicar em um **Fiscal de Posturas** na hierarquia visual, o modal de estatísticas (`abrirEstatisticasFuncionario`) agora carrega automaticamente o **Relatório de Produtividade** completo do fiscal logo abaixo das seções de Tarefas e Eventos.
+- **Disponibilidade exclusiva para Secretário(a)**: ao clicar em um **Fiscal de Posturas** ou **Fiscal de Meio Ambiente** na hierarquia visual, o modal de estatísticas (`abrirEstatisticasFuncionario`) agora carrega automaticamente o **Relatório de Produtividade** completo do fiscal logo abaixo das seções de Tarefas e Eventos.
   - Reutiliza a mesma lógica de dados do relatório fiscal do Gerente (`abrirRelatorioFiscal`), mas renderizado inline dentro do modal de estatísticas.
   - Correção de detecção de cargo: a verificação passou a usar corretamente `window.userRoleGlobal` (antes usava `window.userProfile`, inexistente no projeto).
 
@@ -1173,7 +1175,7 @@ SEMAC/
 - **Tipografia ajustada**: Nome em `14px`, matrícula/e-mail em `12px` — legível sem desperdiçar espaço.
 - **Fotos**: `aspect-ratio: 1` + `object-fit: cover` garantem proporção quadrada sem distorção.
 
-### 📊 Relatório de Produtividade e Limpeza Geral (Fiscal de Posturas)
+### 📊 Relatório de Produtividade e Limpeza Geral (Fiscal de Posturas / Fiscal de Meio Ambiente)
 - **Filtro por mês no relatório**: O relatório agora exibe **apenas os registros do mês referente**, determinado pela regra dos 7 dias (até dia 7 = mês anterior; após dia 7 = mês atual). Registros de outros meses são omitidos automaticamente.
 - **Limpeza Geral inteligente**: O botão "Limpeza Geral" agora afeta **apenas registros de meses anteriores**, mantendo intocados todos os registros do **mês atual** (sem aplicar a regra dos 7 dias).
   - **Controle Processual**: zera a pontuação (`pontuacao = 0`) apenas dos registros com `created_at` de meses passados.

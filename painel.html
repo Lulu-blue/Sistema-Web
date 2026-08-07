@@ -1412,17 +1412,49 @@
                 </div>
 
                 <div class="sub-abas-cp">
-                    <button class="sub-aba-btn active" onclick="mudarSubAbaCP('1.1', this)">NP</button>
-                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.2', this)">Auto Infração</button>
+                    <button class="sub-aba-btn active" onclick="mudarSubAbaCP('np-af', this)">NP/AF</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('ai-ma', this)">Auto Infração</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.3', this)">AR</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.4', this)">Ofício</button>
-                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.5', this)">Relatório de Vistoria</button>
+                    <button class="sub-aba-btn" onclick="mudarSubAbaCP('relatorio-ma', this)">Relatório de Vistoria</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.6', this)">Protocolo</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.7', this)">Réplica</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('1.8', this)">Certidão</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('11', this)">Dívida Ativa</button>
                     <button class="sub-aba-btn" onclick="mudarSubAbaCP('todos', this)">Todos</button>
                 </div>
+
+                <div id="filtro-np-af-container" style="display: none; margin: 10px 0;">
+                    <label style="font-weight: 600; margin-right: 8px; font-size: 14px; color: #475569;">Exibir:</label>
+                    <select id="filtro-np-af" onchange="filtrarHistoricoGeral()"
+                        style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; background: white;">
+                        <option value="todos">Todos</option>
+                        <option value="1.1">Somente Notificação Preliminar (NP)</option>
+                        <option value="1.9">Somente Auto de Fiscalização (AF)</option>
+                    </select>
+                </div>
+
+                <div id="filtro-ai-ma-container" style="display: none; margin: 10px 0;">
+                    <label style="font-weight: 600; margin-right: 8px; font-size: 14px; color: #475569;">Exibir:</label>
+                    <select id="filtro-ai-ma" onchange="filtrarHistoricoGeral()"
+                        style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; background: white;">
+                        <option value="todos">Todos</option>
+                        <option value="1.2">Somente Auto de Infração (AI)</option>
+                        <option value="1.2.MA">Somente Auto de Infração Ambiental (MA-AI)</option>
+                    </select>
+                </div>
+
+                <div id="filtro-relatorio-ma-container" style="display: none; margin: 10px 0;">
+                    <label style="font-weight: 600; margin-right: 8px; font-size: 14px; color: #475569;">Exibir:</label>
+                    <select id="filtro-relatorio-ma" onchange="filtrarHistoricoGeral()"
+                        style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; background: white;">
+                        <option value="todos">Todos</option>
+                        <option value="1.5">Somente Relatório de Vistoria (Posturas)</option>
+                        <option value="1.5.MA">Somente Relatório de Vistoria (Meio Ambiente)</option>
+                    </select>
+                </div>
+
+
 
                 <div class="busca-geral-container" style="display: flex; gap: 10px; align-items: center;">
                     <div style="flex: 1; position: relative;">
@@ -2980,19 +3012,22 @@
             </div>
 
             <div class="modal-body"
-                style="flex: 1; overflow-y: auto; background: #e2e8f0; padding: 20px; display: flex; justify-content: center;">
+                style="flex: 1; overflow-y: auto; background: #e2e8f0; padding: 20px; display: flex; justify-content: center; align-items: flex-start;">
                 <!-- Papel A4 -->
                 <div id="editor-texto" contenteditable="true" style="
-                    background: white; 
-                    width: 210mm; 
-                    min-height: 297mm; 
-                    padding: 20mm; 
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+                    background: white;
+                    width: 210mm;
+                    min-height: 297mm;
+                    height: auto;
+                    padding: 20mm;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                     outline: none;
                     font-family: 'Times New Roman', Times, serif;
                     font-size: 12pt;
                     line-height: 1.5;
                     color: black;
+                    box-sizing: border-box;
+                    margin-bottom: 20px;
                 ">
                 </div>
             </div>
@@ -3495,6 +3530,7 @@
     <script src="assets/js/protecao.js"></script>
     <script src="assets/js/cabecalho_img.js"></script>
     <script src="assets/js/cloudinary-storage.js"></script>
+    <script src="assets/js/modelo_auto_infracao_ambiental.js"></script>
     <script src="assets/js/produtividade.js"></script>
     <!-- GeoJSON dos bairros e município (carregado como JS para evitar CORS em file://) -->
     <script src="assets/geojson/bairros_divinopolis_geojson.js"></script>
