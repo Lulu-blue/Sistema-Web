@@ -55,7 +55,7 @@ O sistema possui **10+ cargos distintos** com permissões específicas:
 | **Admin** | Acesso total, incluindo gerenciamento de usuários |
 | **Fiscal** | Produtividade, Histórico Pessoal, Histórico Geral, Tarefas |
 | **Fiscal de Posturas** | Mesmas permissões do Fiscal (variação de cargo) |
-| **Fiscal de Meio Ambiente** | Produtividade ambiental, acesso à categoria 1.2.MA (Auto de Infração Ambiental), Tarefas |
+| **Fiscal de Meio Ambiente** | Produtividade ambiental, acesso à categoria 1.2.MA (Auto de Infração Ambiental) e 1.5.MA (Relatório de Vistoria), Tarefas |
 | **Gerente Fiscal** | Histórico Geral, Bairros, visão de gestão de fiscais |
 | **Gerente de Posturas** | Projetos, Bairros, Tarefas, Calendário de Eventos |
 | **Gerente de Regularização Ambiental** | Gestão de equipe ambiental (Eng. Agrônomos, Eng. Civis, Analistas, Auxiliares), gestão do Consórcio, Tarefas, Calendário |
@@ -281,6 +281,12 @@ O sistema possui **36 categorias** divididas em Grupos (Cores diferentes):
   - **Novo registro**: o campo é pré-preenchido com o horário atual, mas pode ser alterado.
   - **Edição**: o campo exibe a data/hora salva originalmente e permite modificação dentro do período de ajuste.
   - Fora do período de 7 dias, o campo fica oculto e o sistema usa a data atual automaticamente.
+- **Relatório de Vistoria Dinâmico e Fotográfico (1.5.MA)**: 
+  - O formulário foi otimizado exclusivamente para Vistoria Ambiental. Todos os dados punitivos e de "Autuado" foram removidos para evitar ambiguidades legais.
+  - Substituição da lógica de Infrações por um sistema de seleção condicional de **Origem** (Protocolo, Denúncia ou Comunicação Interna).
+  - Implementação de um gerador dinâmico de texto narrativo que utiliza a data e a hora da vistoria preenchida para formar a frase de início no documento final.
+  - **Sistema de Injeção de Evidências Fotográficas**: A interface permite upload ilimitado de imagens com legenda via FileReader no frontend. O sistema de geração de Documento as compila em uma Galeria no PDF Final.
+  - **Auto-Ajuste de Imagens Lado a Lado (WYSIWYG)**: As imagens são injetadas no editor ocupando 48% da tela para um alinhamento "lado a lado" perfeito. Além disso, possuem um mecanismo de **click-to-resize**: ao clicar na imagem dentro do editor, o usuário escolhe a largura desejada, e as dimensões em pixels (calculadas no DOM dinamicamente) são congeladas e hardcoded para bypassar bugs de renderização no `.doc` do Microsoft Word.
 
 ---
 

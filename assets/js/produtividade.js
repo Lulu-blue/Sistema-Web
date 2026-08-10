@@ -133,7 +133,7 @@ const CATEGORIAS = [
         pontos: 5,
         destaque: true,
         campos: [
-            { nome: 'tipo_documento_referencia', label: 'Tipo de Documento de Referência', tipo: 'select', obrigatorio: false, opcoes: ['Auto de Fiscalização', 'REDS/Boletim de Ocorrência'] },
+            { nome: 'tipo_documento_referencia', label: 'Tipo de Documento de Referência', tipo: 'select', obrigatorio: false, opcoes: ['Auto de Fiscalização', 'REDS/Boletim de Ocorrência', 'Denúncia'] },
             { nome: 'numero_documento_referencia', label: 'Nº do Documento de Referência', tipo: 'text', obrigatorio: false, condicional: { campo: 'tipo_documento_referencia', valor_diferente: '' } },
             { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome do(a) autuado(a)', tipo: 'text', obrigatorio: true },
@@ -3389,7 +3389,7 @@ function removerOpcaoCustom(catId, campoNome, valor) {
 }
 // --- GERENCIAMENTO DE IMAGENS COM LEGENDA ---
 let contadorImagensLegenda = 0;
-window.adicionarCampoImagemLegenda = function() {
+window.adicionarCampoImagemLegenda = function () {
     contadorImagensLegenda++;
     const container = document.getElementById('lista-imagens-legenda');
     if (!container) return;
@@ -3413,7 +3413,7 @@ window.adicionarCampoImagemLegenda = function() {
     container.appendChild(div);
 };
 
-window.removerCampoImagemLegenda = function(id) {
+window.removerCampoImagemLegenda = function (id) {
     const el = document.getElementById(`item-imagem-legenda-${id}`);
     if (el) el.remove();
 };
@@ -4018,7 +4018,7 @@ function renderizarTabelaGeral(registros, categoriaId, statusExtra = '') {
                 case '1.2': nomeCategoria = 'Controle Processual: Auto Infração'; break;
                 case '1.3': nomeCategoria = 'Controle Processual: AR'; break;
                 case '1.4': nomeCategoria = 'Controle Processual: Ofício'; break;
-                case '1.5': 
+                case '1.5':
                 case '1.5.MA': nomeCategoria = 'Controle Processual: Relatório de Vistoria'; break;
                 case '1.6': nomeCategoria = 'Controle Processual: Protocolo'; break;
                 case '1.7': nomeCategoria = 'Réplica'; break;
@@ -5297,7 +5297,7 @@ async function abrirRelatorio() {
         const catDef = CATEGORIAS.find(c => c.id === catId);
 
         const temNumero = cat.registros.some(r => r.numero_sequencial);
-        const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco && !( (catId === '1.1' || catId === '1.9') && c.nome === 'n_notificacao' )) || [];
+        const camposDef = catDef?.campos?.filter(c => c.tipo !== 'file' && c.tipo !== 'date' && !c.ignorarNoBanco && !((catId === '1.1' || catId === '1.9') && c.nome === 'n_notificacao')) || [];
 
         let headerCols = '';
         if (temNumero) headerCols += '<th style="min-width: 95px;">N°</th>';
@@ -5827,7 +5827,7 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
         for (const fiscalExtra of camposAtualizados.fiscais_adicionais) {
             // 1. Criar registro de Ofício (1.4 - 10 pts) em registros_produtividade via RPC (Evita duplicar no histórico geral)
             const camposOficioExtra = { ...camposAtualizados, n_oficio: rascunhoDocumento.numero_sequencial, fiscal_nome_original: fiscalExtra.nome };
-            
+
             const { error: errCpExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
                 p_tabela: 'registros_produtividade',
                 p_user_id: fiscalExtra.id,
@@ -5844,7 +5844,7 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
             // 2. Criar registro de Elaboração de Ofícios (8 - 15 pts) em registros_produtividade via RPC
             const hoje = new Date();
             const dataAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-            
+
             const { error: errProdExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
                 p_tabela: 'registros_produtividade',
                 p_user_id: fiscalExtra.id,
@@ -5868,7 +5868,7 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
         for (const fiscalExtra of camposAtualizados.fiscais_adicionais) {
             // 1. Criar registro de Relatório (1.5.MA - 10 pts) em registros_produtividade via RPC
             const camposRelatorioExtra = { ...camposAtualizados, n_relatorio: rascunhoDocumento.numero_sequencial, fiscal_nome_original: fiscalExtra.nome };
-            
+
             const { error: errCpExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
                 p_tabela: 'registros_produtividade',
                 p_user_id: fiscalExtra.id,
@@ -5884,7 +5884,7 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
             // 2. Criar registro de Elaboração de Relatório (7 - 50 pts) em registros_produtividade via RPC
             const hoje = new Date();
             const dataAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-            
+
             const { error: errProdExtra } = await supabaseClient.rpc('inserir_registro_equipe', {
                 p_tabela: 'registros_produtividade',
                 p_user_id: fiscalExtra.id,
@@ -6982,7 +6982,7 @@ async function abrirEditorOficio() {
             }
             assinaturasHtml += '</tr></table>';
         }
-        
+
         htmlTemplate += assinaturasHtml;
 
         // 3. Exibe Modal
@@ -7737,12 +7737,12 @@ async function baixarDocumentoWord() {
             "<style> " + fontStyle + " </style>" +
             "</head><body>";
         const footer = "</body></html>";
-        
+
         // Clona para injetar tamanhos reais nas imagens para o MS Word
         const tempEditor = editor.cloneNode(true);
         const origImgs = editor.querySelectorAll('img');
         const cloneImgs = tempEditor.querySelectorAll('img');
-        for(let i=0; i<origImgs.length; i++) {
+        for (let i = 0; i < origImgs.length; i++) {
             if (origImgs[i].clientWidth > 0) {
                 cloneImgs[i].setAttribute('width', origImgs[i].clientWidth);
                 cloneImgs[i].setAttribute('height', origImgs[i].clientHeight);
