@@ -964,6 +964,37 @@ function abrirFormulario(categoria) {
                 extraAttr = ` maxlength="18" placeholder="CPF ou CNPJ" oninput="let v=this.value.replace(/\\D/g,''); if(v.length<=11){ v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); } else { v=v.replace(/^(\\d{2})(\\d)/,'$1.$2'); v=v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/,'$1.$2.$3'); v=v.replace(/\\.(\\d{3})(\\d)/,'.$1/$2'); v=v.replace(/(\\d{4})(\\d)/,'$1-$2'); } this.value=v;"`;
             }
             inputHTML = `<input type="${campo.tipo}" id="campo-${campo.nome}" ${campo.obrigatorio ? 'required' : ''} ${extraAttr}>`;
+
+            if ((campo.nome === 'nome_testemunha_1' || campo.nome === 'nome_testemunha_2') && (categoria.id === '1.2.MA' || categoria.id === '1.9')) {
+                const isT1 = campo.nome === 'nome_testemunha_1';
+                inputHTML = `
+                    <select id="sel_fiscal_t${isT1 ? 1 : 2}" style="margin-bottom: 8px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" onchange="
+                        const opt = this.options[this.selectedIndex];
+                        const nomeInput = document.getElementById('campo-${campo.nome}');
+                        const cpfInput = document.getElementById('campo-cpf_testemunha_${isT1 ? 1 : 2}');
+                        if (this.value) {
+                            nomeInput.value = opt.getAttribute('data-nome');
+                            if (cpfInput) {
+                                cpfInput.value = opt.getAttribute('data-cpf');
+                                let v = cpfInput.value.replace(/\\D/g,'');
+                                if(v.length<=11){ v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d)/,'$1.$2'); v=v.replace(/(\\d{3})(\\d{1,2})/,'$1-$2'); }
+                                cpfInput.value = v;
+                            }
+                            nomeInput.readOnly = true;
+                            nomeInput.style.backgroundColor = '#f1f5f9';
+                            if (cpfInput) { cpfInput.readOnly = true; cpfInput.style.backgroundColor = '#f1f5f9'; }
+                        } else {
+                            nomeInput.value = '';
+                            if (cpfInput) cpfInput.value = '';
+                            nomeInput.readOnly = false;
+                            nomeInput.style.backgroundColor = '';
+                            if (cpfInput) { cpfInput.readOnly = false; cpfInput.style.backgroundColor = ''; }
+                        }
+                    ">
+                        <option value="">Preencher Manualmente / Outra</option>
+                    </select>
+                ` + inputHTML;
+            }
         }
 
         grupo.innerHTML = `
@@ -1082,6 +1113,30 @@ function abrirFormulario(categoria) {
     } else {
         btnSalvarForm.textContent = 'Salvar';
         btnSalvarForm.onclick = () => salvarRegistro();
+    }
+
+    if (categoria.id === '1.2.MA' || categoria.id === '1.9') {
+        supabaseClient.from('profiles').select('id, full_name, cpf')
+            .ilike('role', '%fiscal%meio ambiente%')
+            .eq('ativo', true)
+            .then(res => {
+                const fiscais = res.data || [];
+                ['sel_fiscal_t1', 'sel_fiscal_t2'].forEach(idSel => {
+                    const sel = document.getElementById(idSel);
+                    if (sel) {
+                        fiscais.forEach(f => {
+                            if (f.id !== window.userIdGlobal) {
+                                const opt = document.createElement('option');
+                                opt.value = f.id;
+                                opt.textContent = f.full_name;
+                                opt.setAttribute('data-nome', f.full_name);
+                                opt.setAttribute('data-cpf', f.cpf || '');
+                                sel.appendChild(opt);
+                            }
+                        });
+                    }
+                });
+            });
     }
 
     aplicarCamposCondicionais();
@@ -6443,8 +6498,6 @@ async function abrirEditorAutoInfracaoAmbiental() {
                 </td>
             </tr>
         </table>
-        
-        <p align="center" style="margin-top: 50px;">Divinópolis - MG</p>
         `;
 
         const editor = document.getElementById('editor-texto');
@@ -6667,8 +6720,6 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
                 </td>
             </tr>
         </table>
-        
-        <p align="center" style="margin-top: 50px;">Divinópolis - MG</p>
         `;
 
         const editor = document.getElementById('editor-texto');
