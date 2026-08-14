@@ -10060,6 +10060,264 @@ async function baixarRelatorioModal(tipoDownload) {
     }
 }
 
+// --- LÓGICA DA BUSCA PROFUNDA EM PDFs ---
+async function abrirBuscaProfunda() {
+    Swal.fire({
+        title: 'Busca Profunda em Documentos',
+        html: `
+            <div style="text-align:left; font-size:14px; margin-bottom:15px; color:#64748b;">
+                Selecione as categorias que deseja buscar (a busca vai verificar informações no banco e varrer PDFs).
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; font-size:13px; text-align:left;">
+                <label><input type="checkbox" id="chk-cat-todas" checked onchange="document.querySelectorAll('.chk-cat').forEach(c => c.disabled = this.checked)"> <b>Todas as Categorias</b></label>
+                <label><input type="checkbox" class="chk-cat" value="1.1" disabled> Notificação Preliminar (1.1)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.9" disabled> Auto de Fiscalização (1.9)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.2" disabled> Auto Infração - Posturas (1.2)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.2.MA" disabled> Auto Infração - Ambiental (1.2.MA)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.5" disabled> Relatório Vistoria (1.5)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.5.MA" disabled> Relatório Vistoria Ambiental (1.5.MA)</label>
+                <label><input type="checkbox" class="chk-cat" value="1.7" disabled> Certidão (1.7)</label>
+            </div>
+            <input type="text" id="input-busca-profunda" class="swal2-input" placeholder="Palavras-chave (separe por vírgula p/ buscar várias)">
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Iniciar Busca',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#4f46e5',
+        preConfirm: () => {
+            const termo = document.getElementById('input-busca-profunda').value.trim();
+            const chkTodas = document.getElementById('chk-cat-todas').checked;
+            let categorias = [];
+            if (!chkTodas) {
+                document.querySelectorAll('.chk-cat:checked').forEach(chk => categorias.push(chk.value));
+            }
+            if (!termo) {
+                Swal.showValidationMessage('Digite um termo para buscar');
+                return false;
+            }
+            if (!chkTodas && categorias.length === 0) {
+                Swal.showValidationMessage('Selecione pelo menos uma categoria ou marque "Todas"');
+                return false;
+            }
+            return { termo, categorias };
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            executarBuscaProfunda(result.value);
+        }
+    });
+}
+window.abrirBuscaProfunda = abrirBuscaProfunda;
+
+async function executarBuscaProfunda(config) {
+    const termoBusca = config.termo;
+    const categoriasSelecionadas = config.categorias;
+    let aba = typeof subAbaAtual !== 'undefined' ? subAbaAtual : '1.1';
+    
+    Swal.fire({
+        title: 'Preparando Busca...',
+        html: '<b>Buscando registros no banco de dados...</b><br><small>Buscando todos os registros sem limite.</small>',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+        let query = supabaseClient.from('controle_processual').select('*');
+        if (categoriasSelecionadas && categoriasSelecionadas.length > 0) {
+            query = query.in('categoria_id', categoriasSelecionadas);
+        } else if (aba !== 'todos') {
+            // Fallback para aba atual se quiser (mas "Todas" foi marcado)
+            // Como "Todas as Categorias" ignora a aba visual atual, não precisamos filtrar.
+        }
+        // Buscando todos os registros através de blocos (paginação)
+        let todosOsRegistros = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            Swal.update({ html: `<b>Buscando registros no banco de dados...</b><br><small>Carregados: ${todosOsRegistros.length}</small>` });
+            const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1);
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                todosOsRegistros = todosOsRegistros.concat(data);
+                offset += pageSize;
+                if (data.length < pageSize) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+        
+        if (todosOsRegistros.length === 0) {
+            Swal.fire('Nenhum Registro', 'Não há registros nesta aba para pesquisar.', 'info');
+            return;
+        }
+
+        const termosOriginais = termoBusca.split(',').map(t => t.trim()).filter(Boolean);
+        const termosNormalizados = termosOriginais.map(t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+        const registrosEncontrados = [];
+        
+        let i = 0;
+        const total = todosOsRegistros.length;
+        
+        for (const reg of todosOsRegistros) {
+            i++;
+            if (i % 5 === 0) {
+                Swal.update({ html: `<b>Analisando registro ${i} de ${total}...</b><br><small>Verificando PDF/DB</small>`});
+            }
+
+            let countJSON = 0;
+            let countPDF = 0;
+
+            // 1. Verifica e conta no JSON do banco
+            if (reg.campos) {
+                const strJSON = JSON.stringify(reg.campos).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                termosNormalizados.forEach(t => {
+                    countJSON += (strJSON.split(t).length - 1);
+                });
+            }
+
+            // 2. Verifica e conta dentro do PDF anexo
+            if (reg.campos && reg.campos.anexo_pdf) {
+                const pdfUrl = reg.campos.anexo_pdf;
+                if (pdfUrl.includes('.pdf') || pdfUrl.includes('res.cloudinary.com')) {
+                    try {
+                        const pdfResult = await lerTextoDoPdfUrl(pdfUrl);
+                        const strPDF = pdfResult.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        termosNormalizados.forEach(t => {
+                            countPDF += (strPDF.split(t).length - 1);
+                        });
+                        // Dá uma pausa para o navegador limpar a memória (Garbage Collection)
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    } catch (e) {
+                        // Silenciar erro de leitura (link quebrado, etc)
+                    }
+                }
+            }
+
+            // Considera a maior contagem (evita duplicar contagem se o PDF for igual ao JSON)
+            const maxOcorrencias = Math.max(countJSON, countPDF);
+            
+            if (maxOcorrencias > 0) {
+                reg.ocorrencias_busca = maxOcorrencias;
+                registrosEncontrados.push(reg);
+            }
+        }
+
+        Swal.close();
+        
+        if (registrosEncontrados.length === 0) {
+            Swal.fire('Nenhum resultado', `A palavra "${termoBusca}" não foi encontrada nos documentos verificados.`, 'info');
+        } else {
+            let listaHTML = '<ul style="text-align:left; max-height:250px; overflow-y:auto; margin-top:15px; padding:10px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0; list-style-type:none;">';
+            registrosEncontrados.forEach(r => {
+                let docNum = r.numero_sequencial || (r.campos && (r.campos.n_notificacao || r.campos.n_auto || r.campos.n_ar || r.campos.n_oficio)) || 'Sem Número';
+                listaHTML += `<li style="margin-bottom:8px; font-size:14px; border-bottom:1px solid #e2e8f0; padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                                <div>
+                                    <strong style="color:#0f172a;">${docNum}</strong> (Cat: ${r.categoria_id}) 
+                                    <span style="background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:12px; font-size:11px; margin-left:6px; font-weight:600;">${r.ocorrencias_busca} ocorrências</span><br>
+                                    <span style="font-size:12px; color:#64748b;">Fiscal: ${r.fiscal_nome || 'N/A'}</span>
+                                </div>
+                                <button onclick="abrirDetalhesAdminHist('${r.id}')" style="padding:4px 10px; background:#475569; color:white; border:none; border-radius:4px; font-size:12px; cursor:pointer; min-width:80px; text-align:center;">Visualizar</button>
+                              </li>`;
+            });
+            listaHTML += '</ul>';
+
+            window.resultadosBuscaProfundaTemp = registrosEncontrados;
+
+            Swal.fire({
+                title: 'Busca Concluída',
+                html: `Foram encontrados <b>${registrosEncontrados.length}</b> documentos com a palavra "${termoBusca}".<br>${listaHTML}`,
+                icon: 'success',
+                width: '600px',
+                showCancelButton: true,
+                confirmButtonText: 'Baixar Planilha (Excel)',
+                cancelButtonText: 'Fechar',
+                confirmButtonColor: '#10b981'
+            }).then((res) => {
+                if (res.isConfirmed) {
+                    exportarResultadosBuscaProfunda(termoBusca, window.resultadosBuscaProfundaTemp);
+                }
+            });
+            
+            // Garantir que a tabela e os registros atuais sejam renderizados
+            registrosGeralAtual = registrosEncontrados; // para que o visualizar funcione
+            renderizarTabelaGeral(registrosEncontrados, 'todos', `Resultado da Busca Profunda: "${termoBusca}"`);
+        }
+    } catch (err) {
+        console.error('Erro na Busca Profunda:', err);
+        Swal.fire('Erro', 'Ocorreu um erro ao realizar a busca profunda.', 'error');
+    }
+}
+
+function exportarResultadosBuscaProfunda(termo, registros) {
+    if (!registros || registros.length === 0) return;
+    try {
+        const dados = registros.map(r => ({
+            "Ocorrências": r.ocorrencias_busca || 0,
+            "ID Registro": r.id,
+            "Nº Sequencial (Banco)": r.numero_sequencial || '',
+            "Categoria ID": r.categoria_id,
+            "Nº Documento": (r.campos && (r.campos.n_notificacao || r.campos.n_auto || r.campos.n_ar || r.campos.n_oficio)) || '',
+            "Bairro": r.campos?.bairro || '',
+            "Nome Envolvido": r.campos?.nome || '',
+            "Fiscal": r.fiscal_nome || '',
+            "Data Criação": r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : ''
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dados);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Resultados");
+        XLSX.writeFile(wb, `BuscaProfunda_${termo.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
+    } catch(e) {
+        console.error(e);
+        Swal.fire('Erro', 'Falha ao gerar a planilha Excel', 'error');
+    }
+}
+
+async function lerTextoDoPdfUrl(url) {
+    let loadingTask = null;
+    let pdf = null;
+    try {
+        if (typeof pdfjsLib === 'undefined') {
+            throw new Error('Biblioteca PDF.js não carregada na página.');
+        }
+        
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        loadingTask = pdfjsLib.getDocument(url);
+        pdf = await loadingTask.promise;
+        let numPages = pdf.numPages;
+        let textoCompleto = '';
+
+        const maxPages = numPages > 30 ? 30 : numPages;
+        for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            textoCompleto += pageText + ' ';
+            page.cleanup();
+        }
+        
+        return textoCompleto;
+    } catch (e) {
+        // Ignoramos silenciosamente erros de rede ou PDFs corrompidos 
+        // para não poluir o console do navegador
+        return '';
+    } finally {
+        // CRÍTICO: Garantir que a memória seja liberada MESMO se o PDF estiver corrompido
+        if (pdf) {
+            try { await pdf.destroy(); } catch (err) {}
+        }
+        if (loadingTask) {
+            try { loadingTask.destroy(); } catch (err) {}
+        }
+    }
+}
+
 // Executa quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
     carregarBairrosSistema();

@@ -1468,6 +1468,15 @@
                             onmouseover="this.style.background='#062117'" onmouseout="this.style.background='#0c3e2b'">
                             Filtro
                         </button>
+                        <button id="btn-busca-profunda" onclick="abrirBuscaProfunda()"
+                            style="display: none; padding: 0.55rem 1.2rem; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; align-items: center; gap: 6px; transition: 0.2s; margin-left: 10px;"
+                            onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            Busca Profunda (PDFs)
+                        </button>
                         <div id="painel-filtro-popup"
                             style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:20px; z-index:100; min-width:280px; border:1px solid #e2e8f0;">
                             <div style="margin-bottom:14px;">
@@ -3520,6 +3529,8 @@
 
     <script src="lib/chart.js"></script>
     <script src="lib/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <script src="lib/jszip.min.js"></script>
     <script src="lib/FileSaver.min.js"></script>
     <script src="lib/xlsx.bundle.js"></script>

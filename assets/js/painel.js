@@ -307,6 +307,8 @@ async function carregarDadosIniciais() {
             // CARGOS DE GERÊNCIA (exceto especiais)
             else if (isCargoGerencia) {
                 console.log("DEBUG - Cargo de gerência detectado! Ativando opções.");
+                var btnBuscaProfunda = document.getElementById('btn-busca-profunda');
+                if (btnBuscaProfunda) btnBuscaProfunda.style.display = 'inline-flex';
 
                 // Apenas Gerente (puro) vê menus standalone
                 // Diretor e Secretário têm seus próprios menus estruturados
