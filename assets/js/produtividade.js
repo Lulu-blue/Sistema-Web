@@ -273,6 +273,7 @@ const CATEGORIAS = [
             { nome: 'inscricao', label: 'Inscrição', tipo: 'text', obrigatorio: false },
             { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
             { nome: 'irregularidades', label: 'Irregularidades Constatadas', tipo: 'textarea', obrigatorio: true },
+            { nome: 'providencias', label: 'Providências', tipo: 'textarea', obrigatorio: false },
             { nome: 'dispositivos', label: 'Dispositivo(s) legal(is) transgredido(s)', tipo: 'textarea', obrigatorio: true },
             { nome: 'penalidades', label: 'Penalidades previstas no', tipo: 'text', obrigatorio: true },
             { nome: 'prazo_defesa', label: 'Prazo para defesa (dias)', tipo: 'number', obrigatorio: true },
@@ -6687,6 +6688,13 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
             </tr>
         </table>
 
+        <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Providências:</strong></p>
+        <table width="100%" border="1" cellspacing="0" cellpadding="7" style="border-collapse: collapse; border: 1px solid black;">
+            <tr>
+                <td style="border: 1px solid black; padding: 7px; text-align: justify;">${campos.providencias || ''}</td>
+            </tr>
+        </table>
+
         <p style="margin-top: 20px; margin-bottom: 5px;"><strong>Dispositivo(s) legal(is) transgredido(s):</strong></p>
         <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse;">
             <tr>
@@ -6841,6 +6849,9 @@ async function gerarDocxAutoFiscalizacaoAmbiental(campos, numSequencial, nomeFis
         }
         if (texto.includes('Descrição/Fato Constitutivo')) {
             return substituirTextoParagrafo(match, `Descrição/Fato Constitutivo da infração: ${campos.irregularidades || ''}`);
+        }
+        if (texto.includes('Providências') || texto.includes('Providencias')) {
+            return substituirTextoParagrafo(match, `Providências: ${campos.providencias || ''}`);
         }
         if (texto.includes('Dispositivo(s) legal(is) transgredido(s)')) {
             return substituirTextoParagrafo(match, `Dispositivo(s) legal(is) transgredido(s): ${campos.dispositivos || ''}`);
@@ -10186,6 +10197,7 @@ async function executarBuscaProfunda(config) {
                 if (pdfUrl.includes('.pdf') || pdfUrl.includes('res.cloudinary.com')) {
                     try {
                         const pdfResult = await lerTextoDoPdfUrl(pdfUrl);
+                        reg.texto_pdf_extraido = pdfResult;
                         const strPDF = pdfResult.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                         termosNormalizados.forEach(t => {
                             countPDF += (strPDF.split(t).length - 1);
@@ -10203,17 +10215,21 @@ async function executarBuscaProfunda(config) {
             
             if (maxOcorrencias > 0) {
                 reg.ocorrencias_busca = maxOcorrencias;
+                reg.termos_originais_busca = termosOriginais;
                 registrosEncontrados.push(reg);
             }
         }
 
         Swal.close();
         
+        window.termoBuscaProfundaAtual = termoBusca;
+        window.termosBuscaProfundaOriginais = termosOriginais;
+
         if (registrosEncontrados.length === 0) {
             Swal.fire('Nenhum resultado', `A palavra "${termoBusca}" não foi encontrada nos documentos verificados.`, 'info');
         } else {
             let listaHTML = '<ul style="text-align:left; max-height:250px; overflow-y:auto; margin-top:15px; padding:10px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0; list-style-type:none;">';
-            registrosEncontrados.forEach(r => {
+            registrosEncontrados.forEach((r, idx) => {
                 let docNum = r.numero_sequencial || (r.campos && (r.campos.n_notificacao || r.campos.n_auto || r.campos.n_ar || r.campos.n_oficio)) || 'Sem Número';
                 listaHTML += `<li style="margin-bottom:8px; font-size:14px; border-bottom:1px solid #e2e8f0; padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
                                 <div>
@@ -10221,7 +10237,7 @@ async function executarBuscaProfunda(config) {
                                     <span style="background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:12px; font-size:11px; margin-left:6px; font-weight:600;">${r.ocorrencias_busca} ocorrências</span><br>
                                     <span style="font-size:12px; color:#64748b;">Fiscal: ${r.fiscal_nome || 'N/A'}</span>
                                 </div>
-                                <button onclick="abrirDetalhesAdminHist('${r.id}')" style="padding:4px 10px; background:#475569; color:white; border:none; border-radius:4px; font-size:12px; cursor:pointer; min-width:80px; text-align:center;">Visualizar</button>
+                                <button onclick="abrirVisualizadorBuscaProfunda(${idx})" style="padding:4px 10px; background:#4f46e5; color:white; border:none; border-radius:4px; font-size:12px; cursor:pointer; min-width:100px; text-align:center;">🔍 Grifar & Ver</button>
                               </li>`;
             });
             listaHTML += '</ul>';
@@ -10232,13 +10248,18 @@ async function executarBuscaProfunda(config) {
                 title: 'Busca Concluída',
                 html: `Foram encontrados <b>${registrosEncontrados.length}</b> documentos com a palavra "${termoBusca}".<br>${listaHTML}`,
                 icon: 'success',
-                width: '600px',
+                width: '650px',
+                showDenyButton: true,
                 showCancelButton: true,
-                confirmButtonText: 'Baixar Planilha (Excel)',
+                confirmButtonText: '🔍 Navegar & Grifar (Setinhas)',
+                denyButtonText: '📊 Baixar Planilha (Excel)',
                 cancelButtonText: 'Fechar',
-                confirmButtonColor: '#10b981'
+                confirmButtonColor: '#4f46e5',
+                denyButtonColor: '#10b981'
             }).then((res) => {
                 if (res.isConfirmed) {
+                    abrirVisualizadorBuscaProfunda(0);
+                } else if (res.isDenied) {
                     exportarResultadosBuscaProfunda(termoBusca, window.resultadosBuscaProfundaTemp);
                 }
             });
@@ -10277,6 +10298,331 @@ function exportarResultadosBuscaProfunda(termo, registros) {
         Swal.fire('Erro', 'Falha ao gerar a planilha Excel', 'error');
     }
 }
+
+// --- VISUALIZADOR INTERATIVO DA BUSCA PROFUNDA (GRIFO, NAVEGAÇÃO E DESCARTE) ---
+let indiceVisualizadorBuscaProfunda = 0;
+
+function grifarTexto(texto, termos) {
+    if (!texto || !termos || termos.length === 0) return texto || '';
+    
+    let regexPattern = termos.map(t => {
+        let escaped = String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        escaped = escaped
+            .replace(/a/gi, '[aáàãâäAÁÀÃÂÄ]')
+            .replace(/e/gi, '[eéèêëEÉÈÊË]')
+            .replace(/i/gi, '[iíìîïIÍÌÎÏ]')
+            .replace(/o/gi, '[oóòõôöOÓÒÕÔÖ]')
+            .replace(/u/gi, '[uúùûüUÚÙÛÜ]')
+            .replace(/c/gi, '[cCçÇ]');
+        return escaped;
+    }).join('|');
+
+    try {
+        const re = new RegExp(`(${regexPattern})`, 'gi');
+        return String(texto).replace(re, '<mark style="background:#fef08a; color:#854d0e; font-weight:bold; padding:1px 5px; border-radius:4px; box-shadow:0 0 0 1px #facc15;">$1</mark>');
+    } catch(e) {
+        return texto;
+    }
+}
+
+function extrairTrechosGrifados(texto, termos) {
+    if (!texto || !termos || termos.length === 0) return [];
+    
+    const partes = texto.split(/(?<=[.!?\n])\s+/);
+    const trechos = [];
+    const termosNorm = termos.map(t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    
+    for (const parte of partes) {
+        const parteNorm = parte.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (termosNorm.some(t => parteNorm.includes(t))) {
+            if (parte.trim().length > 3) {
+                trechos.push(parte.trim());
+            }
+        }
+    }
+    return trechos;
+}
+
+function formatarCamposGrifados(campos, termosOriginais) {
+    if (!campos || typeof campos !== 'object') return '<div style="color:#94a3b8;">Nenhum campo disponível.</div>';
+    
+    let html = '<ul style="margin:0; padding-left:16px; list-style-type:disc;">';
+    let temCampo = false;
+    
+    for (const [chave, valor] of Object.entries(campos)) {
+        if (!valor || typeof valor === 'object' || chave === 'anexo_pdf' || chave.startsWith('imagem')) continue;
+        
+        temCampo = true;
+        const valorStr = String(valor);
+        const valorGrifado = grifarTexto(valorStr, termosOriginais);
+        const chaveFormatada = chave.replace(/_/g, ' ').toUpperCase();
+        
+        const contemTermo = termosOriginais.some(t => {
+            const tNorm = String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const vNorm = valorStr.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return vNorm.includes(tNorm);
+        });
+        
+        if (contemTermo) {
+            html += `<li style="margin-bottom:6px; background:#fef9c3; padding:6px 10px; border-radius:6px; border-left:4px solid #eab308; list-style:none; font-size:13px;">
+                        <strong style="color:#854d0e;">${chaveFormatada}:</strong> <span style="color:#1e293b;">${valorGrifado}</span>
+                     </li>`;
+        } else {
+            html += `<li style="margin-bottom:4px; color:#475569; font-size:13px;">
+                        <strong>${chaveFormatada}:</strong> <span>${valorGrifado}</span>
+                     </li>`;
+        }
+    }
+    
+    html += '</ul>';
+    return temCampo ? html : '<div style="color:#94a3b8;">Sem campos de texto.</div>';
+}
+
+function formatarTrechosPdfGrifados(textoPdf, termosOriginais) {
+    if (!textoPdf) {
+        return `
+            <div style="margin-top:16px;">
+                <h5 style="margin:0 0 8px 0; font-size:11px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px;">Texto do PDF:</h5>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; color:#94a3b8; text-align:center;">
+                    Nenhum texto extraído do PDF (ou registro sem PDF).
+                </div>
+            </div>
+        `;
+    }
+    
+    const trechos = extrairTrechosGrifados(textoPdf, termosOriginais);
+    
+    let html = `
+        <div style="margin-top:16px;">
+            <h5 style="margin:0 0 8px 0; font-size:11px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px;">
+                Ocorrências Encontradas no Corpo do PDF (${trechos.length} trecho(s)):
+            </h5>
+    `;
+    
+    if (trechos.length === 0) {
+        html += `
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; color:#64748b;">
+                A palavra-chave não foi identificada no corpo textual do PDF (pode estar apenas nos campos).
+            </div>
+        `;
+    } else {
+        const maxTrechos = trechos.slice(0, 30);
+        maxTrechos.forEach(t => {
+            const trechoGrifado = grifarTexto(t, termosOriginais);
+            html += `
+                <div style="margin-bottom:8px; background:#fefce8; border-left:4px solid #eab308; padding:10px; border-radius:0 8px 8px 0; font-size:13px; line-height:1.6; color:#1e293b; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                    "${trechoGrifado}"
+                </div>
+            `;
+        });
+        if (trechos.length > 30) {
+            html += `<div style="font-size:12px; color:#64748b; text-align:center; margin-top:6px;">... e mais ${trechos.length - 30} trecho(s).</div>`;
+        }
+    }
+    
+    html += `</div>`;
+    return html;
+}
+
+function abrirVisualizadorBuscaProfunda(index) {
+    const registros = window.resultadosBuscaProfundaTemp;
+    if (!registros || registros.length === 0) {
+        Swal.fire('Aviso', 'Nenhum resultado de busca disponível.', 'info');
+        return;
+    }
+
+    if (index < 0) index = 0;
+    if (index >= registros.length) index = registros.length - 1;
+    indiceVisualizadorBuscaProfunda = index;
+
+    const reg = registros[index];
+    const total = registros.length;
+    const termosOriginais = reg.termos_originais_busca || window.termosBuscaProfundaOriginais || [window.termoBuscaProfundaAtual];
+    const termoBusca = window.termoBuscaProfundaAtual || termosOriginais.join(', ');
+
+    let docNum = reg.numero_sequencial || (reg.campos && (reg.campos.n_notificacao || reg.campos.n_auto || reg.campos.n_ar || reg.campos.n_oficio)) || 'Sem Número';
+    let pdfUrl = reg.campos && reg.campos.anexo_pdf ? reg.campos.anexo_pdf : null;
+
+    const modalAntigo = document.getElementById('modal-visualizador-busca-profunda');
+    if (modalAntigo) modalAntigo.remove();
+
+    const camposHTML = formatarCamposGrifados(reg.campos, termosOriginais);
+    const trechosPdfHTML = formatarTrechosPdfGrifados(reg.texto_pdf_extraido, termosOriginais);
+
+    let pdfIframeHTML = '';
+    if (pdfUrl) {
+        const pdfViewerUrl = `${pdfUrl}#search=${encodeURIComponent(termoBusca)}`;
+        pdfIframeHTML = `
+            <iframe src="${pdfViewerUrl}" style="width:100%; height:100%; border:none; background:#525659;" title="Documento PDF"></iframe>
+        `;
+    } else {
+        pdfIframeHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#94a3b8; padding:30px; text-align:center;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                <p style="margin-top:12px; font-size:15px;">Nenhum anexo PDF associado a este registro.</p>
+            </div>
+        `;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-visualizador-busca-profunda';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); backdrop-filter:blur(4px); z-index:99999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;';
+
+    modal.innerHTML = `
+        <div style="background:#ffffff; border-radius:16px; width:100%; max-width:1250px; height:92vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0,0,0,0.37);">
+            
+            <!-- BARRA SUPERIOR DE NAVEGAÇÃO E CONTROLE -->
+            <div style="background:#0f172a; color:#f8fafc; padding:12px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e293b; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-size:20px;">🔍</span>
+                    <div>
+                        <h3 style="margin:0; font-size:15px; font-weight:600; color:#f8fafc;">Busca Profunda: "${termoBusca}"</h3>
+                        <span style="font-size:12px; color:#94a3b8;">Documento ${index + 1} de ${total} (Use as setinhas ⬅️ ➡️ do teclado)</span>
+                    </div>
+                </div>
+
+                <!-- CONTROLES NAVEGAÇÃO / DESCARTAR / FECHAR -->
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button onclick="navegarVisualizadorBuscaProfunda(-1)" ${index === 0 ? 'disabled' : ''} style="padding:7px 13px; background:#334155; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:${index === 0 ? 'not-allowed' : 'pointer'}; opacity:${index === 0 ? '0.4' : '1'}; display:flex; align-items:center; gap:4px;" title="Documento Anterior (Seta Esquerda)">
+                        ⬅️ Anterior
+                    </button>
+
+                    <button onclick="navegarVisualizadorBuscaProfunda(1)" ${index === total - 1 ? 'disabled' : ''} style="padding:7px 13px; background:#334155; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:${index === total - 1 ? 'not-allowed' : 'pointer'}; opacity:${index === total - 1 ? '0.4' : '1'}; display:flex; align-items:center; gap:4px;" title="Próximo Documento (Seta Direita)">
+                        Próximo ➡️
+                    </button>
+
+                    <button onclick="descartarRegistroBuscaProfunda(${index})" style="padding:7px 13px; background:#ef4444; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; margin-left:6px;" title="Descartar este anexo da contagem da busca e da planilha Excel">
+                        🗑️ Descartar da Busca
+                    </button>
+
+                    <button onclick="exportarResultadosBuscaProfunda(window.termoBuscaProfundaAtual, window.resultadosBuscaProfundaTemp)" style="padding:7px 13px; background:#10b981; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Baixar planilha Excel atualizada sem os descartados">
+                        📊 Excel
+                    </button>
+
+                    <button onclick="fecharVisualizadorBuscaProfunda()" style="padding:6px 10px; background:transparent; color:#94a3b8; border:none; font-size:20px; cursor:pointer; border-radius:8px; margin-left:4px;" title="Fechar">
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            <!-- CABEÇALHO DETALHES DO DOCUMENTO -->
+            <div style="background:#f8fafc; padding:10px 20px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <strong style="font-size:15px; color:#0f172a;">${docNum}</strong>
+                    <span style="font-size:13px; color:#475569; margin-left:8px;">| Cat: ${reg.categoria_id} | Fiscal: ${reg.fiscal_nome || 'N/A'}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="background:#e0e7ff; color:#4338ca; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">
+                        ${reg.ocorrencias_busca} ocorrência(s) encontrada(s)
+                    </span>
+                    ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" style="font-size:12px; color:#2563eb; text-decoration:none; font-weight:600; display:flex; align-items:center; gap:4px;">Abrir PDF em nova aba ↗</a>` : ''}
+                </div>
+            </div>
+
+            <!-- CONTEÚDO PRINCIPAL (DIVIDIDO EM DUAS COLUNAS) -->
+            <div style="display:flex; flex:1; overflow:hidden; background:#f1f5f9;">
+                
+                <!-- COLUNA DA ESQUERDA: CAMPOS E TRECHOS GRIFADOS -->
+                <div style="width:45%; min-width:340px; background:#ffffff; border-right:1px solid #e2e8f0; padding:16px; overflow-y:auto; box-sizing:border-box;">
+                    <h4 style="margin:0 0 12px 0; font-size:14px; color:#0f172a; display:flex; align-items:center; gap:6px;">
+                        <span>📝</span> Palavras-Chave Grifadas no Documento
+                    </h4>
+
+                    <!-- CAMPOS DO FORMULÁRIO -->
+                    <div style="margin-bottom:16px;">
+                        <h5 style="margin:0 0 8px 0; font-size:11px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px;">Dados do Banco (Campos do Formulário):</h5>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; line-height:1.5;">
+                            ${camposHTML}
+                        </div>
+                    </div>
+
+                    <!-- TRECHOS DO PDF -->
+                    ${trechosPdfHTML}
+                </div>
+
+                <!-- COLUNA DA DIREITA: VISUALIZADOR DE PDF -->
+                <div style="flex:1; background:#334155; display:flex; flex-direction:column; position:relative;">
+                    ${pdfIframeHTML}
+                </div>
+
+            </div>
+
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.removeEventListener('keydown', tratarTecladoBuscaProfunda);
+    document.addEventListener('keydown', tratarTecladoBuscaProfunda);
+}
+
+function fecharVisualizadorBuscaProfunda() {
+    const modal = document.getElementById('modal-visualizador-busca-profunda');
+    if (modal) modal.remove();
+    document.removeEventListener('keydown', tratarTecladoBuscaProfunda);
+}
+
+function navegarVisualizadorBuscaProfunda(delta) {
+    const novoIndex = indiceVisualizadorBuscaProfunda + delta;
+    if (window.resultadosBuscaProfundaTemp && novoIndex >= 0 && novoIndex < window.resultadosBuscaProfundaTemp.length) {
+        abrirVisualizadorBuscaProfunda(novoIndex);
+    }
+}
+
+function descartarRegistroBuscaProfunda(index) {
+    if (!window.resultadosBuscaProfundaTemp || window.resultadosBuscaProfundaTemp.length === 0) return;
+
+    window.resultadosBuscaProfundaTemp.splice(index, 1);
+
+    registrosGeralAtual = window.resultadosBuscaProfundaTemp;
+    renderizarTabelaGeral(window.resultadosBuscaProfundaTemp, 'todos', `Resultado da Busca Profunda: "${window.termoBuscaProfundaAtual}"`);
+
+    const restante = window.resultadosBuscaProfundaTemp.length;
+
+    if (restante === 0) {
+        fecharVisualizadorBuscaProfunda();
+        Swal.fire('Busca Limpa', 'Todos os documentos da busca foram descartados.', 'info');
+        return;
+    }
+
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true
+    });
+    Toast.fire({
+        icon: 'success',
+        title: 'Anexo descartado da contagem!'
+    });
+
+    let novoIndex = index;
+    if (novoIndex >= restante) {
+        novoIndex = restante - 1;
+    }
+    abrirVisualizadorBuscaProfunda(novoIndex);
+}
+
+function tratarTecladoBuscaProfunda(e) {
+    const modal = document.getElementById('modal-visualizador-busca-profunda');
+    if (!modal) return;
+
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+    if (e.key === 'ArrowLeft') {
+        navegarVisualizadorBuscaProfunda(-1);
+    } else if (e.key === 'ArrowRight') {
+        navegarVisualizadorBuscaProfunda(1);
+    } else if (e.key === 'Escape') {
+        fecharVisualizadorBuscaProfunda();
+    }
+}
+
+window.abrirVisualizadorBuscaProfunda = abrirVisualizadorBuscaProfunda;
+window.fecharVisualizadorBuscaProfunda = fecharVisualizadorBuscaProfunda;
+window.navegarVisualizadorBuscaProfunda = navegarVisualizadorBuscaProfunda;
+window.descartarRegistroBuscaProfunda = descartarRegistroBuscaProfunda;
 
 async function lerTextoDoPdfUrl(url) {
     let loadingTask = null;
