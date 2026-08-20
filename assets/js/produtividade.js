@@ -852,6 +852,7 @@ function abrirFormulario(categoria) {
                 const escapeAttr = (str) => (str || '').replace(/"/g, '&quot;');
 
                 fiscais.forEach(f => {
+                    if (f.full_name) f.full_name = f.full_name.replace(/Julio Cesar/gi, 'Júlio César');
                     const chkId = `chk-fiscal-${f.id}`;
                     cont.innerHTML += `
                         <label for="${chkId}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:white; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; transition:all 0.2s; user-select:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#cbd5e1'">
@@ -1126,6 +1127,7 @@ function abrirFormulario(categoria) {
                     const sel = document.getElementById(idSel);
                     if (sel) {
                         fiscais.forEach(f => {
+                            if (f.full_name) f.full_name = f.full_name.replace(/Julio Cesar/gi, 'Júlio César');
                             if (f.id !== window.userIdGlobal) {
                                 const opt = document.createElement('option');
                                 opt.value = f.id;
@@ -2453,7 +2455,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     .select('full_name')
                     .eq('id', user.id)
                     .maybeSingle();
-                const fiscalNome = perfil?.full_name || 'Fiscal';
+                const fiscalNome = (perfil?.full_name || 'Fiscal').replace(/Julio Cesar/gi, 'Júlio César');
 
                 // Gerar número sequencial se necessário (AI, Ofício, Relatório, Réplica, Certidão, Dívida Ativa)
                 let numeroSeq = null;
@@ -5287,7 +5289,7 @@ async function abrirRelatorio() {
         .eq('id', user.id)
         .maybeSingle();
 
-    const nomeFiscal = perfil?.full_name || 'Fiscal';
+    const nomeFiscal = (perfil?.full_name || 'Fiscal').replace(/Julio Cesar/gi, 'Júlio César');
     const roleFiscal = (window.userRoleGlobal || '').toLowerCase();
     const tituloFiscal = roleFiscal.includes('meio') && roleFiscal.includes('ambiente')
         ? 'Fiscal de Meio Ambiente'
@@ -5751,7 +5753,7 @@ async function criarRascunhoControleProcessual(campos, categoriaId, numeroSeq) {
         .select('full_name')
         .eq('id', user.id)
         .maybeSingle();
-    const fiscalNome = perfil?.full_name || 'Fiscal';
+    const fiscalNome = (perfil?.full_name || 'Fiscal').replace(/Julio Cesar/gi, 'Júlio César');
 
     const catDef = CATEGORIAS.find(c => c.id === categoriaId);
 
@@ -6162,7 +6164,7 @@ async function abrirEditorAutoInfracao() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -6332,7 +6334,7 @@ async function abrirEditorAutoInfracaoAmbiental() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -6581,7 +6583,7 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -6969,7 +6971,7 @@ async function abrirEditorOficio() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -7026,12 +7028,14 @@ async function abrirEditorOficio() {
         ];
 
         let assinaturasHtml = '';
-        for (let i = 0; i < todosFiscais.length; i += 3) {
-            const rowFiscais = todosFiscais.slice(i, i + 3);
-            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center;"><tr>';
+        let itensPorLinha = (todosFiscais.length === 4) ? 2 : 3;
+        let widthStr = (itensPorLinha === 2) ? "50%" : "33%";
+        for (let i = 0; i < todosFiscais.length; i += itensPorLinha) {
+            const rowFiscais = todosFiscais.slice(i, i + itensPorLinha);
+            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center; page-break-inside: avoid; break-inside: avoid;"><tr>';
             rowFiscais.forEach(f => {
                 assinaturasHtml += `
-                    <td align="center" style="width: 33%; vertical-align: top; padding: 0 5px; text-align: center;">
+                    <td align="center" style="width: ${widthStr}; vertical-align: top; padding: 0 5px; text-align: center;">
                         <p align="center" style="margin: 0; text-align: center;">_________________________________</p>
                         <p align="center" style="margin: 5px 0 0 0; text-align: center;"><strong>${f.nome}</strong></p>
                         <p align="center" style="margin: 2px 0 0 0; text-align: center;">${f.cargo}</p>
@@ -7039,8 +7043,8 @@ async function abrirEditorOficio() {
                     </td>
                 `;
             });
-            for (let j = rowFiscais.length; j < 3; j++) {
-                assinaturasHtml += '<td style="width: 33%;"></td>';
+            for (let j = rowFiscais.length; j < itensPorLinha; j++) {
+                assinaturasHtml += '<td style="width: ' + widthStr + ';"></td>';
             }
             assinaturasHtml += '</tr></table>';
         }
@@ -7162,7 +7166,7 @@ async function abrirEditorRelatorio() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -7176,19 +7180,22 @@ async function abrirEditorRelatorio() {
 
         const imgBase64 = await obterBase64Cabecalho();
         let htmlTemplate = '';
+        let imagensExtrasHtml = '';
 
         if (categoriaAtual.id === '1.5.MA') {
             const enderecoImovelStr = `${campos.rua_imovel || ''}${campos.rua_imovel && campos.numero_imovel ? ', ' : ''}${campos.numero_imovel || ''}`;
             const dataAssinatura = `${String(diaHoje).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${anoHoje}`;
 
-            let imagensExtrasHtml = '';
             if (campos.imagensExtras && campos.imagensExtras.length > 0) {
-                imagensExtrasHtml += '<div style="margin-top: 30px; text-align: center; font-size: 0;">';
+                // Margem superior maior pois as imagens ficarão após as assinaturas
+                imagensExtrasHtml += '<div style="margin-top: 60px; text-align: center; font-size: 0;">';
                 campos.imagensExtras.forEach(img => {
                     imagensExtrasHtml += `
-                    <div style="display: inline-block; width: 48%; margin: 1%; vertical-align: top; font-size: 12pt;">
+                    <div style="display: inline-block; width: 48%; margin: 1%; vertical-align: top; font-size: 12pt; page-break-inside: avoid; break-inside: avoid;">
+                        <p style="font-size: 12pt; margin-bottom: 10px; font-weight: bold; text-align: center;">Foto do Local</p>
                         <img src="${img.base64}" title="Clique para redimensionar" onclick="const p = prompt('Largura da imagem (ex: 100% para linha inteira, 48% para lado a lado):', this.parentElement.style.width); if(p) this.parentElement.style.width = p;" style="max-width: 100%; height: auto; border: 1px solid #ccc; display: block; margin: 0 auto; cursor: pointer;">
                         <p style="font-size: 11pt; margin-top: 10px; font-style: italic;">${img.legenda}</p>
+                        <p style="font-size: 11pt; margin-top: 5px; text-align: center;">Fonte: Autoria Própria, ${anoHoje}</p>
                     </div>`;
                 });
                 imagensExtrasHtml += '</div>';
@@ -7231,8 +7238,6 @@ async function abrirEditorRelatorio() {
         <p style="margin-top: 10px; text-align: justify;"><strong>Assunto: </strong> ${campos.assunto || ''}</p>
 
         <p style="margin-top: 20px; text-align: justify;">Em atendimento à denúncia acima descrita, estivemos no local no dia ${dataVistoriaFmt}, às ${horaVistoriaFmt}h para averiguar a situação. Em vistoria, verificamos ${campos.verificacao || ''}</p>
-        
-        ${imagensExtrasHtml}
             `;
         } else {
             htmlTemplate = `
@@ -7277,12 +7282,14 @@ async function abrirEditorRelatorio() {
         ];
 
         let assinaturasHtml = '';
-        for (let i = 0; i < todosFiscais.length; i += 3) {
-            const rowFiscais = todosFiscais.slice(i, i + 3);
-            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center;"><tr>';
+        let itensPorLinha = (todosFiscais.length === 4) ? 2 : 3;
+        let widthStr = (itensPorLinha === 2) ? "50%" : "33%";
+        for (let i = 0; i < todosFiscais.length; i += itensPorLinha) {
+            const rowFiscais = todosFiscais.slice(i, i + itensPorLinha);
+            assinaturasHtml += '<table width="100%" style="margin-top: 60px; border-collapse: collapse; text-align: center; page-break-inside: avoid; break-inside: avoid;"><tr>';
             rowFiscais.forEach(f => {
                 assinaturasHtml += `
-                    <td align="center" style="width: 33%; vertical-align: top; padding: 0 5px; text-align: center;">
+                    <td align="center" style="width: ${widthStr}; vertical-align: top; padding: 0 5px; text-align: center;">
                         <p align="center" style="margin: 0; text-align: center;">_________________________________</p>
                         <p align="center" style="margin: 5px 0 0 0; text-align: center;"><strong>${f.nome}</strong></p>
                         <p align="center" style="margin: 2px 0 0 0; text-align: center;">${f.cargo}</p>
@@ -7290,12 +7297,13 @@ async function abrirEditorRelatorio() {
                     </td>
                 `;
             });
-            for (let j = rowFiscais.length; j < 3; j++) {
-                assinaturasHtml += '<td style="width: 33%;"></td>';
+            for (let j = rowFiscais.length; j < itensPorLinha; j++) {
+                assinaturasHtml += '<td style="width: ' + widthStr + ';"></td>';
             }
             assinaturasHtml += '</tr></table>';
         }
         htmlTemplate += assinaturasHtml;
+        htmlTemplate += imagensExtrasHtml;
 
         // 3. Exibe Modal
         const editor = document.getElementById('editor-texto');
@@ -7384,7 +7392,7 @@ async function abrirEditorReplica() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -7528,7 +7536,7 @@ async function abrirEditorCertidao() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -7663,7 +7671,7 @@ async function abrirEditorDividaAtiva() {
                 .select('full_name, matricula')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name;
+            if (perfil && perfil.full_name) nomeFiscal = perfil.full_name.replace(/Julio Cesar/gi, 'Júlio César');
             if (perfil && perfil.matricula) matriculaFiscal = perfil.matricula;
         }
 
@@ -10124,7 +10132,7 @@ async function executarBuscaProfunda(config) {
     const termoBusca = config.termo;
     const categoriasSelecionadas = config.categorias;
     let aba = typeof subAbaAtual !== 'undefined' ? subAbaAtual : '1.1';
-    
+
     Swal.fire({
         title: 'Preparando Busca...',
         html: '<b>Buscando registros no banco de dados...</b><br><small>Buscando todos os registros sem limite.</small>',
@@ -10150,7 +10158,7 @@ async function executarBuscaProfunda(config) {
             Swal.update({ html: `<b>Buscando registros no banco de dados...</b><br><small>Carregados: ${todosOsRegistros.length}</small>` });
             const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1);
             if (error) throw error;
-            
+
             if (data && data.length > 0) {
                 todosOsRegistros = todosOsRegistros.concat(data);
                 offset += pageSize;
@@ -10161,7 +10169,7 @@ async function executarBuscaProfunda(config) {
                 hasMore = false;
             }
         }
-        
+
         if (todosOsRegistros.length === 0) {
             Swal.fire('Nenhum Registro', 'Não há registros nesta aba para pesquisar.', 'info');
             return;
@@ -10170,14 +10178,14 @@ async function executarBuscaProfunda(config) {
         const termosOriginais = termoBusca.split(',').map(t => t.trim()).filter(Boolean);
         const termosNormalizados = termosOriginais.map(t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
         const registrosEncontrados = [];
-        
+
         let i = 0;
         const total = todosOsRegistros.length;
-        
+
         for (const reg of todosOsRegistros) {
             i++;
             if (i % 5 === 0) {
-                Swal.update({ html: `<b>Analisando registro ${i} de ${total}...</b><br><small>Verificando PDF/DB</small>`});
+                Swal.update({ html: `<b>Analisando registro ${i} de ${total}...</b><br><small>Verificando PDF/DB</small>` });
             }
 
             let countJSON = 0;
@@ -10212,7 +10220,7 @@ async function executarBuscaProfunda(config) {
 
             // Considera a maior contagem (evita duplicar contagem se o PDF for igual ao JSON)
             const maxOcorrencias = Math.max(countJSON, countPDF);
-            
+
             if (maxOcorrencias > 0) {
                 reg.ocorrencias_busca = maxOcorrencias;
                 reg.termos_originais_busca = termosOriginais;
@@ -10221,7 +10229,7 @@ async function executarBuscaProfunda(config) {
         }
 
         Swal.close();
-        
+
         window.termoBuscaProfundaAtual = termoBusca;
         window.termosBuscaProfundaOriginais = termosOriginais;
 
@@ -10263,7 +10271,7 @@ async function executarBuscaProfunda(config) {
                     exportarResultadosBuscaProfunda(termoBusca, window.resultadosBuscaProfundaTemp);
                 }
             });
-            
+
             // Garantir que a tabela e os registros atuais sejam renderizados
             registrosGeralAtual = registrosEncontrados; // para que o visualizar funcione
             renderizarTabelaGeral(registrosEncontrados, 'todos', `Resultado da Busca Profunda: "${termoBusca}"`);
@@ -10293,7 +10301,7 @@ function exportarResultadosBuscaProfunda(termo, registros) {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Resultados");
         XLSX.writeFile(wb, `BuscaProfunda_${termo.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
-    } catch(e) {
+    } catch (e) {
         console.error(e);
         Swal.fire('Erro', 'Falha ao gerar a planilha Excel', 'error');
     }
@@ -10304,7 +10312,7 @@ let indiceVisualizadorBuscaProfunda = 0;
 
 function grifarTexto(texto, termos) {
     if (!texto || !termos || termos.length === 0) return texto || '';
-    
+
     let regexPattern = termos.map(t => {
         let escaped = String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         escaped = escaped
@@ -10320,18 +10328,18 @@ function grifarTexto(texto, termos) {
     try {
         const re = new RegExp(`(${regexPattern})`, 'gi');
         return String(texto).replace(re, '<mark style="background:#fef08a; color:#854d0e; font-weight:bold; padding:1px 5px; border-radius:4px; box-shadow:0 0 0 1px #facc15;">$1</mark>');
-    } catch(e) {
+    } catch (e) {
         return texto;
     }
 }
 
 function extrairTrechosGrifados(texto, termos) {
     if (!texto || !termos || termos.length === 0) return [];
-    
+
     const partes = texto.split(/(?<=[.!?\n])\s+/);
     const trechos = [];
     const termosNorm = termos.map(t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-    
+
     for (const parte of partes) {
         const parteNorm = parte.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (termosNorm.some(t => parteNorm.includes(t))) {
@@ -10345,24 +10353,24 @@ function extrairTrechosGrifados(texto, termos) {
 
 function formatarCamposGrifados(campos, termosOriginais) {
     if (!campos || typeof campos !== 'object') return '<div style="color:#94a3b8;">Nenhum campo disponível.</div>';
-    
+
     let html = '<ul style="margin:0; padding-left:16px; list-style-type:disc;">';
     let temCampo = false;
-    
+
     for (const [chave, valor] of Object.entries(campos)) {
         if (!valor || typeof valor === 'object' || chave === 'anexo_pdf' || chave.startsWith('imagem')) continue;
-        
+
         temCampo = true;
         const valorStr = String(valor);
         const valorGrifado = grifarTexto(valorStr, termosOriginais);
         const chaveFormatada = chave.replace(/_/g, ' ').toUpperCase();
-        
+
         const contemTermo = termosOriginais.some(t => {
             const tNorm = String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             const vNorm = valorStr.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             return vNorm.includes(tNorm);
         });
-        
+
         if (contemTermo) {
             html += `<li style="margin-bottom:6px; background:#fef9c3; padding:6px 10px; border-radius:6px; border-left:4px solid #eab308; list-style:none; font-size:13px;">
                         <strong style="color:#854d0e;">${chaveFormatada}:</strong> <span style="color:#1e293b;">${valorGrifado}</span>
@@ -10373,7 +10381,7 @@ function formatarCamposGrifados(campos, termosOriginais) {
                      </li>`;
         }
     }
-    
+
     html += '</ul>';
     return temCampo ? html : '<div style="color:#94a3b8;">Sem campos de texto.</div>';
 }
@@ -10389,16 +10397,16 @@ function formatarTrechosPdfGrifados(textoPdf, termosOriginais) {
             </div>
         `;
     }
-    
+
     const trechos = extrairTrechosGrifados(textoPdf, termosOriginais);
-    
+
     let html = `
         <div style="margin-top:16px;">
             <h5 style="margin:0 0 8px 0; font-size:11px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px;">
                 Ocorrências Encontradas no Corpo do PDF (${trechos.length} trecho(s)):
             </h5>
     `;
-    
+
     if (trechos.length === 0) {
         html += `
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; color:#64748b;">
@@ -10419,7 +10427,7 @@ function formatarTrechosPdfGrifados(textoPdf, termosOriginais) {
             html += `<div style="font-size:12px; color:#64748b; text-align:center; margin-top:6px;">... e mais ${trechos.length - 30} trecho(s).</div>`;
         }
     }
-    
+
     html += `</div>`;
     return html;
 }
@@ -10631,9 +10639,9 @@ async function lerTextoDoPdfUrl(url) {
         if (typeof pdfjsLib === 'undefined') {
             throw new Error('Biblioteca PDF.js não carregada na página.');
         }
-        
+
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        
+
         loadingTask = pdfjsLib.getDocument(url);
         pdf = await loadingTask.promise;
         let numPages = pdf.numPages;
@@ -10647,7 +10655,7 @@ async function lerTextoDoPdfUrl(url) {
             textoCompleto += pageText + ' ';
             page.cleanup();
         }
-        
+
         return textoCompleto;
     } catch (e) {
         // Ignoramos silenciosamente erros de rede ou PDFs corrompidos 
@@ -10656,10 +10664,10 @@ async function lerTextoDoPdfUrl(url) {
     } finally {
         // CRÍTICO: Garantir que a memória seja liberada MESMO se o PDF estiver corrompido
         if (pdf) {
-            try { await pdf.destroy(); } catch (err) {}
+            try { await pdf.destroy(); } catch (err) { }
         }
         if (loadingTask) {
-            try { loadingTask.destroy(); } catch (err) {}
+            try { loadingTask.destroy(); } catch (err) { }
         }
     }
 }
