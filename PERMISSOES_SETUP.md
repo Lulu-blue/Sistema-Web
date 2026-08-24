@@ -857,7 +857,12 @@ FOR DELETE TO authenticated USING (bucket_id = 'tarefa_anexos');
 
 > **Quando usar:** Execute esta seção para criar a infraestrutura de fila global de reutilização de números cancelados (resolve race condition, isolamento entre navegadores e ordenação numérica correta).
 
-### Tabela `numeros_disponiveis`
+### Arquitetura Mestre (Fluxograma) vs Fallback Local (SEMAC)
+
+> 📌 **Banco Mestre (Fluxograma)**: Utiliza a tabela **`sequenciais_contadores`** (para controle atômico dos contadores ativos por categoria/ano) e a tabela **`numeros_descartados`** (para fila prioritária de reaproveitamento de números devolvidos).
+> 📌 **Banco Local (SEMAC)**: Mantém o fallback local em **`numeros_disponiveis`** para contingência de rede.
+
+### Tabela `numeros_disponiveis` (Fallback Local SEMAC)
 
 ```sql
 -- Tabela para guardar números cancelados que podem ser reutilizados globalmente

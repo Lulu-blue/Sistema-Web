@@ -2729,11 +2729,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         console.error("[Salvar] Erro capturado:", err);
         if (numeroSeqRollback && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numeroSeqRollback.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numeroSeqRollback, new Date().getFullYear());
             } catch (e) { console.error('Erro rollback', e); }
         }
         console.error("[Salvar] Tipo do erro:", typeof err, "JSON:", JSON.stringify(err));
@@ -3319,15 +3315,8 @@ async function excluirRegistro() {
     try {
         const tabela = registroSelecionado._tabela || 'registros_produtividade';
 
-        // Devolver número sequencial se existir (AI, Dívida Ativa, Ofício, etc)
-        if (registroSelecionado.numero_sequencial && registroSelecionado.categoria_id) {
-            const anoReg = new Date(registroSelecionado.created_at || Date.now()).getFullYear();
-            await supabaseClient.rpc('devolver_numero_sequencial', {
-                p_numero: registroSelecionado.numero_sequencial.toString(),
-                p_categoria_id: registroSelecionado.categoria_id.toString(),
-                p_ano: anoReg
-            });
-        }
+        // Nota: Ao excluir um registro do histórico antigo, a numeração NÃO é devolvida
+        // para a fila pública para evitar furos ou saltos fora de ordem cronológica.
 
         const { error } = await supabaseClient
             .from(tabela)
@@ -3480,7 +3469,22 @@ window.removerCampoImagemLegenda = function (id) {
 async function gerarNumeroSequencial(categoriaId) {
     const anoAtual = new Date().getFullYear(); // ex: 2026
 
-    // Todas as categorias usam a RPC atômica no PostgreSQL com fila global de reutilização
+    // Ofício ('1.4' ou 'oficio') permanece 100% no banco local (controle_processual + numeros_disponiveis)
+    const isOficio = (categoriaId === '1.4' || categoriaId === 'oficio' || categoriaId === 'Ofício');
+
+    if (!isOficio) {
+        // Tentar consultar a central atômica de numeração Mestre (Fluxograma)
+        try {
+            if (typeof window.gerarNumeroMestre === 'function') {
+                const numeroMestre = await window.gerarNumeroMestre(categoriaId, anoAtual);
+                if (numeroMestre) return numeroMestre;
+            }
+        } catch (errMestre) {
+            console.warn('Aviso: Falha ao consultar Supabase Mestre, utilizando fallback local:', errMestre);
+        }
+    }
+
+    // Fallback/Local para RPC local (Ofício ou quando o Mestre falhar)
     const { data: numeroSeq, error } = await supabaseClient
         .rpc('reservar_numero_sequencial', {
             p_categoria_id: categoriaId,
@@ -3494,6 +3498,37 @@ async function gerarNumeroSequencial(categoriaId) {
 
     return numeroSeq;
 }
+
+/**
+ * Devolve um número sequencial descartado/cancelado tanto para a central Mestre quanto para a reserva local
+ */
+async function devolverNumeroSequencialCompleto(categoriaId, numero, ano) {
+    if (!numero || !categoriaId) return;
+    const anoReg = ano || new Date().getFullYear();
+
+    const isOficio = (categoriaId === '1.4' || categoriaId === 'oficio' || categoriaId === 'Ofício');
+
+    // 1. Devolver no banco Mestre (Fluxograma) - exceto se for Ofício
+    if (!isOficio && typeof window.devolverNumeroMestre === 'function') {
+        try {
+            await window.devolverNumeroMestre(categoriaId, numero);
+        } catch (err) {
+            console.warn('Aviso ao devolver número no Mestre:', err);
+        }
+    }
+
+    // 2. Devolver no banco Local (Ofício ou Fallback)
+    try {
+        await supabaseClient.rpc('devolver_numero_sequencial', {
+            p_numero: numero.toString(),
+            p_categoria_id: categoriaId.toString(),
+            p_ano: anoReg
+        });
+    } catch (err) {
+        console.warn('Aviso ao devolver número no Local:', err);
+    }
+}
+window.devolverNumeroSequencialCompleto = devolverNumeroSequencialCompleto;
 
 // --- HISTÓRICO GERAL (SUB-ABAS) ---
 let subAbaAtual = 'np-af';
@@ -5111,15 +5146,7 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         const isDestaque = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(categoriaId) || categoriaId === 'np-af' || categoriaId === 'ai-ma' || categoriaId === 'relatorio-ma';
         const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
 
-        // Devolver número sequencial se existir (AI, Dívida Ativa, Ofício, etc)
-        if (reg.numero_sequencial && reg.categoria_id) {
-            const anoReg = new Date(reg.created_at || Date.now()).getFullYear();
-            await supabaseClient.rpc('devolver_numero_sequencial', {
-                p_numero: reg.numero_sequencial.toString(),
-                p_categoria_id: reg.categoria_id.toString(),
-                p_ano: anoReg
-            });
-        }
+        // Nota: Excluir registro do histórico não devolve número para não furar sequência cronológica.
 
         const { error } = await supabaseClient
             .from(targetTable)
@@ -6006,11 +6033,7 @@ async function cancelarRascunhoDocumento() {
     try {
         // Devolve o número para a fila global no banco (qualquer categoria que gere número, ex: 1.2, 1.4, 1.5, 1.8, 11)
         if (numeroSeq && categoriaId) {
-            await supabaseClient.rpc('devolver_numero_sequencial', {
-                p_numero: numeroSeq.toString(),
-                p_categoria_id: categoriaId.toString(),
-                p_ano: anoAtual
-            });
+            await devolverNumeroSequencialCompleto(categoriaId, numeroSeq, anoAtual);
         }
 
         await supabaseClient
@@ -6250,11 +6273,7 @@ async function abrirEditorAutoInfracao() {
         console.error('Erro ao preparar documento:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados do documento.');
@@ -6514,11 +6533,7 @@ async function abrirEditorAutoInfracaoAmbiental() {
         console.error('Erro ao gerar Auto de Infração Ambiental:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao gerar o Auto de Infração Ambiental: ' + (error.message || 'Erro desconhecido'));
@@ -6742,11 +6757,7 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
         console.error('Erro ao preparar documento:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao gerar o documento. O número sequencial foi revertido. Tente novamente.');
@@ -7061,11 +7072,7 @@ async function abrirEditorOficio() {
         console.error('Erro ao preparar ofício:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados do ofício.');
@@ -7316,11 +7323,7 @@ async function abrirEditorRelatorio() {
         console.error('Erro ao preparar relatório:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto(categoriaAtual.id, numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados do relatório.');
@@ -7464,11 +7467,7 @@ async function abrirEditorReplica() {
         console.error('Erro ao preparar a réplica:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto('1.7', numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados da réplica.');
@@ -7604,11 +7603,7 @@ async function abrirEditorCertidao() {
         console.error('Erro ao preparar a certidão:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto('1.8', numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados da certidão.');
@@ -7729,11 +7724,7 @@ async function abrirEditorDividaAtiva() {
         console.error('Erro ao preparar Dívida Ativa:', error);
         if (numSequencial && categoriaAtual && categoriaAtual.id) {
             try {
-                await supabaseClient.rpc('devolver_numero_sequencial', {
-                    p_numero: numSequencial.toString(),
-                    p_categoria_id: categoriaAtual.id.toString(),
-                    p_ano: new Date().getFullYear()
-                });
+                await devolverNumeroSequencialCompleto('11', numSequencial);
             } catch (e) { }
         }
         alert('Ocorreu um erro ao processar os dados do documento.');

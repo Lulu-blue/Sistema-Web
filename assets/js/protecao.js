@@ -8,6 +8,124 @@ const supabaseUrl = 'https://marmpnusgmbjphffaynr.supabase.co';
 const supabaseKey = 'sb_publishable_ZVtndwPOvY2dA4Qzlwkl2A_H0-TeUgu';
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
+// =============================================
+// CONEXÃO SUPABASE MASTER (FLUXOGRAMA) - CENTRAL DE NUMERAÇÃO
+// =============================================
+const MASTER_FLUXOGRAMA_URL = 'https://mqjlbgbbvesyagwxqgox.supabase.co';
+const MASTER_FLUXOGRAMA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xamxiZ2JidmVzeWFnd3hxZ294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzMTE5MDUsImV4cCI6MjA5ODg4NzkwNX0.V9Loy1ZarXn7wB00QYfuKhVgVK2chKg3-X8XHdvAgvU';
+const supabaseMaster = supabase.createClient(MASTER_FLUXOGRAMA_URL, MASTER_FLUXOGRAMA_KEY);
+
+window.MASTER_FLUXOGRAMA_URL = MASTER_FLUXOGRAMA_URL;
+window.MASTER_FLUXOGRAMA_KEY = MASTER_FLUXOGRAMA_KEY;
+window.supabaseMaster = supabaseMaster;
+
+// Mapeamento central de categorias SEMAC -> Categoria Mestre Fluxograma
+const MAPA_CATEGORIAS_MESTRE = {
+    // Processo / Dívida Ativa -> "Processo"
+    '1.0': 'Processo',
+    'processo': 'Processo',
+    'Processo': 'Processo',
+    '11': 'Processo',
+    'divida': 'Processo',
+    'divida_ativa': 'Processo',
+    'Dívida Ativa': 'Processo',
+    'Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa': 'Processo',
+
+    // Auto de Infração -> "Auto de Infração"
+    '1.2': 'Auto de Infração',
+    '1.2.MA': 'Auto de Infração',
+    '1.9': 'Auto de Infração',
+    'ai': 'Auto de Infração',
+    'ai-ma': 'Auto de Infração',
+    'Auto de Infração': 'Auto de Infração',
+    'Controle Processual: Auto de Infração': 'Auto de Infração',
+
+    // Certidão -> "Certidão Sem Defesa"
+    '1.8': 'Certidão Sem Defesa',
+    'certidao': 'Certidão Sem Defesa',
+    'Certidão': 'Certidão Sem Defesa',
+    'Certidão Sem Defesa': 'Certidão Sem Defesa',
+
+    // Relatório Fiscal -> "Relatório Fiscal"
+    '1.5': 'Relatório Fiscal',
+    '1.5.MA': 'Relatório Fiscal',
+    'rf': 'Relatório Fiscal',
+    'relatorio': 'Relatório Fiscal',
+    'relatorio-ma': 'Relatório Fiscal',
+    'Relatório Fiscal': 'Relatório Fiscal',
+    'Controle Processual: Relatório': 'Relatório Fiscal',
+
+    // Réplica -> "Réplica"
+    '1.7': 'Réplica',
+    'replica': 'Réplica',
+    'Réplica': 'Réplica',
+
+    // Ofício -> "Ofício"
+    '1.4': 'Ofício',
+    'oficio': 'Ofício',
+    'Ofício': 'Ofício',
+
+    // Notificação Preliminar -> "Notificação Preliminar"
+    '1.1': 'Notificação Preliminar',
+    'np': 'Notificação Preliminar',
+    'Notificação Preliminar': 'Notificação Preliminar',
+
+    // Aviso de Recebimento -> "Aviso de Recebimento"
+    '1.3': 'Aviso de Recebimento',
+    'ar': 'Aviso de Recebimento',
+    'Aviso de Recebimento': 'Aviso de Recebimento',
+
+    // Protocolo -> "Protocolo"
+    '1.6': 'Protocolo',
+    'protocolo': 'Protocolo',
+    'Protocolo': 'Protocolo'
+};
+
+/**
+ * Normaliza o formato de numeração mestre para o padrão SEMAC (ex: 001/2026)
+ */
+function normalizarFormatoNumeroMestre(numeroMestre, ano = 2026) {
+    if (!numeroMestre) return null;
+    const str = numeroMestre.toString().trim();
+    if (str.includes('/')) {
+        const partes = str.split('/');
+        // Se estiver no formato ANO/NUMERO (ex: 2026/001 -> 001/2026)
+        if (partes[0].length === 4 && (partes[0].startsWith('20') || partes[0].startsWith('19'))) {
+            return `${partes[1]}/${partes[0]}`;
+        }
+    }
+    return str.includes('/') ? str : `${str}/${ano}`;
+}
+window.normalizarFormatoNumeroMestre = normalizarFormatoNumeroMestre;
+
+/**
+ * Função mestre para geração/reserva atômica de números unificados (SEMAC + Fluxograma)
+ */
+async function gerarNumeroMestre(categoria, ano = 2026) {
+    const categoriaNome = MAPA_CATEGORIAS_MESTRE[categoria] || categoria;
+    const { data, error } = await supabaseMaster.rpc('reservar_numero', { p_ano: ano, p_categoria: categoriaNome });
+    if (error) {
+        console.error('Erro ao buscar número mestre:', error);
+        throw error;
+    }
+    return normalizarFormatoNumeroMestre(data, ano);
+}
+window.gerarNumeroMestre = gerarNumeroMestre;
+
+/**
+ * Devolve um número cancelado/descartado para a fila pública do Banco Mestre
+ */
+async function devolverNumeroMestre(categoria, numero) {
+    if (!numero) return;
+    const categoriaNome = MAPA_CATEGORIAS_MESTRE[categoria] || categoria;
+    try {
+        await supabaseMaster.rpc('devolver_numero', { p_categoria: categoriaNome, p_numero: numero.toString() });
+    } catch (err) {
+        console.warn('Aviso ao devolver número mestre:', err);
+    }
+}
+window.devolverNumeroMestre = devolverNumeroMestre;
+
 async function verificarAcesso() {
     try {
         const { data: { session }, error } = await supabaseClient.auth.getSession();
