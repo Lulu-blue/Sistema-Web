@@ -25,10 +25,10 @@
 
         try {
             // Garante que o Supabase Client está acessível
-            const client = window.supabaseClient || (typeof supabase !== 'undefined' ? supabase : null);
-            if (!client) {
-                console.error('[Sincronização SEMAC] Cliente Supabase não encontrado.');
-                return { sucesso: false, erro: 'Cliente Supabase ausente' };
+            const client = window.supabaseClient || (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
+            if (!client || typeof client.rpc !== 'function') {
+                console.error('[Sincronização SEMAC] Cliente Supabase válido não encontrado (rpc indisponível).');
+                return { sucesso: false, erro: 'Cliente Supabase ausente ou inválido' };
             }
 
             // Chamada da procedure armazenada no banco

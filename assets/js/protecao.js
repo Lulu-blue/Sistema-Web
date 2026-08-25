@@ -8,6 +8,10 @@ const supabaseUrl = 'https://marmpnusgmbjphffaynr.supabase.co';
 const supabaseKey = 'sb_publishable_ZVtndwPOvY2dA4Qzlwkl2A_H0-TeUgu';
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
+window.supabaseUrl = supabaseUrl;
+window.supabaseKey = supabaseKey;
+window.supabaseClient = supabaseClient;
+
 // =============================================
 // CONEXÃO SUPABASE MASTER (FLUXOGRAMA) - CENTRAL DE NUMERAÇÃO
 // =============================================
@@ -84,7 +88,10 @@ const MAPA_CATEGORIAS_MESTRE = {
 /**
  * Normaliza o formato de numeração mestre para o padrão SEMAC (ex: 001/2026)
  */
-function normalizarFormatoNumeroMestre(numeroMestre, ano = 2026) {
+/**
+ * Normaliza o formato de numeração mestre para o padrão SEMAC (ex: 001/2026)
+ */
+function normalizarFormatoNumeroMestre(numeroMestre, ano = new Date().getFullYear()) {
     if (!numeroMestre) return null;
     const str = numeroMestre.toString().trim();
     if (str.includes('/')) {
@@ -101,11 +108,41 @@ window.normalizarFormatoNumeroMestre = normalizarFormatoNumeroMestre;
 /**
  * Função mestre para geração/reserva atômica de números unificados (SEMAC + Fluxograma)
  */
-async function gerarNumeroMestre(categoria, ano = 2026) {
+async function gerarNumeroMestre(categoria, ano = new Date().getFullYear()) {
     const categoriaNome = MAPA_CATEGORIAS_MESTRE[categoria] || categoria;
+
+    // 1. PRIMEIRA CONSULTA: Verificar se existe algum número descartado na tabela local numeros_disponiveis
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data: disponivel, error: errDisp } = await supabaseClient
+                .from('numeros_disponiveis')
+                .select('id, numero_sequencial')
+                .or(`categoria_id.eq.${categoria},categoria_id.eq.${categoriaNome}`)
+                .eq('ano', ano)
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+
+            if (!errDisp && disponivel && disponivel.numero_sequencial) {
+                // Remover da fila de descartados/disponíveis para utilizar este número
+                await supabaseClient
+                    .from('numeros_disponiveis')
+                    .delete()
+                    .eq('id', disponivel.id);
+
+                console.log(`[Numeração SEMAC] Número reutilizado da fila de descartados (numeros_disponiveis): ${disponivel.numero_sequencial}`);
+                return normalizarFormatoNumeroMestre(disponivel.numero_sequencial, ano);
+            }
+        }
+    } catch (e) {
+        console.warn('[Numeração SEMAC] Erro/aviso ao consultar numeros_disponiveis local:', e);
+    }
+
+    // 2. FILA DE DISPONÍVEIS VAZIA: Consultar a API do Banco Mestre (Fluxograma)
+    // No Fluxograma, a procedure 'reservar_numero' lê a tabela 'sequenciais_contadores', incrementa +1 e atualiza o ultimo_numero.
     const { data, error } = await supabaseMaster.rpc('reservar_numero', { p_ano: ano, p_categoria: categoriaNome });
     if (error) {
-        console.error('Erro ao buscar número mestre:', error);
+        console.error('Erro ao buscar número mestre no Fluxograma:', error);
         throw error;
     }
     return normalizarFormatoNumeroMestre(data, ano);
@@ -113,13 +150,27 @@ async function gerarNumeroMestre(categoria, ano = 2026) {
 window.gerarNumeroMestre = gerarNumeroMestre;
 
 /**
- * Devolve um número cancelado/descartado para a fila pública do Banco Mestre
+ * Guarda um número cancelado/descartado na tabela numeros_disponiveis para ser reutilizado na próxima reserva
  */
-async function devolverNumeroMestre(categoria, numero) {
+async function devolverNumeroMestre(categoria, numero, ano = new Date().getFullYear()) {
     if (!numero) return;
     const categoriaNome = MAPA_CATEGORIAS_MESTRE[categoria] || categoria;
     try {
-        await supabaseMaster.rpc('devolver_numero', { p_categoria: categoriaNome, p_numero: numero.toString() });
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { error } = await supabaseClient
+                .from('numeros_disponiveis')
+                .insert([{
+                    categoria_id: categoria,
+                    numero_sequencial: numero.toString(),
+                    ano: ano
+                }]);
+
+            if (error) {
+                console.warn('Falha ao inserir número em numeros_disponiveis:', error);
+            } else {
+                console.log(`[Numeração SEMAC] Número ${numero} (${categoriaNome}) salvo na fila numeros_disponiveis.`);
+            }
+        }
     } catch (err) {
         console.warn('Aviso ao devolver número mestre:', err);
     }
@@ -273,6 +324,9 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
             // Tentar fazer uma requisição simples ao Supabase
             const response = await fetch(`${supabaseUrl}/rest/v1/`, {
                 method: 'HEAD',
+                headers: {
+                    'apikey': supabaseKey
+                },
                 signal: controller.signal,
                 cache: 'no-store'
             });
