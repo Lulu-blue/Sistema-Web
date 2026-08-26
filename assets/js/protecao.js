@@ -216,6 +216,13 @@ verificarAcesso();
 // Se o token expirar ou o usuário for deslogado em outra aba, redireciona aqui também.
 supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log(`[Auth Event] ${event}`);
+    if (event === 'SIGNED_IN' && session) {
+        // Dispara a sincronização automática ao realizar login
+        if (typeof window.executarSincronizacaoDiaria === 'function') {
+            console.log('[Auth Event] Usuário realizou login. Executando sincronização de produtividade...');
+            window.executarSincronizacaoDiaria();
+        }
+    }
     if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
         console.warn("Sessão encerrada pelo sistema. Redirecionando...");
         localStorage.removeItem('semac_session_start');

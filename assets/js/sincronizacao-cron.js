@@ -1,50 +1,172 @@
 /**
  * =========================================================================
- * MÓDULO DE SINCRONIZAÇÃO AUTOMÁTICA DE PRODUTIVIDADE (CRON JOB / FRONTEND)
+ * MÓDULO DE SINCRONIZAÇÃO AUTOMÁTICA DE PRODUTIVIDADE (FLUXOGRAMA -> SEMAC)
  * =========================================================================
  * 
- * Este arquivo executa a sincronização diária entre os documentos emitidos no
- * Fluxograma/SEMAC e as tabelas 'controle_processual' e 'registros_produtividade'.
+ * Este arquivo sincroniza a produtividade buscando os documentos emitidos no
+ * banco MESTRE (Fluxograma - tabela 'documentos') e inserindo nas tabelas
+ * 'controle_processual' e 'registros_produtividade' do banco SEMAC.
  * 
- * Regras de Negócio Implementadas:
- * - Notificação Preliminar -> 'controle_processual' (Cat 1.1) E 'registros_produtividade' (Cat 14)
- * - Auto de Infração       -> 'controle_processual' (Cat 1.2) E 'registros_produtividade' (Cat 16)
- * - Relatório Fiscal      -> 'controle_processual' (Cat 1.5) E 'registros_produtividade' (Cat 7)
- * - Réplica                -> APENAS em 'controle_processual' (Cat 1.7)
- * - Certidão               -> APENAS em 'controle_processual' (Cat 1.8)
+ * Regras de Negócio:
+ * - Notificação Preliminar -> 'controle_processual' (Cat 1.1 - 5 pts) E 'registros_produtividade' (Cat 14 - 15 pts)
+ * - Auto de Infração       -> 'controle_processual' (Cat 1.2 - 5 pts) E 'registros_produtividade' (Cat 16 - 15 pts)
+ * - Relatório Fiscal      -> 'controle_processual' (Cat 1.5 - 5 pts) E 'registros_produtividade' (Cat 7 - 10 pts)
+ * - Réplica                -> APENAS em 'controle_processual' (Cat 1.7 - 5 pts)
+ * - Certidão               -> APENAS em 'controle_processual' (Cat 1.8 - 5 pts)
  */
 
 (function () {
     /**
-     * Executa a sincronização chamando a função RPC 'sincronizar_produtividade_diaria' do Supabase.
+     * Executa a sincronização buscando do Fluxograma e salvando no SEMAC.
      * @param {string} [dataAlvo] - Data no formato YYYY-MM-DD (padrão: hoje).
      */
     async function executarSincronizacaoDiaria(dataAlvo) {
         const dataFormatada = dataAlvo || new Date().toISOString().split('T')[0];
-        console.log(`[Sincronização SEMAC] Iniciando sincronização para a data: ${dataFormatada}...`);
+        console.log(`[Sincronização SEMAC] Iniciando busca de documentos no FLUXOGRAMA para a data: ${dataFormatada}...`);
 
         try {
-            // Garante que o Supabase Client está acessível
-            const client = window.supabaseClient || (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
-            if (!client || typeof client.rpc !== 'function') {
-                console.error('[Sincronização SEMAC] Cliente Supabase válido não encontrado (rpc indisponível).');
-                return { sucesso: false, erro: 'Cliente Supabase ausente ou inválido' };
+            const masterClient = window.supabaseMaster || (typeof supabaseMaster !== 'undefined' ? supabaseMaster : null);
+            const semacClient = window.supabaseClient || (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
+
+            if (!masterClient || !semacClient) {
+                console.error('[Sincronização SEMAC] Clientes Supabase (Master ou SEMAC) indisponíveis.');
+                return { sucesso: false, erro: 'Clientes Supabase indisponíveis' };
             }
 
-            // Chamada da procedure armazenada no banco
-            const { data, error } = await client.rpc('sincronizar_produtividade_diaria', {
-                p_data: dataFormatada
-            });
+            // 1. Buscar documentos criados na data alvo no banco FLUXOGRAMA (Master)
+            const startOfDay = `${dataFormatada}T00:00:00.000Z`;
+            const endOfDay = `${dataFormatada}T23:59:59.999Z`;
 
-            if (error) {
-                console.error('[Sincronização SEMAC] Erro ao sincronizar via RPC:', error.message);
-                return { sucesso: false, erro: error.message };
+            const { data: documentos, error: errDocs } = await masterClient
+                .from('documentos')
+                .select(`
+                    id,
+                    usuario_id,
+                    processo_id,
+                    tipo,
+                    numero_sequencial,
+                    created_at,
+                    gerado_automaticamente,
+                    profiles:usuario_id (id, nome),
+                    processos:processo_id (numero_processo)
+                `)
+                .gte('created_at', startOfDay)
+                .lte('created_at', endOfDay);
+
+            if (errDocs) {
+                console.error('[Sincronização SEMAC] Erro ao buscar documentos no Fluxograma:', errDocs.message);
+                return { sucesso: false, erro: errDocs.message };
             }
 
-            console.log(`[Sincronização SEMAC] Sincronização finalizada com sucesso para ${dataFormatada}!`);
-            return { sucesso: true, data };
+            if (!documentos || documentos.length === 0) {
+                console.log(`[Sincronização SEMAC] Nenhum documento encontrado no Fluxograma para a data ${dataFormatada}.`);
+                return { sucesso: true, inseridosControle: 0, inseridosProdutividade: 0 };
+            }
+
+            let inseridosControle = 0;
+            let inseridosProdutividade = 0;
+
+            for (const doc of documentos) {
+                // Ignora documentos gerados automaticamente se marcada a flag
+                if (doc.gerado_automaticamente === true) continue;
+
+                const tipo = (doc.tipo || '').trim();
+                const userId = doc.usuario_id;
+                const fiscalNome = doc.profiles?.nome || 'Fiscal de Posturas';
+                const numSeq = doc.numero_sequencial || 'S/N';
+                const numProc = doc.processos?.numero_processo || '';
+                const docId = doc.id;
+                const createdAt = doc.created_at;
+
+                // Definir categorias baseadas no tipo do documento
+                let catControle = null;
+                let catProdutividade = null;
+
+                const tipoLower = tipo.toLowerCase();
+
+                if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao')) {
+                    catControle = { id: '1.2', nome: 'Auto de Infração', pontuacao: 5 };
+                    catProdutividade = { id: '16', nome: 'Auto de Infração', pontuacao: 15, campoChave: 'n_auto' };
+                } else if (tipoLower.includes('notificação preliminar') || tipoLower.includes('notificacao preliminar')) {
+                    catControle = { id: '1.1', nome: 'Notificação Preliminar', pontuacao: 5 };
+                    catProdutividade = { id: '14', nome: 'Notificação Preliminar', pontuacao: 15, campoChave: 'n_notificacao' };
+                } else if (tipoLower.includes('relatório fiscal') || tipoLower.includes('relatorio fiscal')) {
+                    catControle = { id: '1.5', nome: 'Relatório Fiscal', pontuacao: 5 };
+                    catProdutividade = { id: '7', nome: 'Elaboração de Relatório Fiscal', pontuacao: 10, campoChave: 'n_relatorio' };
+                } else if (tipoLower.includes('réplica') || tipoLower.includes('replica')) {
+                    catControle = { id: '1.7', nome: 'Réplica da Defesa', pontuacao: 5 };
+                } else if (tipoLower.includes('certidão') || tipoLower.includes('certidao')) {
+                    catControle = { id: '1.8', nome: 'Certidão Sem Defesa', pontuacao: 5 };
+                }
+
+                // 2. Inserir em controle_processual (SEMAC) se não existir (evita duplicatas)
+                if (catControle && userId) {
+                    const { data: existeCP } = await semacClient
+                        .from('controle_processual')
+                        .select('id')
+                        .eq('user_id', userId)
+                        .eq('categoria_id', catControle.id)
+                        .eq('numero_sequencial', numSeq)
+                        .maybeSingle();
+
+                    if (!existeCP) {
+                        const payloadCP = {
+                            user_id: userId,
+                            fiscal_nome: fiscalNome,
+                            categoria_id: catControle.id,
+                            categoria_nome: catControle.nome,
+                            numero_sequencial: numSeq,
+                            pontuacao: catControle.pontuacao,
+                            campos: { numero_processo: numProc, doc_id: docId },
+                            created_at: createdAt
+                        };
+
+                        const { error: errInsCP } = await semacClient
+                            .from('controle_processual')
+                            .insert([payloadCP]);
+
+                        if (!errInsCP) inseridosControle++;
+                        else console.warn('[Sincronização SEMAC] Erro ao inserir controle_processual:', errInsCP.message);
+                    }
+                }
+
+                // 3. Inserir em registros_produtividade (SEMAC) se não existir (evita duplicatas)
+                if (catProdutividade && userId) {
+                    const { data: existeRP } = await semacClient
+                        .from('registros_produtividade')
+                        .select('id')
+                        .eq('user_id', userId)
+                        .eq('categoria_id', catProdutividade.id)
+                        .contains('campos', { doc_id: docId })
+                        .maybeSingle();
+
+                    if (!existeRP) {
+                        const camposObj = { doc_id: docId };
+                        camposObj[catProdutividade.campoChave] = numSeq;
+
+                        const payloadRP = {
+                            user_id: userId,
+                            categoria_id: catProdutividade.id,
+                            categoria_nome: catProdutividade.nome,
+                            pontuacao: catProdutividade.pontuacao,
+                            campos: camposObj,
+                            created_at: createdAt
+                        };
+
+                        const { error: errInsRP } = await semacClient
+                            .from('registros_produtividade')
+                            .insert([payloadRP]);
+
+                        if (!errInsRP) inseridosProdutividade++;
+                        else console.warn('[Sincronização SEMAC] Erro ao inserir registros_produtividade:', errInsRP.message);
+                    }
+                }
+            }
+
+            console.log(`[Sincronização SEMAC] Sucesso para ${dataFormatada}! Novos registros: ${inseridosControle} em Controle, ${inseridosProdutividade} em Produtividade.`);
+            return { sucesso: true, inseridosControle, inseridosProdutividade };
         } catch (err) {
-            console.error('[Sincronização SEMAC] Falha inesperada durante a execução:', err);
+            console.error('[Sincronização SEMAC] Exceção durante a sincronização:', err);
             return { sucesso: false, erro: err.message };
         }
     }
@@ -53,22 +175,19 @@
     window.executarSincronizacaoDiaria = executarSincronizacaoDiaria;
 
     /**
-     * Agendamento Automático no Navegador:
-     * Verifica se o relógio local atinge o fim do dia (23:55) ou se a última sincronização 
-     * foi feita hoje. Caso contrário, executa uma verificação ao carregar o painel.
+     * Agendamento Automático no Navegador
      */
     function iniciarAgendamentoAutomatico() {
         const HOJE = new Date().toISOString().split('T')[0];
         const ULTIMA_SYNC = localStorage.getItem('semac_ultima_sincronizacao_produtividade');
 
-        // Se ainda não foi sincronizado hoje, roda a sincronização de ontem e de hoje
         if (ULTIMA_SYNC !== HOJE) {
             const ontem = new Date();
             ontem.setDate(ontem.getDate() - 1);
             const dataOntem = ontem.toISOString().split('T')[0];
 
-            console.log('[Sincronização SEMAC] Executando sincronização preventiva...');
-            
+            console.log('[Sincronização SEMAC] Executando sincronização preventiva a partir do Fluxograma...');
+
             executarSincronizacaoDiaria(dataOntem).then(() => {
                 executarSincronizacaoDiaria(HOJE).then(res => {
                     if (res && res.sucesso) {
@@ -77,22 +196,6 @@
                 });
             });
         }
-
-        // Loop de verificação a cada 1 hora no cliente ativo
-        setInterval(() => {
-            const agora = new Date();
-            const dataHoje = agora.toISOString().split('T')[0];
-            const hora = agora.getHours();
-
-            // Se for entre 23:00 e 23:59 e ainda não rodou hoje
-            if (hora >= 23 && localStorage.getItem('semac_ultima_sincronizacao_produtividade') !== dataHoje) {
-                executarSincronizacaoDiaria(dataHoje).then(res => {
-                    if (res && res.sucesso) {
-                        localStorage.setItem('semac_ultima_sincronizacao_produtividade', dataHoje);
-                    }
-                });
-            }
-        }, 60 * 60 * 1000); // 1 hora
     }
 
     // Inicialização ao carregar a página
