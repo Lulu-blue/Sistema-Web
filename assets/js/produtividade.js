@@ -2826,10 +2826,11 @@ async function carregarHistorico() {
     const { data: { user } } = await getAuthUser();
     if (!user) return;
 
-    // Buscar registros de produtividade (RLS filtra pelo próprio fiscal)
+    // Buscar registros de produtividade do próprio fiscal
     const { data: regProd, error: errProd } = await supabaseClient
         .from('registros_produtividade')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
     // Buscar registros de CP do próprio fiscal
@@ -4531,8 +4532,15 @@ async function abrirDetalhesAdminHist(id) {
         </div>`;
     }
 
+    if (campos.anexo_pdf) {
+        htmlCampos += `<div style="margin-bottom:8px;">
+            <strong>Anexo (Documento PDF):</strong> 
+            <a href="${campos.anexo_pdf}" target="_blank" style="color:#0ea5e9; font-weight:600; text-decoration:underline;">📄 Visualizar Documento</a>
+        </div>`;
+    }
+
     Object.entries(campos).forEach(([chave, valor]) => {
-        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'data_vencimento_original' || chave === 'data_dilacao' || chave === 'data_dilacao_anterior' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar') return;
+        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'data_vencimento_original' || chave === 'data_dilacao' || chave === 'data_dilacao_anterior' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar' || chave === 'doc_id' || chave === 'notif_id' || chave === 'proc_id' || chave === 'sincronizado' || chave === 'origem' || chave === 'data_sincronizacao' || chave === '_created_at') return;
         let label = chave;
         if (catDef) {
             const campoDef = catDef.campos.find(c => c.nome === chave);

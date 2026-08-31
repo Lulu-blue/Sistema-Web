@@ -45,9 +45,10 @@ async function rodarCronSincronizacao() {
                 processo_id,
                 tipo,
                 numero_sequencial,
+                url,
                 created_at,
                 gerado_automaticamente,
-                profiles:usuario_id (id, nome),
+                profiles:usuario_id (id, nome, cpf),
                 processos:processo_id (numero_processo)
             `)
             .gte('created_at', startOfDay)
@@ -63,37 +64,141 @@ async function rodarCronSincronizacao() {
             process.exit(0);
         }
 
+        // Buscar contribuintes e imóveis dos processos
+        const processoIds = [...new Set(documentos.map(d => d.processo_id).filter(Boolean))];
+        const contribuintesPorProcesso = {};
+        const imoveisPorProcesso = {};
+
+        if (processoIds.length > 0) {
+            const { data: contribs } = await masterClient
+                .from('contribuintes')
+                .select('processo_id, nome, cpf_cnpj, bairro')
+                .in('processo_id', processoIds);
+            (contribs || []).forEach(c => {
+                if (!contribuintesPorProcesso[c.processo_id]) contribuintesPorProcesso[c.processo_id] = c;
+            });
+
+            const { data: imvs } = await masterClient
+                .from('imoveis')
+                .select('processo_id, bairro, inscricao_imovel')
+                .in('processo_id', processoIds);
+            (imvs || []).forEach(i => {
+                if (!imoveisPorProcesso[i.processo_id]) imoveisPorProcesso[i.processo_id] = i;
+            });
+        }
+
         let inseridosCP = 0;
         let inseridosRP = 0;
+
+        // Cache de mapeamento de IDs: fluxograma/cpf -> semacUserId
+        const semacUserCache = {};
 
         for (const doc of documentos) {
             if (doc.gerado_automaticamente === true) continue;
 
             const tipo = (doc.tipo || '').trim();
-            const userId = doc.usuario_id;
+            const fluxoUserId = doc.usuario_id;
+            const cpfRaw = doc.profiles?.cpf || '';
+            const cpfLimpo = cpfRaw.replace(/\D/g, '');
             const fiscalNome = doc.profiles?.nome || 'Fiscal de Posturas';
             const numSeq = doc.numero_sequencial || 'S/N';
             const numProc = doc.processos?.numero_processo || '';
             const docId = doc.id;
+            const docUrl = doc.url || '';
             const createdAt = doc.created_at;
+
+            const contribuinte = contribuintesPorProcesso[doc.processo_id] || {};
+            const imovel = imoveisPorProcesso[doc.processo_id] || {};
+            const nomeContribuinte = contribuinte.nome || '';
+            const bairroImovel = imovel.bairro || contribuinte.bairro || '';
+            const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
+
+            let semacUserId = semacUserCache[fluxoUserId] || semacUserCache[cpfLimpo];
+
+            if (!semacUserId && (cpfLimpo || fluxoUserId)) {
+                const emailBusca = cpfLimpo ? `${cpfLimpo}@email.com` : null;
+                let querySEMAC = semacClient.from('profiles').select('id');
+                if (emailBusca) {
+                    querySEMAC = querySEMAC.or(`email.eq.${emailBusca},id.eq.${fluxoUserId}`);
+                } else {
+                    querySEMAC = querySEMAC.eq('id', fluxoUserId);
+                }
+
+                const { data: semacPerfil } = await querySEMAC.maybeSingle();
+                if (semacPerfil) {
+                    semacUserId = semacPerfil.id;
+                    semacUserCache[fluxoUserId] = semacUserId;
+                    if (cpfLimpo) semacUserCache[cpfLimpo] = semacUserId;
+                }
+            }
+
+            const userId = semacUserId || fluxoUserId;
 
             let catControle = null;
             let catProdutividade = null;
+            let camposCP = {};
+            let camposRP = {};
             const tipoLower = tipo.toLowerCase();
 
             if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao')) {
                 catControle = { id: '1.2', nome: 'Auto de Infração', pontuacao: 5 };
                 catProdutividade = { id: '16', nome: 'Auto de Infração', pontuacao: 15, campoChave: 'n_auto' };
+                camposCP = {
+                    n_auto: numSeq,
+                    nome: nomeContribuinte,
+                    bairro: bairroImovel,
+                    motivo: '',
+                    data: dataFormatadaBR,
+                    anexo_pdf: docUrl
+                };
+                camposRP = {
+                    n_auto: numSeq,
+                    descricao: nomeContribuinte || 'Expedição Automática',
+                    data: dataFormatadaBR
+                };
             } else if (tipoLower.includes('notificação preliminar') || tipoLower.includes('notificacao preliminar')) {
                 catControle = { id: '1.1', nome: 'Notificação Preliminar', pontuacao: 5 };
                 catProdutividade = { id: '14', nome: 'Notificação Preliminar', pontuacao: 15, campoChave: 'n_notificacao' };
+                camposCP = {
+                    n_notificacao: numSeq,
+                    nome: nomeContribuinte,
+                    n_inscricao: contribuinte.cpf_cnpj || imovel.inscricao_imovel || '',
+                    bairro: bairroImovel,
+                    motivo: '',
+                    anexo_pdf: docUrl
+                };
+                camposRP = {
+                    n_notificacao: numSeq,
+                    descricao: nomeContribuinte || 'Expedição Automática',
+                    data: dataFormatadaBR
+                };
             } else if (tipoLower.includes('relatório fiscal') || tipoLower.includes('relatorio fiscal')) {
                 catControle = { id: '1.5', nome: 'Relatório Fiscal', pontuacao: 5 };
                 catProdutividade = { id: '7', nome: 'Elaboração de Relatório Fiscal', pontuacao: 10, campoChave: 'n_relatorio' };
+                camposCP = {
+                    atendimento: nomeContribuinte || numSeq,
+                    bairro: bairroImovel,
+                    anexo_pdf: docUrl
+                };
+                camposRP = {
+                    n_relatorio: numSeq,
+                    descricao: nomeContribuinte || 'Expedição Automática',
+                    data: dataFormatadaBR
+                };
             } else if (tipoLower.includes('réplica') || tipoLower.includes('replica')) {
                 catControle = { id: '1.7', nome: 'Réplica da Defesa', pontuacao: 5 };
+                camposCP = {
+                    nome: nomeContribuinte,
+                    bairro: bairroImovel,
+                    anexo_pdf: docUrl
+                };
             } else if (tipoLower.includes('certidão') || tipoLower.includes('certidao')) {
                 catControle = { id: '1.8', nome: 'Certidão Sem Defesa', pontuacao: 5 };
+                camposCP = {
+                    nome: nomeContribuinte,
+                    bairro: bairroImovel,
+                    anexo_pdf: docUrl
+                };
             }
 
             if (catControle && userId) {
@@ -113,7 +218,13 @@ async function rodarCronSincronizacao() {
                         categoria_nome: catControle.nome,
                         numero_sequencial: numSeq,
                         pontuacao: catControle.pontuacao,
-                        campos: { numero_processo: numProc, doc_id: docId },
+                        campos: {
+                            ...camposCP,
+                            doc_id: docId,
+                            numero_processo: numProc,
+                            origem: 'sincronizacao_fluxograma',
+                            _created_at: createdAt
+                        },
                         created_at: createdAt
                     };
                     const { error } = await semacClient.from('controle_processual').insert([payloadCP]);
@@ -131,14 +242,17 @@ async function rodarCronSincronizacao() {
                     .maybeSingle();
 
                 if (!existeRP) {
-                    const camposObj = { doc_id: docId };
-                    camposObj[catProdutividade.campoChave] = numSeq;
                     const payloadRP = {
                         user_id: userId,
                         categoria_id: catProdutividade.id,
                         categoria_nome: catProdutividade.nome,
                         pontuacao: catProdutividade.pontuacao,
-                        campos: camposObj,
+                        campos: {
+                            ...camposRP,
+                            doc_id: docId,
+                            origem: 'sincronizacao_fluxograma',
+                            _created_at: createdAt
+                        },
                         created_at: createdAt
                     };
                     const { error } = await semacClient.from('registros_produtividade').insert([payloadRP]);

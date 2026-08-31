@@ -56,6 +56,29 @@ async function executarFechamentoAnual() {
                 buscarMais = false;
             }
         }
+
+        // Buscar registros_produtividade
+        from = 0;
+        buscarMais = true;
+        while (buscarMais) {
+            const { data: chunk, error } = await supabaseClient
+                .from('registros_produtividade')
+                .select('*')
+                .range(from, from + pageSize - 1);
+
+            if (error) throw error;
+
+            if (chunk && chunk.length > 0) {
+                todosRegistros = todosRegistros.concat(chunk);
+                from += pageSize;
+                if (chunk.length < pageSize) {
+                    buscarMais = false;
+                }
+            } else {
+                buscarMais = false;
+            }
+        }
+
         const registros = todosRegistros;
 
         // Filtrar pelo ano atual usando a lógica do sistema (obterDataReal)
@@ -168,7 +191,15 @@ async function executarFechamentoAnual() {
         for (const [catId, lista] of Object.entries(regsPorCategoria)) {
             const catDef = typeof CATEGORIAS !== 'undefined' ? CATEGORIAS.find(c => c.id === catId) : null;
             const catNome = catDef ? catDef.nome : ("Categoria " + catId);
-            const nomeAba = catNome.substring(0, 31).replace(/[\\\/:*?"<>|]/g, ''); // Limite de 31 caracteres para abas
+            
+            let nomeAbaBase = catNome.substring(0, 31).replace(/[\\\/:*?"<>|]/g, '').trim();
+            let nomeAba = nomeAbaBase;
+            let counterAba = 1;
+            while (workbook.SheetNames.includes(nomeAba)) {
+                const suffix = ` (${counterAba})`;
+                nomeAba = nomeAbaBase.substring(0, 31 - suffix.length) + suffix;
+                counterAba++;
+            }
 
             // Definir Cabeçalhos
             let headers = [];
@@ -198,7 +229,8 @@ async function executarFechamentoAnual() {
                     row.push(reg.campos?.[c.nome] || '-');
                 });
 
-                const dataFmt = typeof obterDataReal === 'function' ? obterDataReal(reg).toLocaleDateString('pt-BR') : new Date(reg.created_at).toLocaleDateString('pt-BR');
+                const dtRealFallback = typeof obterDataReal === 'function' ? obterDataReal(reg) : new Date(reg.created_at || Date.now());
+                const dataFmt = (dtRealFallback && !isNaN(dtRealFallback)) ? dtRealFallback.toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
                 row.push(reg.fiscal_nome || '-', dataFmt, reg.pontuacao || 0);
 
                 if (isNPOuAuto) {
@@ -260,8 +292,6 @@ async function executarFechamentoAnual() {
         // mas o pedido diz "igual ao supabase", que geralmente implica as colunas da tabela)
         const rawRows = registrosDoAno.map(r => {
             const flat = { ...r };
-            // Transformar o JSON 'campos' em strings para caber na planilha se necessário,
-            // ou deixar as colunas originais
             if (flat.campos) flat.campos = JSON.stringify(flat.campos);
             return flat;
         });

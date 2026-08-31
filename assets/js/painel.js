@@ -2365,57 +2365,72 @@ async function verificarLimpezaAgendada() {
 
         console.log(`[Limpeza] Registros CP visíveis para este filtro: ${visivelCP ? visivelCP.length : 0}`);
 
-        // 1. Limpar Controle Processual
-        console.log("[Limpeza] Tentando deletar de controle_processual...");
-        const resCP = await supabaseClient
-            .from('controle_processual')
-            .delete()
-            .gte('created_at', inicioAno)
-            .lte('created_at', fimAno)
-            .select('id');
+        // Tentar primeiramente executar a limpeza via RPC com SECURITY DEFINER (para ignorar RLS)
+        let deletadosCP = 0;
+        let deletadosProd = 0;
+        let usouRPC = false;
 
-        if (resCP.error) {
-            console.error("[Limpeza] Erro CP:", resCP.error);
-            if (resCP.error.code === '42501') {
-                throw new Error("Permissão negada (42501). Você não tem autorização no Supabase para deletar estes registros. Verifique as políticas de RLS.");
+        try {
+            const { data: resRPC, error: errRPC } = await supabaseClient.rpc('executar_limpeza_anual', { p_ano: parseInt(anoParaLimpar) });
+            if (!errRPC && resRPC && resRPC.sucesso) {
+                deletadosCP = resRPC.deletados_cp || 0;
+                deletadosProd = resRPC.deletados_prod || 0;
+                usouRPC = true;
+                console.log(`[Limpeza RPC] Sucesso! ${deletadosCP} registros CP e ${deletadosProd} de Produtividade removidos.`);
             }
-            throw resCP.error;
+        } catch (eRPC) {
+            console.warn('[Limpeza RPC] RPC não disponível ou falhou, tentando limpeza direta via client...', eRPC);
         }
 
-        // 2. Limpar Produtividade
-        console.log("[Limpeza] Tentando deletar de registros_produtividade...");
-        const resProd = await supabaseClient
-            .from('registros_produtividade')
-            .delete()
-            .gte('created_at', inicioAno)
-            .lte('created_at', fimAno)
-            .select('id');
+        if (!usouRPC) {
+            // 1. Limpar Controle Processual via cliente
+            console.log("[Limpeza Direct] Tentando deletar de controle_processual...");
+            const resCP = await supabaseClient
+                .from('controle_processual')
+                .delete()
+                .gte('created_at', inicioAno)
+                .lte('created_at', fimAno)
+                .select('id');
 
-        if (resProd.error) {
-            console.error("[Limpeza] Erro Produtividade:", resProd.error);
-            throw resProd.error;
+            if (resCP.error) {
+                console.error("[Limpeza Direct] Erro CP:", resCP.error);
+                if (resCP.error.code === '42501') {
+                    throw new Error("Permissão negada (42501). Você não tem autorização no Supabase para deletar estes registros. Execute a função RPC no Supabase.");
+                }
+                throw resCP.error;
+            }
+
+            // 2. Limpar Produtividade via cliente
+            console.log("[Limpeza Direct] Tentando deletar de registros_produtividade...");
+            const resProd = await supabaseClient
+                .from('registros_produtividade')
+                .delete()
+                .gte('created_at', inicioAno)
+                .lte('created_at', fimAno)
+                .select('id');
+
+            if (resProd.error) {
+                console.error("[Limpeza Direct] Erro Produtividade:", resProd.error);
+                throw resProd.error;
+            }
+
+            deletadosCP = resCP.data?.length || 0;
+            deletadosProd = resProd.data?.length || 0;
         }
 
-        const deletadosCP = resCP.data?.length || 0;
-        const deletadosProd = resProd.data?.length || 0;
         console.log(`[Limpeza] Resultado: ${deletadosCP} registros CP deletados, ${deletadosProd} registros Prod deletados.`);
 
         // --- DIAGNÓSTICO DE RLS ---
-        if (deletadosCP === 0 && visivelCP && visivelCP.length > 0) {
-            const msgRLS = "[Limpeza] ATENÇÃO: Os registros são VISÍVEIS mas NÃO puderam ser DELETADOS. " +
-                "Isso indica bloqueio por RLS (Row Level Security) no Supabase. " +
-                "Apenas o criador do registro ou um usuário com permissão de DELETE na política do banco pode excluir.";
+        if (!usouRPC && deletadosCP === 0 && visivelCP && visivelCP.length > 0) {
+            const msgRLS = "[Limpeza] ATENÇÃO: Os registros são VISÍVEIS mas NÃO puderam ser DELETADOS devido ao RLS. " +
+                "Execute a função SQL RPC 'executar_limpeza_anual' no Supabase SQL Editor para permitir a limpeza.";
             console.error(msgRLS);
-            console.info("%c[SUPABASE FIX] Execute este SQL no Dashboard do Supabase para corrigir:\n\n" +
-                "ALTER POLICY \"Permitir exclusão para gerentes\" ON controle_processual \n" +
-                "FOR DELETE TO authenticated \n" +
-                "USING ( (SELECT role FROM profiles WHERE id = auth.uid()) = 'Gerente de Posturas' );", "color: orange; font-weight: bold;");
 
             if (swalActive) {
                 Swal.fire({
-                    title: 'Bloqueio de Permissão',
-                    html: `O sistema encontrou ${visivelCP.length} registros de ${anoParaLimpar}, mas o <b>Supabase</b> não permitiu a exclusão.<br><br>` +
-                        `Certifique-se de que a política RLS da tabela <code>controle_processual</code> permite o <i>DELETE</i> para o seu cargo.`,
+                    title: 'Bloqueio de Permissão (RLS)',
+                    html: `O sistema encontrou ${visivelCP.length} registros de ${anoParaLimpar}, mas o <b>Supabase RLS</b> bloqueou a exclusão pelo navegador.<br><br>` +
+                        `Execute a função SQL fornecida no SQL Editor do Supabase para autorizar a limpeza.`,
                     icon: 'warning'
                 });
             }
