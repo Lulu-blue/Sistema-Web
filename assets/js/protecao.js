@@ -17,7 +17,13 @@ window.supabaseClient = supabaseClient;
 // =============================================
 const MASTER_FLUXOGRAMA_URL = 'https://mqjlbgbbvesyagwxqgox.supabase.co';
 const MASTER_FLUXOGRAMA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xamxiZ2JidmVzeWFnd3hxZ294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzMTE5MDUsImV4cCI6MjA5ODg4NzkwNX0.V9Loy1ZarXn7wB00QYfuKhVgVK2chKg3-X8XHdvAgvU';
-const supabaseMaster = supabase.createClient(MASTER_FLUXOGRAMA_URL, MASTER_FLUXOGRAMA_KEY);
+const supabaseMaster = supabase.createClient(MASTER_FLUXOGRAMA_URL, MASTER_FLUXOGRAMA_KEY, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+    }
+});
 
 window.MASTER_FLUXOGRAMA_URL = MASTER_FLUXOGRAMA_URL;
 window.MASTER_FLUXOGRAMA_KEY = MASTER_FLUXOGRAMA_KEY;

@@ -1098,6 +1098,10 @@ function mudarAba(idAba) {
         event.currentTarget.classList.add('active');
     }
 
+    if ((idAba === 'historico' || idAba === 'produtividade') && typeof carregarHistorico === 'function') {
+        carregarHistorico();
+    }
+
     if (idAba === 'historico-geral' && typeof mudarSubAbaCP === 'function') {
         var btnAtiva = document.querySelector('.sub-aba-btn.active');
         mudarSubAbaCP(subAbaAtual || '1.1', btnAtiva);
