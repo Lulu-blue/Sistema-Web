@@ -21,18 +21,52 @@ function cancelarFechamento() {
     }
 }
 
+async function fetchComTimeout(url, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        return response;
+    } catch (err) {
+        clearTimeout(timer);
+        throw err;
+    }
+}
+
+function sanitizarValorExcel(val) {
+    if (val === null || val === undefined) return '';
+    let str = '';
+    if (typeof val === 'object') {
+        try {
+            str = JSON.stringify(val);
+        } catch (e) {
+            str = String(val);
+        }
+    } else {
+        str = String(val);
+    }
+    if (str.length > 32000) {
+        return str.substring(0, 31950) + '... [truncado p/ limite do Excel]';
+    }
+    return str;
+}
+
 async function executarFechamentoAnual() {
     console.log("[Fechamento] Iniciando execução anual...");
     const anoAtual = new Date().getFullYear();
 
-    // 1. Ocultamos o popup do SweetAlert e atualizamos a barra de progresso do HTML
-    const txtProgressoMain = document.getElementById('progresso-fechamento-texto');
-    if (txtProgressoMain) txtProgressoMain.textContent = 'Iniciando fechamento...';
+    // 1. Atualizar UI de progresso do HTML
+    const divProgresso = document.getElementById('progresso-fechamento');
+    const txtProgresso = document.getElementById('progresso-fechamento-texto');
+    const barraProgresso = document.getElementById('progresso-fechamento-barra');
+
+    if (divProgresso) divProgresso.style.display = 'block';
+    if (txtProgresso) txtProgresso.textContent = '10% - Carregando registros...';
+    if (barraProgresso) barraProgresso.style.width = '10%';
 
     try {
         // 2. Buscar todos os registros de controle_processual do ano atual
-        // Nota: A coluna de data real pode variar, usaremos created_at como base se obterDataReal não filtrar no banco
-        // Mas o ideal é carregar tudo e filtrar no JS para garantir paridade com as regras do sistema
         let todosRegistros = [];
         let from = 0;
         const pageSize = 1000;
@@ -50,7 +84,7 @@ async function executarFechamentoAnual() {
                 todosRegistros = todosRegistros.concat(chunk);
                 from += pageSize;
                 if (chunk.length < pageSize) {
-                    buscarMais = false; // Acabou
+                    buscarMais = false;
                 }
             } else {
                 buscarMais = false;
@@ -84,10 +118,11 @@ async function executarFechamentoAnual() {
         // Filtrar pelo ano atual usando a lógica do sistema (obterDataReal)
         const registrosDoAno = registros.filter(reg => {
             const dt = typeof obterDataReal === 'function' ? obterDataReal(reg) : new Date(reg.created_at);
-            return dt.getFullYear() === anoAtual;
+            return dt && !isNaN(dt) && dt.getFullYear() === anoAtual;
         });
 
         if (registrosDoAno.length === 0) {
+            if (divProgresso) divProgresso.style.display = 'none';
             Swal.fire('Aviso', 'Nenhum registro encontrado para o ano de ' + anoAtual, 'info');
             return;
         }
@@ -104,13 +139,6 @@ async function executarFechamentoAnual() {
 
         let processados = 0;
         let falhas = 0;
-
-        // Exibir Barra de Progresso no painel
-        const divProgresso = document.getElementById('progresso-fechamento');
-        const txtProgresso = document.getElementById('progresso-fechamento-texto');
-        const barraProgresso = document.getElementById('progresso-fechamento-barra');
-        if (divProgresso) divProgresso.style.display = 'block';
-        if (txtProgresso) txtProgresso.textContent = 'Calculando...';
 
         const totalRegistros = registrosDoAno.length;
         let registrosProcessados = 0;
@@ -131,50 +159,69 @@ async function executarFechamentoAnual() {
 
             registrosProcessados++;
 
-            const urlAnexo = reg.campos && reg.campos.anexo_pdf;
+            // Extrair todos os anexos possíveis do registro (file, anexos_extras, anexo_pdf, anexo_ar)
+            const catId = reg.categoria_id || 'Outros';
+            const catDef = typeof CATEGORIAS !== 'undefined' ? CATEGORIAS.find(c => c.id === catId) : null;
+            const camposFile = catDef?.campos?.filter(c => c.tipo === 'file') || [];
 
-            if (urlAnexo) {
-                const catId = reg.categoria_id || 'Outros';
+            const anexosDoReg = [];
+            if (reg.campos) {
+                camposFile.forEach(cf => {
+                    if (reg.campos[cf.nome]) anexosDoReg.push({ url: reg.campos[cf.nome], label: cf.label || cf.nome });
+                });
+                if (Array.isArray(reg.campos.anexos_extras)) {
+                    reg.campos.anexos_extras.forEach((url, idx) => {
+                        if (url) anexosDoReg.push({ url: url, label: `Anexo_Extra_${idx + 1}` });
+                    });
+                }
+                if (reg.campos.anexo_pdf) anexosDoReg.push({ url: reg.campos.anexo_pdf, label: 'Documento' });
+                if (reg.campos.anexo_ar) anexosDoReg.push({ url: reg.campos.anexo_ar, label: 'AR' });
+            }
+
+            // Deduplicar URLs por registro
+            const urlsVistas = new Set();
+            const anexosUnicos = anexosDoReg.filter(a => {
+                if (!a.url || typeof a.url !== 'string' || urlsVistas.has(a.url)) return false;
+                urlsVistas.add(a.url);
+                return true;
+            });
+
+            if (anexosUnicos.length > 0) {
                 const catNome = categoriasMap[catId] || ('Categoria ' + catId);
                 const folderCategoria = folderDocumentos.folder(catNome.replace(/[\\\/:*?"<>|]/g, ''));
-
-                // Definir nome do arquivo (Número Sequencial)
                 const numero = (reg.numero_sequencial || reg.id).toString().replace(/[\\\/:*?"<>|]/g, '-');
-                const extensao = urlAnexo.split('.').pop().split('?')[0]; // Pegar extensão antes de query params
-                const fileName = `${numero}.${extensao}`;
 
-                try {
-                    // Baixar o arquivo
-                    const response = await fetch(urlAnexo);
-                    if (!response.ok) throw new Error('Falha no download');
-                    const blob = await response.blob();
+                for (let i = 0; i < anexosUnicos.length; i++) {
+                    const item = anexosUnicos[i];
+                    const suf = anexosUnicos.length > 1 ? `_${i + 1}` : '';
+                    const extensao = item.url.split('.').pop().split('?')[0] || 'pdf';
+                    const fileName = `${numero}${suf}.${extensao}`;
 
-                    // Salvar o arquivo diretamente na pasta da categoria
-                    folderCategoria.file(fileName, blob);
-                    processados++;
-                } catch (err) {
-                    console.error(`Erro ao baixar anexo de ${numero}:`, err);
-                    falhas++;
+                    try {
+                        const response = await fetchComTimeout(item.url, 12000);
+                        if (!response.ok) throw new Error('Falha no download HTTP ' + response.status);
+                        const blob = await response.blob();
+
+                        folderCategoria.file(fileName, blob);
+                        processados++;
+                    } catch (err) {
+                        console.error(`Erro/Timeout ao baixar anexo (${numero}):`, err);
+                        falhas++;
+                    }
                 }
             }
 
-            // Atualizamos apenas a UI de progresso na tela
-
-            // Atualizar UI de progresso na tela
+            // Atualizar UI de progresso na tela (etapa 10% -> 75%)
             if (txtProgresso && totalRegistros > 0) {
-                const perc = Math.round((registrosProcessados / totalRegistros) * 100);
+                const perc = Math.round(10 + (registrosProcessados / totalRegistros) * 65);
                 txtProgresso.textContent = `${perc}% (${registrosProcessados} de ${totalRegistros} registros)`;
                 if (barraProgresso) barraProgresso.style.width = `${perc}%`;
             }
         }
 
-        if (processados === 0) {
-            Swal.fire('Aviso', 'Nenhum anexo encontrado nos registros de ' + anoAtual, 'info');
-            return;
-        }
-
-        // 5. Gerar Planilha ODS
-        if (txtProgresso) txtProgresso.textContent = 'Gerando Planilhas...';
+        // 5. Gerar Planilha ODS / XLSX
+        if (txtProgresso) txtProgresso.textContent = '75% - Gerando Planilhas Excel...';
+        if (barraProgresso) barraProgresso.style.width = '75%';
 
         const workbook = XLSX.utils.book_new();
         const folderTabela = zip.folder(anoAtual.toString()).folder("Tabela");
@@ -223,23 +270,23 @@ async function executarFechamentoAnual() {
 
             lista.forEach(reg => {
                 const row = [];
-                if (temNumero) row.push(reg.numero_sequencial || '-');
+                if (temNumero) row.push(sanitizarValorExcel(reg.numero_sequencial || '-'));
 
                 camposDef.forEach(c => {
-                    row.push(reg.campos?.[c.nome] || '-');
+                    row.push(sanitizarValorExcel(reg.campos?.[c.nome] ?? '-'));
                 });
 
                 const dtRealFallback = typeof obterDataReal === 'function' ? obterDataReal(reg) : new Date(reg.created_at || Date.now());
                 const dataFmt = (dtRealFallback && !isNaN(dtRealFallback)) ? dtRealFallback.toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
-                row.push(reg.fiscal_nome || '-', dataFmt, reg.pontuacao || 0);
+                row.push(sanitizarValorExcel(reg.fiscal_nome || '-'), dataFmt, reg.pontuacao || 0);
 
                 if (isNPOuAuto) {
                     const c = reg.campos || {};
                     row.push(
-                        c.data_entrada ? c.data_entrada.split('-').reverse().join('/') : '-',
-                        c.data_vencimento ? c.data_vencimento.split('-').reverse().join('/') : '-',
-                        c.historico_admin || '-',
-                        c.resposta_fiscal || '-'
+                        sanitizarValorExcel(c.data_entrada ? c.data_entrada.split('-').reverse().join('/') : '-'),
+                        sanitizarValorExcel(c.data_vencimento ? c.data_vencimento.split('-').reverse().join('/') : '-'),
+                        sanitizarValorExcel(c.historico_admin || '-'),
+                        sanitizarValorExcel(c.resposta_fiscal || '-')
                     );
                 }
                 rows.push(row);
@@ -285,14 +332,19 @@ async function executarFechamentoAnual() {
         folderTabela.file(`Fechamento_${anoAtual}.xlsx`, xlsxBuffer);
 
         // --- 5.1 Gerar Planilha "Banco de Dados.xlsx" ---
-        // Exportação bruta (todas as colunas do Supabase)
         const workbookDB = XLSX.utils.book_new();
 
-        // Flattening the data (opcional: transformar o objeto 'campos' em colunas individuais se necessário, 
-        // mas o pedido diz "igual ao supabase", que geralmente implica as colunas da tabela)
         const rawRows = registrosDoAno.map(r => {
-            const flat = { ...r };
-            if (flat.campos) flat.campos = JSON.stringify(flat.campos);
+            const flat = {};
+            for (const [k, v] of Object.entries(r)) {
+                if (v === null || v === undefined) {
+                    flat[k] = '';
+                } else if (typeof v === 'number' || typeof v === 'boolean') {
+                    flat[k] = v;
+                } else {
+                    flat[k] = sanitizarValorExcel(v);
+                }
+            }
             return flat;
         });
 
@@ -302,16 +354,30 @@ async function executarFechamentoAnual() {
         const dbBuffer = XLSX.write(workbookDB, { bookType: 'xlsx', type: 'array' });
         folderTabela.file(`Banco de Dados.xlsx`, dbBuffer);
 
-        // 6. Gerar o ZIP final e baixar
-        if (txtProgresso) txtProgresso.textContent = 'Compactando arquivo ZIP final...';
+        // 6. Gerar o ZIP final usando modo STORE rápido e atualização suave de progresso (85% -> 100%)
+        if (txtProgresso) txtProgresso.textContent = '85% - Compactando arquivo ZIP final...';
+        if (barraProgresso) barraProgresso.style.width = '85%';
 
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        console.log("[Fechamento] ZIP gerado com sucesso. Tamanho:", zipBlob.size, "bytes");
+        const zipBlob = await zip.generateAsync({
+            type: "blob",
+            compression: "STORE"
+        }, function updateCallback(metadata) {
+            if (txtProgresso) {
+                const zipPerc = Math.round(85 + (metadata.percent / 100) * 15);
+                txtProgresso.textContent = `${zipPerc}% - Compactando ZIP (${Math.round(metadata.percent)}%)`;
+                if (barraProgresso) barraProgresso.style.width = `${zipPerc}%`;
+            }
+        });
+
+        if (txtProgresso) txtProgresso.textContent = '100% - Fechamento Concluído!';
+        if (barraProgresso) barraProgresso.style.width = '100%';
+
+        console.log("[Fechamento] ZIP gerado com sucesso. Tamanho:", zipBlob.size, "bytes. Arquivos:", processados, "Falhas:", falhas);
 
         // --- 7. Salvar com Verificação (Exige novo gesto do usuário para evitar SecurityError) ---
         Swal.fire({
             title: 'Fechamento Gerado!',
-            text: 'O arquivo ZIP está pronto. Clique no botão abaixo para escolher onde salvar no seu computador.',
+            text: `O arquivo ZIP está pronto (${processados} anexos incluídos${falhas > 0 ? `, ${falhas} falhas` : ''}). Clique abaixo para salvar.`,
             icon: 'success',
             confirmButtonText: '📁 Escolher local e Salvar',
             showCancelButton: true,

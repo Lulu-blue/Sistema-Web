@@ -2752,36 +2752,50 @@ let todosRegistros = []; // Armazena globalmente para filtrar
 // Procura pela data preenchida nos campos do formulário para exibir a data correta
 // da ação, em vez da data em que o registro foi digitado no sistema (created_at)
 function obterDataReal(reg) {
-    // Controle Processual: sempre usar created_at
+    if (!reg) return new Date();
+
+    // Controle Processual: sempre tentar created_at primeiro
     if (reg.categoria_id && reg.categoria_id.toString().startsWith('1.')) {
-        return new Date(reg.created_at);
+        if (reg.created_at) {
+            const dtCP = new Date(reg.created_at);
+            if (!isNaN(dtCP.getTime())) return dtCP;
+        }
     }
 
-    if (!reg.campos) return new Date(reg.created_at);
-
-    // Registros comuns: procura por qualquer campo que tenha "data" no nome
-    for (const [chave, valor] of Object.entries(reg.campos)) {
-        if (chave.includes('data') && valor && typeof valor === 'string') {
-            // Formato ISO: YYYY-MM-DD
-            if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                return new Date(valor + 'T12:00:00');
-            }
-            // Formato brasileiro: DD/MM/YYYY
-            const matchBr = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-            if (matchBr) {
-                const [, dia, mes, ano] = matchBr;
-                return new Date(`${ano}-${mes}-${dia}T12:00:00`);
-            }
-            // Formato brasileiro curto: DD/MM/YY
-            const matchBrCurto = valor.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
-            if (matchBrCurto) {
-                const [, dia, mes, anoCurto] = matchBrCurto;
-                const ano = parseInt(anoCurto, 10) >= 50 ? `19${anoCurto}` : `20${anoCurto}`;
-                return new Date(`${ano}-${mes}-${dia}T12:00:00`);
+    if (reg.campos && typeof reg.campos === 'object') {
+        // Registros comuns: procura por qualquer campo que tenha "data" no nome
+        for (const [chave, valor] of Object.entries(reg.campos)) {
+            if (chave.includes('data') && valor && typeof valor === 'string') {
+                // Formato ISO: YYYY-MM-DD
+                if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const dtIso = new Date(valor + 'T12:00:00');
+                    if (!isNaN(dtIso.getTime())) return dtIso;
+                }
+                // Formato brasileiro: DD/MM/YYYY
+                const matchBr = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (matchBr) {
+                    const [, dia, mes, ano] = matchBr;
+                    const dtBr = new Date(`${ano}-${mes}-${dia}T12:00:00`);
+                    if (!isNaN(dtBr.getTime())) return dtBr;
+                }
+                // Formato brasileiro curto: DD/MM/YY
+                const matchBrCurto = valor.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+                if (matchBrCurto) {
+                    const [, dia, mes, anoCurto] = matchBrCurto;
+                    const ano = parseInt(anoCurto, 10) >= 50 ? `19${anoCurto}` : `20${anoCurto}`;
+                    const dtBrCurto = new Date(`${ano}-${mes}-${dia}T12:00:00`);
+                    if (!isNaN(dtBrCurto.getTime())) return dtBrCurto;
+                }
             }
         }
     }
-    return new Date(reg.created_at);
+
+    if (reg.created_at) {
+        const dtCreated = new Date(reg.created_at);
+        if (!isNaN(dtCreated.getTime())) return dtCreated;
+    }
+
+    return new Date();
 }
 
 function estaNosPrimeiros7Dias() {
@@ -4540,7 +4554,7 @@ async function abrirDetalhesAdminHist(id) {
     }
 
     Object.entries(campos).forEach(([chave, valor]) => {
-        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'data_vencimento_original' || chave === 'data_dilacao' || chave === 'data_dilacao_anterior' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar' || chave === 'doc_id' || chave === 'notif_id' || chave === 'proc_id' || chave === 'sincronizado' || chave === 'origem' || chave === 'data_sincronizacao' || chave === '_created_at') return;
+        if (!valor || chave.startsWith('anexo_') || chave === 'data_entrada' || chave === 'data_vencimento' || chave === 'data_vencimento_original' || chave === 'data_dilacao' || chave === 'data_dilacao_anterior' || chave === 'historico_admin' || chave === 'resposta_fiscal' || chave === 'ar' || chave === 'doc_id' || chave === 'notif_id' || chave === 'proc_id' || chave === 'auto_id' || chave === 'processo_id' || chave === 'sincronizado' || chave === 'origem' || chave === 'data_sincronizacao' || chave === '_created_at') return;
         let label = chave;
         if (catDef) {
             const campoDef = catDef.campos.find(c => c.nome === chave);
@@ -5504,6 +5518,97 @@ function salvarPDF() {
 }
 
 // --- NOVA LIMPEZA GERAL ---
+// --- LIMPEZA MENSAL AUTOMÁTICA E MANUAL ---
+async function executarLimpezaMensal(silencioso = false) {
+    const agora = new Date();
+    const inicioMesAtual = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const inicioMesIso = inicioMesAtual.toISOString();
+
+    try {
+        const { data: { user } } = await getAuthUser();
+        if (!user) return;
+
+        // 1. Zera a pontuação no Controle Processual APENAS para registros anteriores ao mês atual
+        const { error: errorCP } = await supabaseClient
+            .from('controle_processual')
+            .update({ pontuacao: 0 })
+            .eq('user_id', user.id)
+            .lt('created_at', inicioMesIso);
+
+        if (errorCP) {
+            console.warn('[Limpeza Mensal] Erro ao zerar pontuação por created_at:', errorCP);
+        }
+
+        // Verificar também registros com pontuação > 0 cuja data real seja anterior ao mês atual
+        const { data: regCPCampos } = await supabaseClient
+            .from('controle_processual')
+            .select('id, campos, created_at, pontuacao')
+            .eq('user_id', user.id)
+            .gt('pontuacao', 0);
+
+        if (regCPCampos && regCPCampos.length > 0) {
+            const idsCPZerar = [];
+            regCPCampos.forEach(r => {
+                const dt = obterDataReal(r);
+                if (dt < inicioMesAtual) {
+                    idsCPZerar.push(r.id);
+                }
+            });
+            if (idsCPZerar.length > 0) {
+                for (let i = 0; i < idsCPZerar.length; i += 100) {
+                    const lote = idsCPZerar.slice(i, i + 100);
+                    await supabaseClient
+                        .from('controle_processual')
+                        .update({ pontuacao: 0 })
+                        .in('id', lote);
+                }
+            }
+        }
+
+        // 2. Remove registros de registros_produtividade anteriores ao mês atual
+        const { data: registrosProd, error: errorFetch } = await supabaseClient
+            .from('registros_produtividade')
+            .select('id, campos, created_at')
+            .eq('user_id', user.id);
+
+        if (!errorFetch && registrosProd) {
+            const idsParaExcluir = [];
+            registrosProd.forEach(r => {
+                const dt = obterDataReal(r);
+                if (dt < inicioMesAtual) {
+                    idsParaExcluir.push(r.id);
+                }
+            });
+
+            if (idsParaExcluir.length > 0) {
+                for (let i = 0; i < idsParaExcluir.length; i += 100) {
+                    const lote = idsParaExcluir.slice(i, i + 100);
+                    await supabaseClient
+                        .from('registros_produtividade')
+                        .delete()
+                        .in('id', lote);
+                }
+            }
+        }
+
+        const chaveMes = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+        localStorage.setItem('semac_ultimo_mes_limpeza_' + user.id, chaveMes);
+
+        if (!silencioso && typeof Swal !== 'undefined') {
+            Swal.fire('Concluído!', 'Registros de meses anteriores foram limpos. Os registros do mês atual permanecem intocados.', 'success');
+        }
+
+        if (typeof carregarHistorico === 'function') {
+            await carregarHistorico();
+        }
+    } catch (err) {
+        console.error('Erro na limpeza mensal:', err);
+        if (!silencioso && typeof Swal !== 'undefined') {
+            Swal.fire('Erro', 'Ocorreu um erro ao limpar o histórico.', 'error');
+        }
+    }
+}
+
 function confirmarLimpeza() {
     const agora = new Date();
     const nomeMesAtual = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -5525,63 +5630,12 @@ function confirmarLimpeza() {
                 allowOutsideClick: false,
                 didOpen: () => { Swal.showLoading(); }
             });
-
-            try {
-                const { data: { user } } = await getAuthUser();
-                if (!user) {
-                    Swal.fire('Erro', 'Usuário não autenticado.', 'error');
-                    return;
-                }
-
-                // 1. Zera a pontuação no Controle Processual APENAS para meses anteriores (usa created_at)
-                const inicioMesAtual = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
-                const { error: errorCP } = await supabaseClient
-                    .from('controle_processual')
-                    .update({ pontuacao: 0 })
-                    .eq('user_id', user.id)
-                    .lt('created_at', inicioMesAtual);
-
-                if (errorCP) throw errorCP;
-
-                // 2. Remove registros da produtividade normal APENAS para meses anteriores
-                // Para registros comuns, usa a data do campo 'data' em campos, não created_at
-                const { data: registrosProd, error: errorFetch } = await supabaseClient
-                    .from('registros_produtividade')
-                    .select('id, campos')
-                    .eq('user_id', user.id);
-
-                if (errorFetch) throw errorFetch;
-
-                const idsParaExcluir = [];
-                const anoAtual = agora.getFullYear();
-                const mesAtual = agora.getMonth();
-
-                (registrosProd || []).forEach(r => {
-                    const dt = obterDataReal(r);
-                    if (dt.getFullYear() < anoAtual || (dt.getFullYear() === anoAtual && dt.getMonth() < mesAtual)) {
-                        idsParaExcluir.push(r.id);
-                    }
-                });
-
-                if (idsParaExcluir.length > 0) {
-                    const { error: errorDel } = await supabaseClient
-                        .from('registros_produtividade')
-                        .delete()
-                        .in('id', idsParaExcluir);
-
-                    if (errorDel) throw errorDel;
-                }
-
-                Swal.fire('Concluído!', 'Registros de meses anteriores foram limpos. Os registros do mês atual permanecem intocados.', 'success');
-                carregarHistorico();
-            } catch (err) {
-                console.error('Erro ao limpar produtividade:', err);
-                Swal.fire('Erro', 'Ocorreu um erro ao limpar o histórico.', 'error');
-            }
+            await executarLimpezaMensal(false);
         }
     });
 }
 window.confirmarLimpeza = confirmarLimpeza;
+window.executarLimpezaMensal = executarLimpezaMensal;
 
 // Fechar dropdowns e modais ao clicar fora
 document.addEventListener('click', (e) => {
