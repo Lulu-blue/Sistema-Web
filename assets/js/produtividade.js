@@ -953,6 +953,16 @@ function abrirFormulario(categoria) {
                     </div>
                 </div>
             `;
+        } else if (campo.nome === 'n_processo' && categoria.id === '10') {
+            // Caso especial: Categoria 9 com múltiplos campos de processo
+            inputHTML = `
+                <div id="container-processos" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div class="processo-item" style="display: flex; gap: 8px;">
+                        <input type="text" class="campo-processo-multi" placeholder="N° do Processo" required style="flex: 1;">
+                        <button type="button" class="btn-add-processo" onclick="adicionarCampoProcesso()" style="background: #2ecc71; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">+</button>
+                    </div>
+                </div>
+            `;
         } else if (campo.tipo === 'imagens_com_legenda') {
             inputHTML = `
                 <div id="container-imagens-legenda" style="display: flex; flex-direction: column; gap: 10px;">
@@ -1200,6 +1210,24 @@ window.adicionarCampoLicenca = function () {
     div.querySelector('input').focus();
 };
 
+// --- FUNÇÃO PARA ADICIONAR CAMPO DE PROCESSO (CATEGORIA 9) ---
+window.adicionarCampoProcesso = function () {
+    const container = document.getElementById('container-processos');
+    if (!container) return;
+
+    const div = document.createElement('div');
+    div.className = 'processo-item';
+    div.style.display = 'flex';
+    div.style.gap = '8px';
+    div.style.marginTop = '8px';
+    div.innerHTML = `
+        <input type="text" class="campo-processo-multi" placeholder="N° do Processo" style="flex: 1;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">×</button>
+    `;
+    container.appendChild(div);
+    div.querySelector('input').focus();
+};
+
 // =========================================================
 // SALVAR EDIÇÃO DE REGISTRO (ESPECÍFICO PARA NÃO AFETAR ANEXOS E PONTOS)
 // =========================================================
@@ -1255,6 +1283,27 @@ async function salvarEdicaoRegistro() {
                     todosPreenchidos = false;
                 } else {
                     novosCampos['_lista_licencas'] = lista;
+                }
+                return;
+            }
+
+            if (categoriaAtual.id === '10' && campo.nome === 'n_processo') {
+                const inputsMulti = document.querySelectorAll('.campo-processo-multi');
+                const lista = [];
+                inputsMulti.forEach(inp => {
+                    const val = inp.value.trim();
+                    if (val) {
+                        lista.push(val);
+                        inp.style.borderColor = '#e2e8f0';
+                    } else if (campo.obrigatorio && lista.length === 0) {
+                        inp.style.borderColor = '#ef4444';
+                    }
+                });
+
+                if (lista.length === 0 && campo.obrigatorio) {
+                    todosPreenchidos = false;
+                } else {
+                    novosCampos['_lista_processos'] = lista;
                 }
                 return;
             }
@@ -1464,6 +1513,28 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 todosPreenchidos = false;
             } else {
                 campos['_lista_licencas'] = lista;
+            }
+            return;
+        }
+
+        // CASO ESPECIAL: Múltiplos processos (Categoria 9)
+        if (categoriaAtual.id === '10' && campo.nome === 'n_processo') {
+            const inputsMulti = document.querySelectorAll('.campo-processo-multi');
+            const lista = [];
+            inputsMulti.forEach(inp => {
+                const val = inp.value.trim();
+                if (val) {
+                    lista.push(val);
+                    inp.style.borderColor = '#e2e8f0';
+                } else if (campo.obrigatorio && lista.length === 0) {
+                    inp.style.borderColor = '#ef4444';
+                }
+            });
+
+            if (lista.length === 0 && campo.obrigatorio) {
+                todosPreenchidos = false;
+            } else {
+                campos['_lista_processos'] = lista;
             }
             return;
         }
@@ -2635,12 +2706,34 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         .from('registros_produtividade')
                         .insert(registrosMulti)
                         .select());
+                } else if (categoriaAtual.id === '10' && campos._lista_processos && campos._lista_processos.length > 1) {
+                    // MULTIPLOS INSERTS (Categoria 10)
+                    const registrosMulti = campos._lista_processos.map(proc => {
+                        const camposIndiv = { ...campos };
+                        delete camposIndiv._lista_processos;
+                        camposIndiv.n_processo = proc;
+                        return {
+                            user_id: user.id,
+                            categoria_id: categoriaAtual.id,
+                            categoria_nome: categoriaAtual.nome,
+                            pontuacao: pontos,
+                            campos: camposIndiv
+                        };
+                    });
+                    ({ data, error } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert(registrosMulti)
+                        .select());
                 } else {
                     // INSERT NORMAL
                     const camposLimpos = { ...campos };
                     if (camposLimpos._lista_licencas) {
                         camposLimpos.n_licenca = camposLimpos._lista_licencas[0];
                         delete camposLimpos._lista_licencas;
+                    }
+                    if (camposLimpos._lista_processos) {
+                        camposLimpos.n_processo = camposLimpos._lista_processos[0];
+                        delete camposLimpos._lista_processos;
                     }
                     ({ data, error } = await supabaseClient
                         .from('registros_produtividade')
@@ -2703,6 +2796,8 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${data[0].numero_sequencial}`);
             } else if (categoriaAtual.id === '19' && campos._lista_licencas && campos._lista_licencas.length > 1) {
                 alert(`${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
+            } else if (categoriaAtual.id === '10' && campos._lista_processos && campos._lista_processos.length > 1) {
+                alert(`${campos._lista_processos.length} registros salvos com sucesso! (${pontos * campos._lista_processos.length} pontos no total)`);
             } else if (categoriaAtual.id === '1.1') {
                 const startsWithAI = campos.n_notificacao && campos.n_notificacao.toUpperCase().startsWith('AI');
                 if (startsWithAI) {
