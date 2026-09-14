@@ -56,6 +56,42 @@
     }
 
     /**
+     * Verifica se o cargo (profiles.role no SEMAC) é elegível para a sincronização automática
+     * de produtividade (somente Fiscais de Posturas e de Meio Ambiente possuem contrapartida
+     * de documentos no banco Fluxograma).
+     */
+    function ehCargoFiscalSincronizavel(role) {
+        if (!role) return false;
+        const normalizado = role
+            .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+            .toLowerCase().trim();
+        return normalizado === 'fiscal'
+            || normalizado.includes('fiscal de postura')
+            || normalizado.includes('fiscal de meio ambiente');
+    }
+
+    /**
+     * Normaliza o número sequencial (ex: "0053/2026" -> "53/2026") para servir de chave de
+     * correlação ENTRE tabelas diferentes do Fluxograma (documentos / autos_infracao / notificacoes)
+     * que podem descrever o mesmo evento real com formatação ligeiramente diferente.
+     * Retorna null para valores não confiáveis (vazio, "S/N"), caso em que a deduplicação cai
+     * para o id interno da tabela de origem (doc_id/auto_id/notif_id/proc_id).
+     */
+    function normalizarNumeroSequencial(numero) {
+        if (!numero) return null;
+        const str = String(numero).trim();
+        if (!str || str.toUpperCase() === 'S/N') return null;
+        const partes = str.split('/');
+        if (partes.length === 2) {
+            const num = partes[0].replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+            const ano = partes[1].replace(/\D/g, '');
+            if (num) return `${num}/${ano}`;
+        }
+        const soDigitos = str.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        return soDigitos || str.toLowerCase();
+    }
+
+    /**
      * Extrai exaustivamente qualquer URL (Cloudinary / PDF / HTTP) de um objeto ou lista de argumentos.
      */
     function extrairUrlCloudinary(...fontes) {
@@ -92,12 +128,43 @@
     }
 
     /**
+     * Verifica se o fiscal já rodou a "Limpeza Geral" (Home) para o mês anterior ao atual: essa
+     * ação apaga permanentemente os registros de `registros_produtividade` de meses passados. Se
+     * não sobrou NENHUM registro do fiscal no mês anterior, é sinal de que a limpeza já foi feita
+     * — nesse caso a tolerância de reabertura do mês anterior NÃO deve mais se aplicar, senão a
+     * sincronização reinsere pontos que o fiscal já fechou/zerou deliberadamente.
+     */
+    async function limpezaGeralJaFeitaMesAnterior(semacClient, userId) {
+        if (!userId) return false;
+        const hoje = new Date();
+        const anoRef = hoje.getMonth() === 0 ? hoje.getFullYear() - 1 : hoje.getFullYear();
+        const mesRef = hoje.getMonth() === 0 ? 11 : hoje.getMonth() - 1; // 0-indexed
+        const inicioMesAnterior = new Date(anoRef, mesRef, 1, 0, 0, 0, 0).toISOString();
+        const fimMesAnterior = new Date(anoRef, mesRef + 1, 0, 23, 59, 59, 999).toISOString();
+
+        const { count, error } = await semacClient
+            .from('registros_produtividade')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .gte('created_at', inicioMesAnterior)
+            .lte('created_at', fimMesAnterior);
+
+        if (error) {
+            console.warn('[Sincronização SEMAC] Erro ao verificar Limpeza Geral do mês anterior:', error.message);
+            return false; // Em caso de erro, não bloquear a tolerância (comportamento conservador)
+        }
+        return (count || 0) === 0;
+    }
+
+    /**
      * Verifica a elegibilidade para pontuação e inserção nos registros de produtividade:
      * - Mês atual: Pontuação total + Registra em RP.
-     * - Mês anterior (1 mês atrás): Pontuação total + Registra em RP se hoje for até o dia 7 do mês vigente.
-     * - Mês anterior (após dia 7) ou 2+ meses atrás: Apenas insere no Controle Processual com pontuação 0 (não insere em RP).
+     * - Mês anterior (1 mês atrás): Pontuação total + Registra em RP, mas SOMENTE até o dia 3 do
+     *   mês vigente E somente se o fiscal ainda não tiver rodado a Limpeza Geral daquele mês.
+     * - Mês anterior (após dia 3, ou com Limpeza Geral já feita) ou 2+ meses atrás: Apenas insere
+     *   no Controle Processual com pontuação 0 (não insere em RP).
      */
-    function verificarElegibilidadePontuacao(dataInput) {
+    function verificarElegibilidadePontuacao(dataInput, limpezaMesAnteriorFeita) {
         if (!dataInput) return { pontuar: true, diferencaMeses: 0 };
         const dt = new Date(dataInput);
         if (isNaN(dt.getTime())) return { pontuar: true, diferencaMeses: 0 };
@@ -119,6 +186,9 @@
 
         // Exatamente 1 mês atrás (mês anterior) -> Tolerância até o dia 3 do mês atual
         if (diferencaMeses === 1) {
+            if (limpezaMesAnteriorFeita) {
+                return { pontuar: false, diferencaMeses, motivo: 'Limpeza Geral do mês anterior já realizada pelo fiscal' };
+            }
             if (diaAtual <= 3) {
                 return { pontuar: true, diferencaMeses };
             } else {
@@ -183,6 +253,12 @@
         // 1. Verificar se já existe pelo identificador único do Mestre (doc_id, notif_id, proc_id ou auto_id)
         const chaveUnica = campos.doc_id || campos.notif_id || campos.proc_id || campos.auto_id;
         const campoChave = campos.doc_id ? 'doc_id' : (campos.notif_id ? 'notif_id' : (campos.proc_id ? 'proc_id' : 'auto_id'));
+
+        // Chave de correlação usada pela constraint UNIQUE do banco (user_id, categoria_id, origem_unica).
+        // Prioriza o número sequencial normalizado (funciona mesmo quando o MESMO evento real aparece
+        // em tabelas diferentes do Fluxograma com ids internos distintos, ex: documentos x autos_infracao);
+        // cai para o id interno da tabela de origem quando não há número sequencial confiável.
+        const origemUnica = normalizarNumeroSequencial(numSeq) || (chaveUnica ? `${campoChave}:${chaveUnica}` : null);
 
         if (chaveUnica) {
             const { data: existeChave } = await semacClient
@@ -250,9 +326,12 @@
             }
         }
 
-        const { error } = await semacClient
+        // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica): mesmo que
+        // duas execuções concorrentes (abas/dispositivos diferentes) passem pelas checagens acima ao
+        // mesmo tempo, o banco garante que só uma delas efetivamente insere a linha.
+        const { data: linhaInserida, error } = await semacClient
             .from('controle_processual')
-            .insert([{
+            .upsert([{
                 user_id: userId,
                 fiscal_nome: fiscalNome,
                 categoria_id: catId,
@@ -260,14 +339,16 @@
                 numero_sequencial: numSeq || 'S/N',
                 pontuacao: pontuacao,
                 campos: campos,
+                origem_unica: origemUnica,
                 created_at: campos._created_at || new Date().toISOString()
-            }]);
+            }], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+            .select('id');
 
         if (error) {
             console.warn(`[Sincronização] Erro ao inserir CP (${catId}):`, error.message);
             return false;
         }
-        return true;
+        return !!(linhaInserida && linhaInserida.length > 0);
     }
 
     /**
@@ -316,6 +397,10 @@
         }
 
         const numSeqRP = campos.n_auto || campos.n_notificacao || campos.n_relatorio || campos.numero_sequencial;
+
+        // Mesma lógica de chave de correlação usada em inserirControleProcessual (ver comentário lá).
+        const origemUnica = normalizarNumeroSequencial(numSeqRP) || (chaveUnica ? `${campoChave}:${chaveUnica}` : null);
+
         if (numSeqRP && numSeqRP !== 'S/N' && numSeqRP !== '') {
             const campoBusca = catId === '16' ? 'n_auto' : 'n_notificacao';
             const { data: existeSeqRP } = await semacClient
@@ -338,22 +423,26 @@
             }
         }
 
-        const { error } = await semacClient
+        // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica) — mesma
+        // proteção contra corrida descrita em inserirControleProcessual.
+        const { data: linhaInserida, error } = await semacClient
             .from('registros_produtividade')
-            .insert([{
+            .upsert([{
                 user_id: userId,
                 categoria_id: catId,
                 categoria_nome: catNome,
                 pontuacao: pontuacao,
                 campos: campos,
+                origem_unica: origemUnica,
                 created_at: campos._created_at || new Date().toISOString()
-            }]);
+            }], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+            .select('id');
 
         if (error) {
             console.warn(`[Sincronização] Erro ao inserir RP (${catId}):`, error.message);
             return false;
         }
-        return true;
+        return !!(linhaInserida && linhaInserida.length > 0);
     }
 
     // =============================================
@@ -382,7 +471,7 @@
             }
 
             // ------------------------------------------------------------------
-            // PASSO 1: Identificar o usuário no Fluxograma via CPF / Email / Auth ID / Nome
+            // PASSO 1: Identificar o usuário no Fluxograma via Auth ID / CPF / Email (nunca por nome)
             // ------------------------------------------------------------------
             const { data: { user: authUser } } = await semacClient.auth.getUser();
             if (!authUser) {
@@ -395,12 +484,20 @@
             try {
                 const { data: pSemac } = await semacClient
                     .from('profiles')
-                    .select('id, cpf, full_name, email_real')
+                    .select('id, cpf, full_name, email_real, role')
                     .eq('id', authUser.id)
                     .maybeSingle();
                 semacPerfil = pSemac;
             } catch (e) {
                 console.warn('[Sincronização SEMAC] Erro ao buscar perfil SEMAC:', e);
+            }
+
+            // Esta sincronização só se aplica a Fiscais (os únicos cargos com contrapartida
+            // de documentos no banco Fluxograma). Gerentes, Diretores, Secretário(a) etc. nunca
+            // devem disparar a busca no Fluxograma.
+            if (!ehCargoFiscalSincronizavel(semacPerfil?.role)) {
+                console.log(`[Sincronização SEMAC] Cargo "${semacPerfil?.role || 'desconhecido'}" não é Fiscal de Posturas/Meio Ambiente. Sincronização ignorada para este usuário.`);
+                return { sucesso: true, bloqueadoPorCargo: true, inseridosControle: 0, inseridosProdutividade: 0 };
             }
 
             const userEmail = authUser.email || semacPerfil?.email_real || '';
@@ -412,10 +509,13 @@
 
             console.log(`[Sincronização SEMAC] Tentando identificar usuário (Email: ${userEmail}, CPF: ${cpfLimpo || 'N/A'}, Nome: ${userNome || 'N/A'})...`);
 
-            // Montar condições de busca no Fluxograma (profiles)
+            // Montar condições de busca no Fluxograma (profiles).
+            // Identificação feita SOMENTE por identificadores únicos e confiáveis (auth_id, CPF, e-mail).
+            // Um fallback por nome (ilike) foi removido deliberadamente: além de falhar com diferenças
+            // de acentuação (ex: "José" x "Jose"), corria o risco de casar com MAIS DE UM perfil por
+            // nome parecido, misturando/duplicando documentos entre fiscais diferentes.
             let perfisFluxograma = [];
 
-            // 1. Tentar buscar por auth_id ou CPF no Fluxograma
             const orConditions = [];
             if (authUser.id) orConditions.push(`auth_id.eq.${authUser.id}`);
             if (cpfFormatado) orConditions.push(`cpf.eq.${cpfFormatado}`);
@@ -435,22 +535,8 @@
                 }
             }
 
-            // 2. Se ainda não encontrou e temos nome, tentar buscar por nome aproximado
-            if (perfisFluxograma.length === 0 && userNome && userNome.length > 3) {
-                const { data: resNome } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('profiles')
-                        .select('id, auth_id, nome, cpf, email')
-                        .ilike('nome', `%${userNome.trim()}%`)
-                );
-
-                if (resNome && resNome.length > 0) {
-                    perfisFluxograma = resNome;
-                }
-            }
-
             if (perfisFluxograma.length === 0) {
-                console.warn(`[Sincronização SEMAC] Perfil não encontrado no Fluxograma para Email: ${userEmail}, CPF: ${cpfFormatado || cpfLimpo}.`);
+                console.warn(`[Sincronização SEMAC] ⚠️ CPF não encontrado no Fluxograma para "${userNome || 'usuário'}" (Email: ${userEmail}, CPF: ${cpfFormatado || cpfLimpo || 'N/A'}). A sincronização não pode prosseguir com segurança sem um CPF correspondente — verifique/corrija o cadastro deste fiscal em um dos dois sistemas.`);
                 return { sucesso: true, inseridosControle: 0, inseridosProdutividade: 0 };
             }
 
@@ -465,6 +551,10 @@
 
             let inseridosControle = 0;
             let inseridosProdutividade = 0;
+
+            // Calculado uma única vez por execução: usado pela tolerância do mês anterior em
+            // verificarElegibilidadePontuacao() (ver comentário na definição da função).
+            const limpezaMesAnteriorFeita = await limpezaGeralJaFeitaMesAnterior(semacClient, semacUserId);
 
             // ------------------------------------------------------------------
             // PASSO 1: BUSCA E DIAGNÓSTICO EM TODAS AS TABELAS DO FLUXOGRAMA
@@ -605,48 +695,17 @@
             });
 
             if (todosProcessosDoFiscal.length === 0 && documentos.length === 0 && autosTabela.length > 0) {
-                console.error('🚨🚨🚨 [Sincronização SEMAC] PROBLEMA DE RLS DETECTADO! A tabela autos_infracao (RLS=OFF) retorna dados, mas processos e documentos (RLS=ON) não. O masterClient está usando a anon key SEM sessão autenticada, e as políticas RLS bloqueiam o acesso. SOLUÇÃO: No banco Fluxograma, execute:\n' +
-                    "ALTER TABLE processos DISABLE ROW LEVEL SECURITY;\n" +
-                    "ALTER TABLE documentos DISABLE ROW LEVEL SECURITY;\n" +
-                    "ALTER TABLE notificacoes DISABLE ROW LEVEL SECURITY;\n" +
-                    "-- OU adicione políticas de leitura anônima:\n" +
+                console.error('🚨🚨🚨 [Sincronização SEMAC] PROBLEMA DE RLS DETECTADO! A tabela autos_infracao (RLS=OFF) retorna dados, mas processos e documentos (RLS=ON) não. O masterClient está usando a anon key SEM sessão autenticada, e as políticas RLS bloqueiam o acesso. SOLUÇÃO: No banco Fluxograma, adicione políticas de leitura anônima SOMENTE nestas 3 tabelas (contribuintes/imoveis não precisam — os dados de contribuinte/imóvel já vêm embutidos em processos.dados):\n' +
                     "CREATE POLICY \"anon_read_processos\" ON processos FOR SELECT TO anon USING (true);\n" +
                     "CREATE POLICY \"anon_read_documentos\" ON documentos FOR SELECT TO anon USING (true);\n" +
                     "CREATE POLICY \"anon_read_notificacoes\" ON notificacoes FOR SELECT TO anon USING (true);\n" +
-                    "CREATE POLICY \"anon_read_contribuintes\" ON contribuintes FOR SELECT TO anon USING (true);\n" +
-                    "CREATE POLICY \"anon_read_imoveis\" ON imoveis FOR SELECT TO anon USING (true);");
+                    "(NÃO use ALTER TABLE ... DISABLE ROW LEVEL SECURITY — isso desliga toda a proteção da tabela, não só a leitura.)");
             }
 
-            // Coletar todos os processo_ids para contribuintes e imóveis
-            const todosProcIdsColetados = [...new Set([
-                ...todosProcessosDoFiscal.map(p => p.id),
-                ...procIdsRelacionados
-            ].filter(Boolean))];
-
-            const contribuintesPorProcesso = {};
-            const imoveisPorProcesso = {};
-
-            if (todosProcIdsColetados.length > 0) {
-                const { data: contribs } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('contribuintes')
-                        .select('processo_id, nome, cpf_cnpj, bairro')
-                        .in('processo_id', todosProcIdsColetados)
-                );
-                (contribs || []).forEach(c => {
-                    if (!contribuintesPorProcesso[c.processo_id]) contribuintesPorProcesso[c.processo_id] = c;
-                });
-
-                const { data: imvs } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('imoveis')
-                        .select('processo_id, bairro, inscricao_imovel')
-                        .in('processo_id', todosProcIdsColetados)
-                );
-                (imvs || []).forEach(i => {
-                    if (!imoveisPorProcesso[i.processo_id]) imoveisPorProcesso[i.processo_id] = i;
-                });
-            }
+            // Dados de contribuinte/imóvel vêm de dentro de `processos.dados` (JSON já carregado
+            // em processosPorId acima) — de propósito NÃO consultamos as tabelas `contribuintes`
+            // nem `imoveis` diretamente: são cadastros de PII de contribuinte mais amplos que o
+            // necessário aqui, sem necessidade de abrir leitura anônima neles no Fluxograma.
 
             // Mapear URLs de documentos por processo
             const docAutoUrlPorProcesso = {};
@@ -681,12 +740,10 @@
                     dadosProc
                 );
                 const createdAt = doc.created_at;
-                const contribuinte = contribuintesPorProcesso[doc.processo_id] || {};
-                const imovel = imoveisPorProcesso[doc.processo_id] || {};
-                const nomeContribuinte = contribuinte.nome || dadosProc.contribuinte?.nome || '';
-                const bairroImovel = imovel.bairro || contribuinte.bairro || dadosProc.imovel?.bairro || '';
+                const nomeContribuinte = dadosProc.contribuinte?.nome || '';
+                const bairroImovel = dadosProc.imovel?.bairro || '';
                 const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
-                const elegivel = verificarElegibilidadePontuacao(createdAt);
+                const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
 
                 // --- Auto de Infração ---
                 if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao') || (tipoLower.includes('auto') && tipoLower.includes('infra'))) {
@@ -727,7 +784,7 @@
                         doc_id: doc.id,
                         n_notificacao: numSeq,
                         nome: nomeContribuinte,
-                        n_inscricao: contribuinte.cpf_cnpj || imovel.inscricao_imovel || '',
+                        n_inscricao: dadosProc.contribuinte?.cpf_cnpj || dadosProc.imovel?.inscricao_imovel || '',
                         bairro: bairroImovel,
                         motivo: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || '',
                         anexo_pdf: docUrl,
@@ -766,6 +823,23 @@
                     };
                     if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.5', 'Controle Processual: Relatório', numSeq, ptsCP, camposCP)) {
                         inseridosControle++;
+                    }
+
+                    // Mesma automação aplicada quando o fiscal preenche a categoria 1.5 manualmente
+                    // (ver produtividade.js): gera também a Elaboração de Relatório Fiscal (cat. 7, 50 pts).
+                    if (elegivel.pontuar) {
+                        const camposRP = {
+                            doc_id: doc.id,
+                            n_relatorio: numSeq,
+                            tipo: 'Relatório Fiscal',
+                            descricao: numSeq,
+                            data: dataFormatadaBR,
+                            anexo_pdf: docUrl,
+                            _created_at: createdAt
+                        };
+                        if (await inserirRegistroProdutividade(semacClient, semacUserId, '7', 'Elaboração de Certidão de Arquivamento e Relatório Fiscal', 50, camposRP)) {
+                            inseridosProdutividade++;
+                        }
                     }
                 }
 
@@ -810,13 +884,11 @@
             for (const auto of (autosTabela || [])) {
                 const numSeq = auto.numero || 'S/N';
                 const createdAt = auto.created_at;
-                const contribuinte = contribuintesPorProcesso[auto.processo_id] || {};
-                const imovel = imoveisPorProcesso[auto.processo_id] || {};
-                const nomeContribuinte = contribuinte.nome || auto.dados?.contribuinte?.nome || '';
-                const bairroImovel = imovel.bairro || contribuinte.bairro || auto.dados?.imovel?.bairro || '';
-                const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
                 const procDoAuto = processosPorId[auto.processo_id] || {};
                 const dadosProcAuto = procDoAuto.dados || {};
+                const nomeContribuinte = auto.dados?.contribuinte?.nome || dadosProcAuto.contribuinte?.nome || '';
+                const bairroImovel = auto.dados?.imovel?.bairro || dadosProcAuto.imovel?.bairro || '';
+                const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
                 const autoUrl = extrairUrlCloudinary(
                     auto.dados,
                     auto.url,
@@ -828,7 +900,7 @@
                     dadosProcAuto
                 );
 
-                const elegivel = verificarElegibilidadePontuacao(createdAt);
+                const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
                 const ptsCP = elegivel.pontuar ? 5 : 0;
 
                 const camposCP = {
@@ -873,8 +945,6 @@
 
                 if (isAutoInfracao) continue;
 
-                const contribuinte = contribuintesPorProcesso[notif.processo_id] || {};
-                const imovel = imoveisPorProcesso[notif.processo_id] || {};
                 const createdAt = notif.created_at;
                 const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
                 const procDoNotif = processosPorId[notif.processo_id] || {};
@@ -884,15 +954,15 @@
                     dadosProcNotif
                 );
 
-                const elegivel = verificarElegibilidadePontuacao(createdAt);
+                const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
                 const ptsCP = elegivel.pontuar ? 5 : 0;
 
                 const camposCP = {
                     notif_id: notif.id,
                     n_notificacao: notif.numero || 'S/N',
-                    nome: contribuinte.nome || '',
-                    n_inscricao: contribuinte.cpf_cnpj || imovel.inscricao_imovel || '',
-                    bairro: imovel.bairro || contribuinte.bairro || '',
+                    nome: dadosProcNotif.contribuinte?.nome || '',
+                    n_inscricao: dadosProcNotif.contribuinte?.cpf_cnpj || dadosProcNotif.imovel?.inscricao_imovel || '',
+                    bairro: dadosProcNotif.imovel?.bairro || '',
                     motivo: notif.descricao || '',
                     anexo_pdf: notifUrl,
                     _created_at: createdAt
@@ -986,8 +1056,6 @@
 
                 for (const proc of processosDividaAtiva) {
                     const autoDoc = docsDAPorProcesso[proc.id] || {};
-                    const contribDA = contribuintesPorProcesso[proc.id] || {};
-                    const imovelDA = imoveisPorProcesso[proc.id] || {};
                     const dadosProc = proc.dados || {};
 
                     // Extrair dados relevantes conforme especificação
@@ -996,21 +1064,16 @@
                         || dadosProc.etapa14?.numero_auto_infracao
                         || proc.numero_processo
                         || 'S/N';
-                    const nomeAutuado = contribDA.nome
-                        || dadosProc.contribuinte?.nome
+                    const nomeAutuado = dadosProc.contribuinte?.nome
                         || '';
-                    const cpfAutuado = contribDA.cpf_cnpj
-                        || dadosProc.contribuinte?.cpf_cnpj
+                    const cpfAutuado = dadosProc.contribuinte?.cpf_cnpj
                         || '';
-                    const advogadoAutuado = contribDA.advogado
-                        || dadosProc.advogado
+                    const advogadoAutuado = dadosProc.advogado
                         || dadosProc.contribuinte?.advogado
                         || dadosProc.etapa14?.advogado
                         || dadosProc.etapa15?.advogado
                         || 'S/A';
-                    const bairroDA = imovelDA.bairro
-                        || contribDA.bairro
-                        || dadosProc.imovel?.bairro
+                    const bairroDA = dadosProc.imovel?.bairro
                         || '';
                     const anexoPdf = autoDoc.url
                         || dadosProc.anexo_pdf
@@ -1021,7 +1084,7 @@
 
                     const dataDA = proc.created_at;
                     const dataFormatadaBR = dataDA ? new Date(dataDA).toISOString().split('T')[0] : '';
-                    const elegivel = verificarElegibilidadePontuacao(dataDA);
+                    const elegivel = verificarElegibilidadePontuacao(dataDA, limpezaMesAnteriorFeita);
                     const ptsCP = elegivel.pontuar ? 100 : 0;
 
                     const camposCP = {

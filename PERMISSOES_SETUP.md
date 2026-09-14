@@ -3716,3 +3716,107 @@ CREATE POLICY "Acesso escrita liquidacoes"
         )
     );
 ```
+
+---
+
+## 🆕 MIGRAÇÃO: Deduplicação da Sincronização Fluxograma → SEMAC
+
+> Corrige a causa raiz de registros duplicados vindos da sincronização automática (`assets/js/sincronizacao-cron.js` e `cron-sincronizacao.js`): não havia nenhuma constraint no banco impedindo duas inserções da mesma origem (Auto/NP/Certidão/Réplica/Relatório/Dívida Ativa), então a deduplicação dependia 100% de checagens no JavaScript antes do `insert`, vulnerável a corridas entre abas/dispositivos/execuções simultâneas — e o mesmo evento real podia chegar por mais de uma tabela do Fluxograma (`documentos` x `autos_infracao` x `notificacoes`) com ids internos diferentes, escapando das checagens.
+>
+> O código-fonte já foi ajustado para gravar uma coluna `origem_unica` (número sequencial normalizado, ou o id de origem quando não há número confiável) e fazer `upsert` com `ON CONFLICT` nessa chave. **Esta migração precisa ser aplicada no banco para que a proteção funcione** — execute os passos **nesta ordem**, revisando o resultado de cada `SELECT` antes de prosseguir para o próximo passo.
+
+### Passo 1 — Adicionar a coluna (seguro, não destrutivo)
+
+```sql
+ALTER TABLE public.controle_processual ADD COLUMN IF NOT EXISTS origem_unica TEXT;
+ALTER TABLE public.registros_produtividade ADD COLUMN IF NOT EXISTS origem_unica TEXT;
+```
+
+### Passo 2 — Preencher `origem_unica` para os registros já sincronizados
+
+Só afeta linhas com `campos->>'origem' = 'sincronizacao_fluxograma'` (nunca toca em registros lançados manualmente pelos fiscais, que continuam com `origem_unica = NULL` e ficam de fora da constraint do Passo 5).
+
+```sql
+UPDATE public.controle_processual
+SET origem_unica = CASE
+    WHEN numero_sequencial IS NOT NULL AND numero_sequencial NOT IN ('S/N', '')
+        THEN regexp_replace(numero_sequencial, '^0+(\d)', '\1')
+    WHEN campos->>'doc_id' IS NOT NULL THEN 'doc_id:' || (campos->>'doc_id')
+    WHEN campos->>'notif_id' IS NOT NULL THEN 'notif_id:' || (campos->>'notif_id')
+    WHEN campos->>'proc_id' IS NOT NULL THEN 'proc_id:' || (campos->>'proc_id')
+    WHEN campos->>'auto_id' IS NOT NULL THEN 'auto_id:' || (campos->>'auto_id')
+    ELSE NULL
+END
+WHERE (campos->>'origem') = 'sincronizacao_fluxograma' AND origem_unica IS NULL;
+
+UPDATE public.registros_produtividade
+SET origem_unica = CASE
+    WHEN COALESCE(campos->>'n_auto', campos->>'n_notificacao', campos->>'n_relatorio') IS NOT NULL
+         AND COALESCE(campos->>'n_auto', campos->>'n_notificacao', campos->>'n_relatorio') NOT IN ('S/N', '')
+        THEN regexp_replace(COALESCE(campos->>'n_auto', campos->>'n_notificacao', campos->>'n_relatorio'), '^0+(\d)', '\1')
+    WHEN campos->>'doc_id' IS NOT NULL THEN 'doc_id:' || (campos->>'doc_id')
+    WHEN campos->>'notif_id' IS NOT NULL THEN 'notif_id:' || (campos->>'notif_id')
+    WHEN campos->>'proc_id' IS NOT NULL THEN 'proc_id:' || (campos->>'proc_id')
+    WHEN campos->>'auto_id' IS NOT NULL THEN 'auto_id:' || (campos->>'auto_id')
+    ELSE NULL
+END
+WHERE (campos->>'origem') = 'sincronizacao_fluxograma' AND origem_unica IS NULL;
+```
+
+### Passo 3 — Revisar os grupos duplicados ANTES de apagar qualquer coisa
+
+Rode e **confira visualmente** o resultado. Cada linha mostra um grupo de registros que a sincronização considera "o mesmo evento" e quantas cópias existem.
+
+```sql
+SELECT user_id, categoria_id, origem_unica, count(*) AS copias, array_agg(id ORDER BY created_at) AS ids
+FROM public.controle_processual
+WHERE origem_unica IS NOT NULL
+GROUP BY user_id, categoria_id, origem_unica
+HAVING count(*) > 1
+ORDER BY copias DESC;
+
+SELECT user_id, categoria_id, origem_unica, count(*) AS copias, array_agg(id ORDER BY created_at) AS ids
+FROM public.registros_produtividade
+WHERE origem_unica IS NOT NULL
+GROUP BY user_id, categoria_id, origem_unica
+HAVING count(*) > 1
+ORDER BY copias DESC;
+```
+
+### Passo 4 — Apagar as cópias duplicadas (⚠️ DESTRUTIVO — só rode depois de revisar o Passo 3)
+
+Mantém sempre a linha mais antiga (`created_at` menor) de cada grupo e apaga as demais.
+
+```sql
+DELETE FROM public.controle_processual a
+USING public.controle_processual b
+WHERE a.user_id = b.user_id
+  AND a.categoria_id = b.categoria_id
+  AND a.origem_unica = b.origem_unica
+  AND a.origem_unica IS NOT NULL
+  AND (a.created_at, a.id) > (b.created_at, b.id);
+
+DELETE FROM public.registros_produtividade a
+USING public.registros_produtividade b
+WHERE a.user_id = b.user_id
+  AND a.categoria_id = b.categoria_id
+  AND a.origem_unica = b.origem_unica
+  AND a.origem_unica IS NOT NULL
+  AND (a.created_at, a.id) > (b.created_at, b.id);
+```
+
+### Passo 5 — Criar a constraint UNIQUE (proteção definitiva contra novas duplicatas)
+
+Só funciona se o Passo 4 já zerou os grupos duplicados — senão o `ALTER TABLE` abaixo falha com erro de violação de unicidade (o que é esperado e serve de confirmação de que ainda sobrou duplicata para limpar).
+
+```sql
+ALTER TABLE public.controle_processual
+    ADD CONSTRAINT ux_controle_processual_origem UNIQUE (user_id, categoria_id, origem_unica);
+
+ALTER TABLE public.registros_produtividade
+    ADD CONSTRAINT ux_registros_produtividade_origem UNIQUE (user_id, categoria_id, origem_unica);
+```
+
+> **Nota:** `NULL` nunca conflita com outro `NULL` em uma constraint UNIQUE do Postgres — então registros manuais (sem `origem_unica`) e registros antigos sem número sequencial confiável continuam podendo coexistir livremente, sem serem barrados por esta constraint.
+
+> **Atenção com a ordem:** aplique esta migração **antes** de corrigir o RLS do Fluxograma mencionado nos logs de `sincronizacao-cron.js` (tabelas `processos`/`documentos`/`notificacoes` hoje retornam vazio para o `masterClient` sem sessão). Sem a constraint, destravar esse RLS faria a mesma Notificação/Auto ser processado por duas tabelas de origem ao mesmo tempo (`documentos` e `notificacoes`/`autos_infracao`), piorando a duplicação em vez de resolvê-la.

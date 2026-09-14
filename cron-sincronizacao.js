@@ -29,6 +29,95 @@ const masterClient = createClient(MASTER_URL, MASTER_KEY, {
     }
 });
 
+/**
+ * Normaliza o número sequencial (ex: "0053/2026" -> "53/2026") para servir de chave de
+ * correlação ÚNICA no banco (user_id, categoria_id, origem_unica), consistente com a mesma
+ * função usada em assets/js/sincronizacao-cron.js. Isso garante que o mesmo evento real
+ * processado pelo cron externo ou pela sincronização do navegador nunca seja duplicado.
+ */
+function normalizarNumeroSequencial(numero) {
+    if (!numero) return null;
+    const str = String(numero).trim();
+    if (!str || str.toUpperCase() === 'S/N') return null;
+    const partes = str.split('/');
+    if (partes.length === 2) {
+        const num = partes[0].replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        const ano = partes[1].replace(/\D/g, '');
+        if (num) return `${num}/${ano}`;
+    }
+    const soDigitos = str.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    return soDigitos || str.toLowerCase();
+}
+
+/**
+ * Verifica se o fiscal já rodou a "Limpeza Geral" (Home) para o mês anterior ao atual: essa ação
+ * apaga permanentemente os registros de `registros_produtividade` de meses passados. Se não sobrou
+ * NENHUM registro do fiscal no mês anterior, é sinal de que a limpeza já foi feita — nesse caso a
+ * tolerância de reabertura do mês anterior NÃO deve mais se aplicar. Resultado cacheado por userId
+ * dentro de uma mesma execução do cron (que processa vários fiscais de uma vez).
+ */
+const limpezaMesAnteriorCache = new Map();
+async function limpezaGeralJaFeitaMesAnterior(userId) {
+    if (!userId) return false;
+    if (limpezaMesAnteriorCache.has(userId)) return limpezaMesAnteriorCache.get(userId);
+
+    const hoje = new Date();
+    const anoRef = hoje.getMonth() === 0 ? hoje.getFullYear() - 1 : hoje.getFullYear();
+    const mesRef = hoje.getMonth() === 0 ? 11 : hoje.getMonth() - 1; // 0-indexed
+    const inicioMesAnterior = new Date(anoRef, mesRef, 1, 0, 0, 0, 0).toISOString();
+    const fimMesAnterior = new Date(anoRef, mesRef + 1, 0, 23, 59, 59, 999).toISOString();
+
+    const { count, error } = await semacClient
+        .from('registros_produtividade')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', inicioMesAnterior)
+        .lte('created_at', fimMesAnterior);
+
+    const resultado = error ? false : (count || 0) === 0;
+    if (error) console.warn('[CRON SEMAC] Erro ao verificar Limpeza Geral do mês anterior:', error.message);
+    limpezaMesAnteriorCache.set(userId, resultado);
+    return resultado;
+}
+
+/**
+ * Verifica a elegibilidade para pontuação e inserção nos registros de produtividade:
+ * - Mês atual: Pontuação total + Registra em RP.
+ * - Mês anterior (1 mês atrás): Pontuação total + Registra em RP, mas SOMENTE até o dia 3 do mês
+ *   vigente E somente se o fiscal ainda não tiver rodado a Limpeza Geral daquele mês.
+ * - Mês anterior (após dia 3, ou com Limpeza Geral já feita) ou 2+ meses atrás: Apenas insere no
+ *   Controle Processual com pontuação 0 (não insere em RP).
+ */
+async function verificarElegibilidadePontuacao(userId, dataInput) {
+    if (!dataInput) return { pontuar: true, diferencaMeses: 0 };
+    const dt = new Date(dataInput);
+    if (isNaN(dt.getTime())) return { pontuar: true, diferencaMeses: 0 };
+
+    const hoje = new Date();
+    const anoAtual = hoje.getFullYear();
+    const mesAtual = hoje.getMonth();
+    const diaAtual = hoje.getDate();
+
+    const diferencaMeses = (anoAtual - dt.getFullYear()) * 12 + (mesAtual - dt.getMonth());
+
+    if (diferencaMeses <= 0) {
+        return { pontuar: true, diferencaMeses };
+    }
+
+    if (diferencaMeses === 1) {
+        const limpezaFeita = await limpezaGeralJaFeitaMesAnterior(userId);
+        if (limpezaFeita) {
+            return { pontuar: false, diferencaMeses, motivo: 'Limpeza Geral do mês anterior já realizada pelo fiscal' };
+        }
+        if (diaAtual <= 3) {
+            return { pontuar: true, diferencaMeses };
+        }
+        return { pontuar: false, diferencaMeses, motivo: 'Passou do dia 3 do mês seguinte' };
+    }
+
+    return { pontuar: false, diferencaMeses, motivo: 'Item antigo (2+ meses de atraso)' };
+}
+
 async function rodarCronSincronizacao() {
     const dataFormatada = process.argv[2] || new Date().toISOString().split('T')[0];
 
@@ -54,7 +143,7 @@ async function rodarCronSincronizacao() {
                 created_at,
                 gerado_automaticamente,
                 profiles:usuario_id (id, nome, cpf),
-                processos:processo_id (numero_processo)
+                processos:processo_id (numero_processo, dados)
             `)
             .gte('created_at', startOfDay)
             .lte('created_at', endOfDay);
@@ -69,29 +158,10 @@ async function rodarCronSincronizacao() {
             process.exit(0);
         }
 
-        // Buscar contribuintes e imóveis dos processos
-        const processoIds = [...new Set(documentos.map(d => d.processo_id).filter(Boolean))];
-        const contribuintesPorProcesso = {};
-        const imoveisPorProcesso = {};
-
-        if (processoIds.length > 0) {
-            const { data: contribs } = await masterClient
-                .from('contribuintes')
-                .select('processo_id, nome, cpf_cnpj, bairro')
-                .in('processo_id', processoIds);
-            (contribs || []).forEach(c => {
-                if (!contribuintesPorProcesso[c.processo_id]) contribuintesPorProcesso[c.processo_id] = c;
-            });
-
-            const { data: imvs } = await masterClient
-                .from('imoveis')
-                .select('processo_id, bairro, inscricao_imovel')
-                .in('processo_id', processoIds);
-            (imvs || []).forEach(i => {
-                if (!imoveisPorProcesso[i.processo_id]) imoveisPorProcesso[i.processo_id] = i;
-            });
-        }
-
+        // Dados de contribuinte/imóvel vêm de dentro de `processos.dados` (JSON já embutido no
+        // select de `documentos` acima) — de propósito NÃO consultamos as tabelas `contribuintes`
+        // nem `imoveis` diretamente: são cadastros de PII de contribuinte mais amplos que o
+        // necessário aqui, e não há necessidade de abrir leitura anônima neles no Fluxograma.
         let inseridosCP = 0;
         let inseridosRP = 0;
 
@@ -112,10 +182,10 @@ async function rodarCronSincronizacao() {
             const docUrl = doc.url || '';
             const createdAt = doc.created_at;
 
-            const contribuinte = contribuintesPorProcesso[doc.processo_id] || {};
-            const imovel = imoveisPorProcesso[doc.processo_id] || {};
-            const nomeContribuinte = contribuinte.nome || '';
-            const bairroImovel = imovel.bairro || contribuinte.bairro || '';
+            const dadosProc = doc.processos?.dados || {};
+            const nomeContribuinte = dadosProc.contribuinte?.nome || '';
+            const bairroImovel = dadosProc.imovel?.bairro || '';
+            const inscricaoImovel = dadosProc.contribuinte?.cpf_cnpj || dadosProc.imovel?.inscricao_imovel || '';
             const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
 
             let semacUserId = semacUserCache[fluxoUserId] || semacUserCache[cpfLimpo];
@@ -146,8 +216,8 @@ async function rodarCronSincronizacao() {
             const tipoLower = tipo.toLowerCase();
 
             if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao')) {
-                catControle = { id: '1.2', nome: 'Auto de Infração', pontuacao: 5 };
-                catProdutividade = { id: '16', nome: 'Auto de Infração', pontuacao: 15, campoChave: 'n_auto' };
+                catControle = { id: '1.2', nome: 'Controle Processual: Auto de Infração', pontuacao: 5 };
+                catProdutividade = { id: '16', nome: 'Autos de Infração expedidos', pontuacao: 30, campoChave: 'n_auto' };
                 camposCP = {
                     n_auto: numSeq,
                     nome: nomeContribuinte,
@@ -162,12 +232,12 @@ async function rodarCronSincronizacao() {
                     data: dataFormatadaBR
                 };
             } else if (tipoLower.includes('notificação preliminar') || tipoLower.includes('notificacao preliminar')) {
-                catControle = { id: '1.1', nome: 'Notificação Preliminar', pontuacao: 5 };
-                catProdutividade = { id: '14', nome: 'Notificação Preliminar', pontuacao: 15, campoChave: 'n_notificacao' };
+                catControle = { id: '1.1', nome: 'Controle Processual: Notificação Preliminar', pontuacao: 5 };
+                catProdutividade = { id: '14', nome: 'Notificação Preliminar expedidos', pontuacao: 20, campoChave: 'n_notificacao' };
                 camposCP = {
                     n_notificacao: numSeq,
                     nome: nomeContribuinte,
-                    n_inscricao: contribuinte.cpf_cnpj || imovel.inscricao_imovel || '',
+                    n_inscricao: inscricaoImovel,
                     bairro: bairroImovel,
                     motivo: '',
                     anexo_pdf: docUrl
@@ -178,8 +248,9 @@ async function rodarCronSincronizacao() {
                     data: dataFormatadaBR
                 };
             } else if (tipoLower.includes('relatório fiscal') || tipoLower.includes('relatorio fiscal')) {
-                catControle = { id: '1.5', nome: 'Relatório Fiscal', pontuacao: 5 };
-                catProdutividade = { id: '7', nome: 'Elaboração de Relatório Fiscal', pontuacao: 10, campoChave: 'n_relatorio' };
+                catControle = { id: '1.5', nome: 'Controle Processual: Relatório', pontuacao: 10 };
+                // Mesma automação aplicada quando o fiscal preenche a categoria 1.5 manualmente (ver produtividade.js).
+                catProdutividade = { id: '7', nome: 'Elaboração de Certidão de Arquivamento e Relatório Fiscal', pontuacao: 50, campoChave: 'n_relatorio' };
                 camposCP = {
                     atendimento: nomeContribuinte || numSeq,
                     bairro: bairroImovel,
@@ -187,18 +258,19 @@ async function rodarCronSincronizacao() {
                 };
                 camposRP = {
                     n_relatorio: numSeq,
-                    descricao: nomeContribuinte || 'Expedição Automática',
+                    tipo: 'Relatório Fiscal',
+                    descricao: numSeq,
                     data: dataFormatadaBR
                 };
             } else if (tipoLower.includes('réplica') || tipoLower.includes('replica')) {
-                catControle = { id: '1.7', nome: 'Réplica da Defesa', pontuacao: 5 };
+                catControle = { id: '1.7', nome: 'Réplica', pontuacao: 50 };
                 camposCP = {
                     nome: nomeContribuinte,
                     bairro: bairroImovel,
                     anexo_pdf: docUrl
                 };
             } else if (tipoLower.includes('certidão') || tipoLower.includes('certidao')) {
-                catControle = { id: '1.8', nome: 'Certidão Sem Defesa', pontuacao: 5 };
+                catControle = { id: '1.8', nome: 'Certidão', pontuacao: 50 };
                 camposCP = {
                     nome: nomeContribuinte,
                     bairro: bairroImovel,
@@ -206,63 +278,62 @@ async function rodarCronSincronizacao() {
                 };
             }
 
-            if (catControle && userId) {
-                const { data: existeCP } = await semacClient
-                    .from('controle_processual')
-                    .select('id')
-                    .eq('user_id', userId)
-                    .eq('categoria_id', catControle.id)
-                    .eq('numero_sequencial', numSeq)
-                    .maybeSingle();
+            // Regra de elegibilidade por data (mês atual / tolerância de 3 dias do mês anterior,
+            // sujeita à Limpeza Geral / 2+ meses de atraso): ver verificarElegibilidadePontuacao().
+            const elegivel = (catControle || catProdutividade) && userId
+                ? await verificarElegibilidadePontuacao(userId, createdAt)
+                : { pontuar: true };
 
-                if (!existeCP) {
-                    const payloadCP = {
-                        user_id: userId,
-                        fiscal_nome: fiscalNome,
-                        categoria_id: catControle.id,
-                        categoria_nome: catControle.nome,
-                        numero_sequencial: numSeq,
-                        pontuacao: catControle.pontuacao,
-                        campos: {
-                            ...camposCP,
-                            doc_id: docId,
-                            numero_processo: numProc,
-                            origem: 'sincronizacao_fluxograma',
-                            _created_at: createdAt
-                        },
-                        created_at: createdAt
-                    };
-                    const { error } = await semacClient.from('controle_processual').insert([payloadCP]);
-                    if (!error) inseridosCP++;
-                }
+            if (catControle && userId) {
+                const origemUnicaCP = normalizarNumeroSequencial(numSeq) || `doc_id:${docId}`;
+                const payloadCP = {
+                    user_id: userId,
+                    fiscal_nome: fiscalNome,
+                    categoria_id: catControle.id,
+                    categoria_nome: catControle.nome,
+                    numero_sequencial: numSeq,
+                    pontuacao: elegivel.pontuar ? catControle.pontuacao : 0,
+                    campos: {
+                        ...camposCP,
+                        doc_id: docId,
+                        numero_processo: numProc,
+                        origem: 'sincronizacao_fluxograma',
+                        _created_at: createdAt
+                    },
+                    origem_unica: origemUnicaCP,
+                    created_at: createdAt
+                };
+                // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica):
+                // protege contra duplicidade mesmo se este cron rodar em paralelo com a sincronização
+                // do navegador ou for reexecutado para a mesma data.
+                const { data: insCP, error: errCP } = await semacClient
+                    .from('controle_processual')
+                    .upsert([payloadCP], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+                    .select('id');
+                if (!errCP && insCP && insCP.length > 0) inseridosCP++;
             }
 
-            if (catProdutividade && userId) {
-                const { data: existeRP } = await semacClient
+            if (catProdutividade && userId && elegivel.pontuar) {
+                const origemUnicaRP = normalizarNumeroSequencial(numSeq) || `doc_id:${docId}`;
+                const payloadRP = {
+                    user_id: userId,
+                    categoria_id: catProdutividade.id,
+                    categoria_nome: catProdutividade.nome,
+                    pontuacao: catProdutividade.pontuacao,
+                    campos: {
+                        ...camposRP,
+                        doc_id: docId,
+                        origem: 'sincronizacao_fluxograma',
+                        _created_at: createdAt
+                    },
+                    origem_unica: origemUnicaRP,
+                    created_at: createdAt
+                };
+                const { data: insRP, error: errRP } = await semacClient
                     .from('registros_produtividade')
-                    .select('id')
-                    .eq('user_id', userId)
-                    .eq('categoria_id', catProdutividade.id)
-                    .contains('campos', { doc_id: docId })
-                    .maybeSingle();
-
-                if (!existeRP) {
-                    const payloadRP = {
-                        user_id: userId,
-                        categoria_id: catProdutividade.id,
-                        categoria_nome: catProdutividade.nome,
-                        pontuacao: catProdutividade.pontuacao,
-                        campos: {
-                            ...camposRP,
-                            doc_id: docId,
-                            origem: 'sincronizacao_fluxograma',
-                            _created_at: createdAt
-                        },
-                        created_at: createdAt
-                    };
-                    const { error } = await semacClient.from('registros_produtividade').insert([payloadRP]);
-                    if (!error) inseridosRP++;
-                }
+                    .upsert([payloadRP], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+                    .select('id');
+                if (!errRP && insRP && insRP.length > 0) inseridosRP++;
             }
         }
 
@@ -356,32 +427,11 @@ async function rodarCronSincronizacao() {
                 if (!autosPorProcesso[a.processo_id]) autosPorProcesso[a.processo_id] = a;
             });
 
-            // Buscar Contribuintes
-            const contribsDAPorProcesso = {};
-            const { data: contribsDA } = await masterClient
-                .from('contribuintes')
-                .select('processo_id, nome, cpf_cnpj, bairro, logradouro, numero')
-                .in('processo_id', procIdsDA);
-
-            (contribsDA || []).forEach(c => {
-                if (!contribsDAPorProcesso[c.processo_id]) contribsDAPorProcesso[c.processo_id] = c;
-            });
-
-            // Buscar Imóveis
-            const imoveisDAPorProcesso = {};
-            const { data: imvsDA } = await masterClient
-                .from('imoveis')
-                .select('processo_id, bairro, inscricao_imovel, logradouro, numero')
-                .in('processo_id', procIdsDA);
-
-            (imvsDA || []).forEach(i => {
-                if (!imoveisDAPorProcesso[i.processo_id]) imoveisDAPorProcesso[i.processo_id] = i;
-            });
-
+            // Dados de contribuinte/imóvel vêm de dentro de `proc.dados` (JSON já presente no
+            // select de `processos` acima) — mesma decisão de não abrir `contribuintes`/`imoveis`
+            // do PASSO 1 (ver comentário lá em cima).
             for (const proc of processosDividaAtiva) {
                 const autoDoc = autosPorProcesso[proc.id] || {};
-                const contribDA = contribsDAPorProcesso[proc.id] || {};
-                const imovelDA = imoveisDAPorProcesso[proc.id] || {};
                 const dadosProc = proc.dados || {};
 
                 // Identificar o criador do processo (fiscal_id) e mapear para o SEMAC
@@ -420,16 +470,17 @@ async function rodarCronSincronizacao() {
                     || dadosProc.numero_auto_infracao
                     || dadosProc.etapa14?.numero_auto_infracao
                     || '';
-                const nomeAutuado = contribDA.nome
-                    || dadosProc.contribuinte?.nome
+                const nomeAutuado = dadosProc.contribuinte?.nome
                     || '';
-                const cpfAutuado = contribDA.cpf_cnpj
-                    || dadosProc.contribuinte?.cpf_cnpj
+                const cpfAutuado = dadosProc.contribuinte?.cpf_cnpj
                     || '';
-                const bairroDA = imovelDA.bairro
-                    || contribDA.bairro
-                    || dadosProc.imovel?.bairro
+                const bairroDA = dadosProc.imovel?.bairro
                     || '';
+                const advogadoAutuado = dadosProc.advogado
+                    || dadosProc.contribuinte?.advogado
+                    || dadosProc.etapa14?.advogado
+                    || dadosProc.etapa15?.advogado
+                    || 'S/A';
                 const anexoPdf = autoDoc.url || '';
                 const numSeqDA = proc.numero_processo || numAuto || 'S/N';
 
@@ -469,19 +520,24 @@ async function rodarCronSincronizacao() {
                     if (existeSeq) continue;
                 }
 
+                // Regra de elegibilidade por data (mesma aplicada aos demais tipos — ver verificarElegibilidadePontuacao()).
+                const elegivelDA = await verificarElegibilidadePontuacao(semacUserIdDA, proc.updated_at || proc.created_at);
+
                 // Inserir no controle_processual
+                const origemUnicaDA = normalizarNumeroSequencial(numSeqDA) || `proc_id:${proc.id}`;
                 const payloadDA = {
                     user_id: semacUserIdDA,
                     fiscal_nome: fiscalNomeDA,
                     categoria_id: '11',
                     categoria_nome: 'Montagem de processo para encaminhamento, exclusivamente para inscrição em dívida ativa',
                     numero_sequencial: numSeqDA,
-                    pontuacao: 100,
+                    pontuacao: elegivelDA.pontuar ? 100 : 0,
                     campos: {
                         proc_id: proc.id,
                         n_auto: numAuto,
                         nome: nomeAutuado,
                         cpf: cpfAutuado,
+                        advogado: advogadoAutuado,
                         bairro: bairroDA,
                         numero_processo: proc.numero_processo || '',
                         etapa_atual: extrairEtapaNumeroCron(proc),
@@ -491,14 +547,18 @@ async function rodarCronSincronizacao() {
                         data_sincronizacao: new Date().toISOString(),
                         _created_at: proc.updated_at || proc.created_at
                     },
+                    origem_unica: origemUnicaDA,
                     created_at: proc.updated_at || proc.created_at
                 };
 
-                const { error: errInsDA } = await semacClient.from('controle_processual').insert([payloadDA]);
-                if (!errInsDA) {
+                const { data: insDA, error: errInsDA } = await semacClient
+                    .from('controle_processual')
+                    .upsert([payloadDA], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+                    .select('id');
+                if (!errInsDA && insDA && insDA.length > 0) {
                     inseridosCP++;
                     console.log(`   ✅ Dívida Ativa: ${nomeAutuado || numSeqDA} → ${fiscalNomeDA} (Processo: ${proc.numero_processo})`);
-                } else {
+                } else if (errInsDA) {
                     console.warn(`   ❌ Erro Dívida Ativa: ${errInsDA.message}`);
                 }
             }
