@@ -25,7 +25,9 @@ async function verificarConexaoAntesDeSalvar() {
         const response = await fetch('https://marmpnusgmbjphffaynr.supabase.co/rest/v1/', {
             method: 'HEAD',
             signal: controller.signal,
-            cache: 'no-store'
+            cache: 'no-store',
+            // Sem a apikey o Supabase responde 401 e o console fica cheio de erros
+            headers: window.supabaseKey ? { apikey: window.supabaseKey } : {}
         });
 
         clearTimeout(timeoutId);
@@ -1573,6 +1575,20 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         return;
     }
 
+    // Usuário logado: usado pelas validações de duplicidade que devem olhar apenas
+    // os registros do próprio fiscal (data, local, endereço, estabelecimento...).
+    // As validações por NÚMERO (protocolo, ofício, processo, auto, alvará, licença)
+    // continuam globais, pois o número é único na secretaria.
+    let usuarioAtual = null;
+    try {
+        const authRes = await getAuthUser();
+        usuarioAtual = authRes?.data?.user || null;
+    } catch (e) {
+        // Se não for possível identificar o usuário agora, as validações por usuário
+        // são apenas puladas — o salvamento continua e a RLS do banco decide.
+        console.warn('[Salvar] Não foi possível obter o usuário para validar duplicidade:', e);
+    }
+
     // VALIDAÇÃO DE DUPLICIDADE (CATEGORIAS 1°, 2° e 3°) - N° PROTOCOLO
     // IDs internos: '2' (1°), '3' (2°) e '4' (3°)
 
@@ -1622,12 +1638,14 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
     if (categoriaAtual.id === '5' && !modoEdicao) {
         const dataServicoNova = campos.data_servico; // Valor da data capturado do formulário
 
-        if (dataServicoNova) {
-            // Buscamos no banco todos os registros da categoria 4°
+        if (dataServicoNova && usuarioAtual) {
+            // Buscamos no banco os registros da categoria 4° do usuário logado
+            // (a data só é duplicada se o MESMO fiscal já registrou serviço nesse dia)
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', '5');
+                .eq('categoria_id', '5')
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verificação manual no JavaScript pela Data do Serviço
@@ -1923,12 +1941,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const enderecoNovo = campos.endereco ? String(campos.endereco).trim().toLowerCase() : '';
         const dataNova = campos.data;
 
-        if (enderecoNovo !== '' && dataNova) {
-            // Buscamos no banco todos os registros da categoria 17°
+        if (enderecoNovo !== '' && dataNova && usuarioAtual) {
+            // Buscamos os registros da categoria 17° do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', '17');
+                .eq('categoria_id', '17')
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe o MESMO endereço na MESMA data
@@ -1966,12 +1985,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
         const dataNova = campos.data;
 
-        if (localNovo !== '' && dataNova) {
-            // Buscamos no banco todos os registros da categoria 18°
+        if (localNovo !== '' && dataNova && usuarioAtual) {
+            // Buscamos os registros da categoria 18° do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', '18');
+                .eq('categoria_id', '18')
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe o MESMO local na MESMA data
@@ -2011,12 +2031,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const localNovo = campos.local ? String(campos.local).trim().toLowerCase() : '';
         const dataNova = campos.data;
 
-        if (localNovo !== '' && dataNova) {
-            // Buscamos no banco todos os registros da categoria atual
+        if (localNovo !== '' && dataNova && usuarioAtual) {
+            // Buscamos os registros da categoria atual do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', categoriaAtual.id);
+                .eq('categoria_id', categoriaAtual.id)
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe o MESMO local na MESMA data
@@ -2055,12 +2076,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const especieNova = campos.especie ? String(campos.especie).trim().toLowerCase() : '';
         const dataNova = campos.data;
 
-        if (localNovo !== '' && especieNova !== '' && dataNova) {
-            // Buscamos no banco todos os registros da categoria 23°
+        if (localNovo !== '' && especieNova !== '' && dataNova && usuarioAtual) {
+            // Buscamos os registros da categoria 23° do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', '23');
+                .eq('categoria_id', '23')
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe o MESMO local, MESMA espécie na MESMA data
@@ -2104,12 +2126,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const estabelecimentoNovo = campos.estabelecimento ? String(campos.estabelecimento).trim().toLowerCase() : '';
         const dataNova = campos.data;
 
-        if (estabelecimentoNovo !== '' && dataNova) {
-            // Buscamos no banco todos os registros da categoria atual
+        if (estabelecimentoNovo !== '' && dataNova && usuarioAtual) {
+            // Buscamos os registros da categoria atual do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', categoriaAtual.id);
+                .eq('categoria_id', categoriaAtual.id)
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe o MESMO estabelecimento na MESMA data
@@ -2235,12 +2258,13 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
         const dataNova = campos.data;
         const duracaoNova = campos.duracao;
 
-        if (dataNova && duracaoNova) {
-            // Buscamos no banco todos os registros da categoria atual
+        if (dataNova && duracaoNova && usuarioAtual) {
+            // Buscamos os registros da categoria atual do usuário logado
             const { data: historico, error: erroBD } = await supabaseClient
                 .from('registros_produtividade')
                 .select('campos')
-                .eq('categoria_id', categoriaAtual.id);
+                .eq('categoria_id', categoriaAtual.id)
+                .eq('user_id', usuarioAtual.id);
 
             if (!erroBD && historico) {
                 // Verifica se já existe um registro para a MESMA data E MESMA duração

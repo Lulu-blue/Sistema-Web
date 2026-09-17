@@ -1730,6 +1730,9 @@ function fecharModalNovaDenuncia() {
 }
 
 async function salvarDenuncia() {
+    var btnSalvarDenuncia = document.getElementById('btn-salvar-denuncia');
+    if (btnSalvarDenuncia && btnSalvarDenuncia.disabled) return; // Ignora clique duplicado enquanto já está salvando
+    if (btnSalvarDenuncia) { btnSalvarDenuncia.disabled = true; btnSalvarDenuncia.textContent = 'Salvando...'; }
     try {
         if (typeof garantirSessaoAtiva === 'function') await garantirSessaoAtiva();
 
@@ -1831,6 +1834,8 @@ async function salvarDenuncia() {
     } catch (err) {
         console.error('Erro ao salvar denúncia:', err);
         Swal.fire({ icon: 'error', title: 'Erro', text: 'Não foi possível salvar. Tente novamente.', confirmButtonColor: '#0f172a' });
+    } finally {
+        if (btnSalvarDenuncia) { btnSalvarDenuncia.disabled = false; btnSalvarDenuncia.textContent = 'Salvar'; }
     }
 }
 
