@@ -225,6 +225,106 @@
         return { data: null, error: null };
     }
 
+    // Registra se alguma consulta ao Fluxograma falhou por tempo esgotado (Postgres 57014).
+    // Serve para não acusar "problema de RLS" quando na verdade a consulta só demorou demais.
+    let houveTimeoutNoFluxograma = false;
+
+    function ehErroDeTimeout(error) {
+        if (!error) return false;
+        return error.code === '57014' || String(error.message || '').includes('statement timeout');
+    }
+
+    function dividirEmLotes(lista, tamanho) {
+        const lotes = [];
+        for (let i = 0; i < lista.length; i += tamanho) {
+            lotes.push(lista.slice(i, i + tamanho));
+        }
+        return lotes;
+    }
+
+    /**
+     * Busca linhas do Fluxograma em lotes pequenos, por ID.
+     *
+     * Algumas linhas guardam vários MB em base64 (processos.dados e documentos.url),
+     * então uma consulta única com todos os IDs estoura o statement timeout do Postgres
+     * (erro 57014 → HTTP 500). Ao dar timeout, o lote é dividido ao meio e tentado de novo;
+     * uma linha sozinha que ainda falhe é pulada com aviso, para não travar a sincronização
+     * inteira por causa de um anexo gigante.
+     */
+    // O cliente do Fluxograma é criado em protecao.js; aqui ele é resolvido sob demanda
+    // porque estas funções auxiliares vivem fora de executarSincronizacaoDiaria().
+    function obterMasterClient() {
+        return window.supabaseMaster || (typeof supabaseMaster !== 'undefined' ? supabaseMaster : null);
+    }
+
+    async function buscarLinhasPorIds(tabela, colunas, ids, tamanhoLote = 4) {
+        const resultado = [];
+        const cliente = obterMasterClient();
+        if (!cliente) {
+            console.error('[Sincronização SEMAC] ❌ Cliente do Fluxograma indisponível.');
+            return resultado;
+        }
+
+        const totalLotes = Math.ceil(ids.length / tamanhoLote);
+        let loteAtual = 0;
+
+        async function buscarLote(lote) {
+            const { data, error } = await executarQueryComRetry(() =>
+                cliente.from(tabela).select(colunas).in('id', lote)
+            );
+
+            if (!error) {
+                (data || []).forEach(linha => { if (linha) resultado.push(linha); });
+                return;
+            }
+
+            if (ehErroDeTimeout(error)) houveTimeoutNoFluxograma = true;
+
+            // Qualquer falha (timeout do Postgres, 500 ou queda de conexão no meio do
+            // download) é tratada do mesmo jeito: divide o lote e tenta de novo menor.
+            if (lote.length === 1) {
+                console.warn(`[Sincronização SEMAC] ⏱️ ${tabela}: registro ${lote[0]} ignorado (${error.message || error}). Provavelmente guarda um anexo em base64 grande demais.`);
+                return;
+            }
+
+            const meio = Math.ceil(lote.length / 2);
+            await buscarLote(lote.slice(0, meio));
+            await buscarLote(lote.slice(meio));
+        }
+
+        for (const lote of dividirEmLotes(ids, tamanhoLote)) {
+            loteAtual++;
+            await buscarLote(lote);
+            console.log(`[Sincronização SEMAC] 📦 ${tabela}: lote ${loteAtual}/${totalLotes} (${resultado.length}/${ids.length} registros lidos)`);
+        }
+        return resultado;
+    }
+
+    /**
+     * Busca primeiro só os IDs (consulta leve, sem as colunas pesadas) e depois as linhas
+     * completas em lotes. Retorna no mesmo formato do Supabase: { data, error }.
+     */
+    async function buscarEmLotesPorFiltro(tabela, colunas, campoFiltro, valores, tamanhoLote = 4) {
+        if (!valores || valores.length === 0) return { data: [], error: null };
+
+        const cliente = obterMasterClient();
+        if (!cliente) return { data: null, error: { message: 'Cliente do Fluxograma indisponível' } };
+
+        const { data: linhasId, error: erroIds } = await executarQueryComRetry(() =>
+            cliente.from(tabela).select('id').in(campoFiltro, valores)
+        );
+
+        if (erroIds) {
+            if (ehErroDeTimeout(erroIds)) houveTimeoutNoFluxograma = true;
+            return { data: null, error: erroIds };
+        }
+
+        const ids = (linhasId || []).map(l => l.id).filter(Boolean);
+        if (ids.length === 0) return { data: [], error: null };
+
+        return { data: await buscarLinhasPorIds(tabela, colunas, ids, tamanhoLote), error: null };
+    }
+
     /**
      * Insere no controle_processual do SEMAC se ainda não existir (verifica por doc_id/notif_id OU numero_sequencial).
      * Retorna true se inseriu, false se já existia ou houve erro.
@@ -575,11 +675,11 @@
             // 1.1 Processos do Fiscal
             let procsFiscal = [];
             if (allUserIds.length > 0) {
-                const { data: p1, error: errP1 } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('processos')
-                        .select('id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at')
-                        .in('fiscal_id', allUserIds)
+                const { data: p1, error: errP1 } = await buscarEmLotesPorFiltro(
+                    'processos',
+                    'id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at',
+                    'fiscal_id',
+                    allUserIds
                 );
                 if (errP1) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar processos:', errP1.message, errP1);
                 if (p1) procsFiscal = p1;
@@ -591,22 +691,22 @@
             // 1.2 Documentos
             let docsUser = [], docsProc = [];
             if (allUserIds.length > 0) {
-                const { data: d1, error: errD1 } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('documentos')
-                        .select('id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id')
-                        .in('usuario_id', allUserIds)
+                const { data: d1, error: errD1 } = await buscarEmLotesPorFiltro(
+                    'documentos',
+                    'id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
+                    'usuario_id',
+                    allUserIds
                 );
                 if (errD1) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar documentos (usuario_id):', errD1.message, errD1);
                 if (d1) docsUser = d1;
                 console.log(`[Sincronização SEMAC] 📄 documentos (usuario_id IN [...]): ${(d1 || []).length} registros`);
             }
             if (procIdsDoFiscal.length > 0) {
-                const { data: d2, error: errD2 } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('documentos')
-                        .select('id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id')
-                        .in('processo_id', procIdsDoFiscal)
+                const { data: d2, error: errD2 } = await buscarEmLotesPorFiltro(
+                    'documentos',
+                    'id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
+                    'processo_id',
+                    procIdsDoFiscal
                 );
                 if (errD2) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar documentos (processo_id):', errD2.message, errD2);
                 if (d2) docsProc = d2;
@@ -619,22 +719,22 @@
             // 1.3 Autos de Infração (Tabela autos_infracao) - RLS DESABILITADO
             let autosUser = [], autosProc = [];
             if (allUserIds.length > 0) {
-                const { data: a1, error: errA1 } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('autos_infracao')
-                        .select('id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados')
-                        .in('usuario_id', allUserIds)
+                const { data: a1, error: errA1 } = await buscarEmLotesPorFiltro(
+                    'autos_infracao',
+                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados',
+                    'usuario_id',
+                    allUserIds
                 );
                 if (errA1) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar autos_infracao (usuario_id):', errA1.message, errA1);
                 if (a1) autosUser = a1;
                 console.log(`[Sincronização SEMAC] ⚖️ autos_infracao (usuario_id IN [...]): ${(a1 || []).length} registros`);
             }
             if (procIdsDoFiscal.length > 0) {
-                const { data: a2, error: errA2 } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('autos_infracao')
-                        .select('id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados')
-                        .in('processo_id', procIdsDoFiscal)
+                const { data: a2, error: errA2 } = await buscarEmLotesPorFiltro(
+                    'autos_infracao',
+                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados',
+                    'processo_id',
+                    procIdsDoFiscal
                 );
                 if (errA2) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar autos_infracao (processo_id):', errA2.message, errA2);
                 if (a2) autosProc = a2;
@@ -647,11 +747,11 @@
             // 1.4 Notificações (Tabela notificacoes)
             let notificacoes = [];
             if (procIdsDoFiscal.length > 0) {
-                const { data: notifs, error: errN } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('notificacoes')
-                        .select('id, numero, descricao, status, created_at, processo_id')
-                        .in('processo_id', procIdsDoFiscal)
+                const { data: notifs, error: errN } = await buscarEmLotesPorFiltro(
+                    'notificacoes',
+                    'id, numero, descricao, status, created_at, processo_id',
+                    'processo_id',
+                    procIdsDoFiscal
                 );
                 if (errN) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar notificacoes:', errN.message, errN);
                 if (notifs) notificacoes = notifs;
@@ -668,13 +768,11 @@
             const procIdsFaltantes = procIdsRelacionados.filter(id => !procIdsDoFiscal.includes(id));
             if (procIdsFaltantes.length > 0) {
                 console.log(`[Sincronização SEMAC] 🔗 Buscando ${procIdsFaltantes.length} processos faltantes vinculados a autos/docs/notifs...`);
-                const { data: pExtra, error: errPE } = await executarQueryComRetry(() =>
-                    masterClient
-                        .from('processos')
-                        .select('id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at')
-                        .in('id', procIdsFaltantes)
+                const pExtra = await buscarLinhasPorIds(
+                    'processos',
+                    'id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at',
+                    procIdsFaltantes
                 );
-                if (errPE) console.error('[Sincronização SEMAC] ❌ ERRO ao buscar processos faltantes:', errPE.message, errPE);
                 if (pExtra) {
                     console.log(`[Sincronização SEMAC] 📋 processos faltantes encontrados: ${pExtra.length}`);
                     pExtra.forEach(p => { if (p && p.id) procsFiscal.push(p); });
@@ -694,7 +792,11 @@
                 '4. Tabela notificacoes (RLS=ON)': { Encontrados: notificacoes.length, RLS: 'HABILITADO' }
             });
 
-            if (todosProcessosDoFiscal.length === 0 && documentos.length === 0 && autosTabela.length > 0) {
+            if (houveTimeoutNoFluxograma) {
+                console.warn('⏱️ [Sincronização SEMAC] Alguma consulta ao Fluxograma estourou o tempo limite (Postgres 57014). Isso acontece quando processos.dados ou documentos.url guardam arquivos em base64 de vários MB — a leitura foi feita em lotes menores e os registros grandes demais foram pulados. Solução definitiva: gravar no Fluxograma apenas o link do arquivo (Cloudinary/Storage), não o base64.');
+            }
+
+            if (!houveTimeoutNoFluxograma && todosProcessosDoFiscal.length === 0 && documentos.length === 0 && autosTabela.length > 0) {
                 console.error('🚨🚨🚨 [Sincronização SEMAC] PROBLEMA DE RLS DETECTADO! A tabela autos_infracao (RLS=OFF) retorna dados, mas processos e documentos (RLS=ON) não. O masterClient está usando a anon key SEM sessão autenticada, e as políticas RLS bloqueiam o acesso. SOLUÇÃO: No banco Fluxograma, adicione políticas de leitura anônima SOMENTE nestas 3 tabelas (contribuintes/imoveis não precisam — os dados de contribuinte/imóvel já vêm embutidos em processos.dados):\n' +
                     "CREATE POLICY \"anon_read_processos\" ON processos FOR SELECT TO anon USING (true);\n" +
                     "CREATE POLICY \"anon_read_documentos\" ON documentos FOR SELECT TO anon USING (true);\n" +

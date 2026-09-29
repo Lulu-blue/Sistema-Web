@@ -334,9 +334,10 @@ window.garantirSessaoAtiva = garantirSessaoAtiva;
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos timeout
 
-            // Tentar fazer uma requisição simples ao Supabase
-            const response = await fetch(`${supabaseUrl}/rest/v1/`, {
-                method: 'HEAD',
+            // Endpoint de saúde do Auth: responde 200 com a apikey publicável.
+            // (A raiz /rest/v1/ devolve 401 e enchia o console de erros.)
+            const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+                method: 'GET',
                 headers: {
                     'apikey': supabaseKey
                 },
