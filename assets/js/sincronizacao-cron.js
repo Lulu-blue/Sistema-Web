@@ -234,6 +234,38 @@
         return error.code === '57014' || String(error.message || '').includes('statement timeout');
     }
 
+    // =============================================
+    // SITUAÇÃO DO PROCESSO NO FLUXOGRAMA
+    // =============================================
+    // processos.status assume três valores no Fluxograma:
+    //   'auto_infracao'         → virou Auto de Infração (processos por decreto nascem assim)
+    //   'notificacao_preliminar'→ ainda é Notificação Preliminar, não virou AI
+    //   'cancelado'             → processo cancelado
+    function statusDoProcesso(proc) {
+        return String(proc?.status || '').toLowerCase().trim();
+    }
+
+    /**
+     * Processo por decreto: nasce direto como Auto de Infração, então a Notificação
+     * Preliminar nunca existiu de fato e não deve ser puxada. Notificações legítimas que
+     * viraram AI depois já foram capturadas numa sincronização anterior, porque há um
+     * intervalo entre a expedição da NP e a conversão em AI.
+     */
+    function processoPorDecreto(proc) {
+        if (!proc) return false;
+        return proc.possui_decreto === true || statusDoProcesso(proc) === 'auto_infracao';
+    }
+
+    /** Processo cancelado: não gera pontuação nenhuma. */
+    function processoCancelado(proc) {
+        return statusDoProcesso(proc).includes('cancelad');
+    }
+
+    /** Processo ainda em Notificação Preliminar: não chegou a virar Auto de Infração. */
+    function processoAindaEmNotificacao(proc) {
+        return statusDoProcesso(proc) === 'notificacao_preliminar';
+    }
+
     function dividirEmLotes(lista, tamanho) {
         const lotes = [];
         for (let i = 0; i < lista.length; i += tamanho) {
@@ -351,8 +383,8 @@
         }
 
         // 1. Verificar se já existe pelo identificador único do Mestre (doc_id, notif_id, proc_id ou auto_id)
-        const chaveUnica = campos.doc_id || campos.notif_id || campos.proc_id || campos.auto_id;
-        const campoChave = campos.doc_id ? 'doc_id' : (campos.notif_id ? 'notif_id' : (campos.proc_id ? 'proc_id' : 'auto_id'));
+        const chaveUnica = campos.doc_id || campos.notif_id || campos.auto_id || campos.proc_id;
+        const campoChave = campos.doc_id ? 'doc_id' : (campos.notif_id ? 'notif_id' : (campos.auto_id ? 'auto_id' : 'proc_id'));
 
         // Chave de correlação usada pela constraint UNIQUE do banco (user_id, categoria_id, origem_unica).
         // Prioriza o número sequencial normalizado (funciona mesmo quando o MESMO evento real aparece
@@ -426,6 +458,13 @@
             }
         }
 
+        // 4. Reconciliar com um registro anterior que ficou sem número (ver função)
+        const campoNumeroCP = campos.n_notificacao !== undefined ? 'n_notificacao'
+            : (campos.n_auto !== undefined ? 'n_auto' : null);
+        if (campoNumeroCP && await reconciliarRegistroSemNumero(semacClient, 'controle_processual', userId, catId, campoNumeroCP, numSeq, campos)) {
+            return false;
+        }
+
         // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica): mesmo que
         // duas execuções concorrentes (abas/dispositivos diferentes) passem pelas checagens acima ao
         // mesmo tempo, o banco garante que só uma delas efetivamente insere a linha.
@@ -452,6 +491,65 @@
     }
 
     /**
+     * Resolve o caso do registro que ficou com "S/N".
+     *
+     * O número nem sempre vem na primeira sincronização (o documento é criado antes da
+     * numeração). Antes, a sincronização seguinte via o número novo como um evento diferente
+     * e criava uma segunda linha — uma com S/N e outra numerada, para o mesmo fato.
+     *
+     * Aqui as duas linhas são reconciliadas pelo processo de origem (proc_id):
+     *   - chegou o número e existe linha com S/N  → completa a linha existente;
+     *   - chegou S/N e já existe linha numerada   → não cria nada.
+     *
+     * Retorna true quando não se deve inserir nada novo.
+     */
+    async function reconciliarRegistroSemNumero(semacClient, tabela, userId, catId, campoNumero, numSeq, campos) {
+        const procId = campos.proc_id;
+        if (!procId) return false;
+
+        const { data: existentes } = await semacClient
+            .from(tabela)
+            .select('id, campos' + (tabela === 'controle_processual' ? ', numero_sequencial' : ''))
+            .eq('user_id', userId)
+            .eq('categoria_id', catId)
+            .contains('campos', { proc_id: procId });
+
+        if (!existentes || existentes.length === 0) return false;
+
+        // Um processo pode, em tese, ter mais de um documento da mesma categoria. Nesse caso
+        // não há como saber qual linha completar, então é melhor não mexer em nada.
+        if (existentes.length > 1) {
+            console.warn(`[Sincronização SEMAC] ⚠️ ${tabela} (${catId}): processo ${procId} tem ${existentes.length} registros; reconciliação de número ignorada por ambiguidade.`);
+            return false;
+        }
+
+        const semNumero = numeroConfiavel => (existentes || []).find(linha => {
+            const n = linha.campos?.[campoNumero] || linha.numero_sequencial;
+            return numeroConfiavel ? (!n || String(n).toUpperCase() === 'S/N') : (n && String(n).toUpperCase() !== 'S/N');
+        });
+
+        const temNumeroNovo = numSeq && String(numSeq).toUpperCase() !== 'S/N';
+
+        if (temNumeroNovo) {
+            const linhaSemNumero = semNumero(true);
+            if (!linhaSemNumero) return false;
+
+            const novosCampos = { ...(linhaSemNumero.campos || {}), [campoNumero]: numSeq };
+            if (campos.anexo_pdf) novosCampos.anexo_pdf = campos.anexo_pdf;
+
+            const atualizacao = { campos: novosCampos };
+            if (tabela === 'controle_processual') atualizacao.numero_sequencial = numSeq;
+
+            await semacClient.from(tabela).update(atualizacao).eq('id', linhaSemNumero.id);
+            console.log(`[Sincronização SEMAC] 🔢 ${tabela} (${catId}): registro que estava como S/N recebeu o número ${numSeq}.`);
+            return true;
+        }
+
+        // Sem número agora, mas já existe a mesma coisa numerada: não duplicar.
+        return !!semNumero(false);
+    }
+
+    /**
      * Insere em registros_produtividade do SEMAC se ainda não existir.
      * Retorna true se inseriu, false se já existia ou houve erro.
      */
@@ -472,8 +570,8 @@
             }
         }
 
-        const chaveUnica = campos.doc_id || campos.notif_id || campos.proc_id || campos.auto_id;
-        const campoChave = campos.doc_id ? 'doc_id' : (campos.notif_id ? 'notif_id' : (campos.proc_id ? 'proc_id' : 'auto_id'));
+        const chaveUnica = campos.doc_id || campos.notif_id || campos.auto_id || campos.proc_id;
+        const campoChave = campos.doc_id ? 'doc_id' : (campos.notif_id ? 'notif_id' : (campos.auto_id ? 'auto_id' : 'proc_id'));
 
         if (chaveUnica) {
             const { data: existeChave } = await semacClient
@@ -521,6 +619,13 @@
                 }
                 return false;
             }
+        }
+
+        // Reconciliar com um registro anterior que ficou sem número (ver função)
+        const campoNumeroRP = campos.n_notificacao !== undefined ? 'n_notificacao'
+            : (campos.n_auto !== undefined ? 'n_auto' : null);
+        if (campoNumeroRP && await reconciliarRegistroSemNumero(semacClient, 'registros_produtividade', userId, catId, campoNumeroRP, numSeqRP, campos)) {
+            return false;
         }
 
         // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica) — mesma
@@ -677,7 +782,7 @@
             if (allUserIds.length > 0) {
                 const { data: p1, error: errP1 } = await buscarEmLotesPorFiltro(
                     'processos',
-                    'id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at',
+                    'id, numero_processo, fiscal_id, etapa_atual_id, status, dados, possui_decreto, created_at, updated_at',
                     'fiscal_id',
                     allUserIds
                 );
@@ -770,7 +875,7 @@
                 console.log(`[Sincronização SEMAC] 🔗 Buscando ${procIdsFaltantes.length} processos faltantes vinculados a autos/docs/notifs...`);
                 const pExtra = await buscarLinhasPorIds(
                     'processos',
-                    'id, numero_processo, fiscal_id, etapa_atual_id, dados, possui_decreto, created_at, updated_at',
+                    'id, numero_processo, fiscal_id, etapa_atual_id, status, dados, possui_decreto, created_at, updated_at',
                     procIdsFaltantes
                 );
                 if (pExtra) {
@@ -824,13 +929,35 @@
                 }
             });
 
+            // Número da notificação por processo: serve de segunda fonte quando o documento
+            // de notificação vem sem numero_sequencial.
+            const numeroNotificacaoPorProcesso = {};
+            (notificacoes || []).forEach(n => {
+                if (n && n.processo_id && n.numero && !numeroNotificacaoPorProcesso[n.processo_id]) {
+                    numeroNotificacaoPorProcesso[n.processo_id] = n.numero;
+                }
+            });
+
             // ------------------------------------------------------------------
             // PASSO 2: SINCRONIZAR TABELA DOCUMENTOS
             // ------------------------------------------------------------------
             for (const doc of (documentos || [])) {
                 const tipoLower = (doc.tipo || '').toLowerCase().trim();
-                const numSeq = doc.numero_sequencial || 'S/N';
                 const procDoDoc = processosPorId[doc.processo_id] || {};
+
+                // Processo cancelado não gera pontuação.
+                if (processoCancelado(procDoDoc)) {
+                    console.log(`[Sincronização SEMAC] 🚫 documento ${doc.id} ignorado: processo ${procDoDoc.numero_processo || doc.processo_id} está cancelado.`);
+                    continue;
+                }
+
+                // Quando o número não vem no documento, tenta a notificação do mesmo processo
+                // antes de cair para "S/N" (um registro com S/N acaba duplicado quando o número
+                // aparece numa sincronização posterior).
+                const numSeq = doc.numero_sequencial
+                    || (tipoLower.includes('notific') ? numeroNotificacaoPorProcesso[doc.processo_id] : null)
+                    || 'S/N';
+
                 const dadosProc = procDoDoc.dados || {};
                 const docUrl = extrairUrlCloudinary(
                     doc.url,
@@ -852,6 +979,7 @@
                     const ptsCP = elegivel.pontuar ? 5 : 0;
                     const camposCP = {
                         doc_id: doc.id,
+                        proc_id: doc.processo_id,
                         n_auto: numSeq,
                         nome: nomeContribuinte,
                         bairro: bairroImovel,
@@ -867,6 +995,7 @@
                     if (elegivel.pontuar) {
                         const camposRP = {
                             doc_id: doc.id,
+                            proc_id: doc.processo_id,
                             n_auto: numSeq,
                             descricao: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || nomeContribuinte || 'Expedição Automática',
                             data: dataFormatadaBR,
@@ -881,9 +1010,16 @@
 
                 // --- Notificação Preliminar ---
                 else if (tipoLower.includes('notific')) {
+                    // Processo por decreto nasce como Auto de Infração: a NP nunca foi expedida.
+                    if (processoPorDecreto(procDoDoc)) {
+                        console.log(`[Sincronização SEMAC] 🚫 NP do documento ${doc.id} ignorada: processo ${procDoDoc.numero_processo || doc.processo_id} é por decreto.`);
+                        continue;
+                    }
+
                     const ptsCP = elegivel.pontuar ? 5 : 0;
                     const camposCP = {
                         doc_id: doc.id,
+                        proc_id: doc.processo_id,
                         n_notificacao: numSeq,
                         nome: nomeContribuinte,
                         n_inscricao: dadosProc.contribuinte?.cpf_cnpj || dadosProc.imovel?.inscricao_imovel || '',
@@ -899,6 +1035,7 @@
                     if (elegivel.pontuar) {
                         const camposRP = {
                             doc_id: doc.id,
+                            proc_id: doc.processo_id,
                             n_notificacao: numSeq,
                             descricao: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || nomeContribuinte || 'Notificação Preliminar',
                             data: dataFormatadaBR,
@@ -984,9 +1121,15 @@
             // PASSO 2.5: SINCRONIZAR TABELA AUTOS_INFRACAO
             // ------------------------------------------------------------------
             for (const auto of (autosTabela || [])) {
+                const procDoAuto = processosPorId[auto.processo_id] || {};
+
+                if (processoCancelado(procDoAuto)) {
+                    console.log(`[Sincronização SEMAC] 🚫 auto ${auto.id} ignorado: processo ${procDoAuto.numero_processo || auto.processo_id} está cancelado.`);
+                    continue;
+                }
+
                 const numSeq = auto.numero || 'S/N';
                 const createdAt = auto.created_at;
-                const procDoAuto = processosPorId[auto.processo_id] || {};
                 const dadosProcAuto = procDoAuto.dados || {};
                 const nomeContribuinte = auto.dados?.contribuinte?.nome || dadosProcAuto.contribuinte?.nome || '';
                 const bairroImovel = auto.dados?.imovel?.bairro || dadosProcAuto.imovel?.bairro || '';
@@ -1007,6 +1150,7 @@
 
                 const camposCP = {
                     auto_id: auto.id,
+                    proc_id: auto.processo_id,
                     n_auto: numSeq,
                     nome: nomeContribuinte,
                     bairro: bairroImovel,
@@ -1023,6 +1167,7 @@
                 if (elegivel.pontuar) {
                     const camposRP = {
                         auto_id: auto.id,
+                        proc_id: auto.processo_id,
                         n_auto: numSeq,
                         descricao: auto.dados?.motivo || auto.dados?.descricao || nomeContribuinte || 'Expedição Automática',
                         data: dataFormatadaBR,
@@ -1047,9 +1192,21 @@
 
                 if (isAutoInfracao) continue;
 
+                const procDoNotif = processosPorId[notif.processo_id] || {};
+
+                if (processoCancelado(procDoNotif)) {
+                    console.log(`[Sincronização SEMAC] 🚫 notificação ${notif.id} ignorada: processo ${procDoNotif.numero_processo || notif.processo_id} está cancelado.`);
+                    continue;
+                }
+
+                // Processo por decreto: a NP nunca foi expedida, só o Auto de Infração.
+                if (processoPorDecreto(procDoNotif)) {
+                    console.log(`[Sincronização SEMAC] 🚫 notificação ${notif.id} ignorada: processo ${procDoNotif.numero_processo || notif.processo_id} é por decreto.`);
+                    continue;
+                }
+
                 const createdAt = notif.created_at;
                 const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
-                const procDoNotif = processosPorId[notif.processo_id] || {};
                 const dadosProcNotif = procDoNotif.dados || {};
                 const notifUrl = extrairUrlCloudinary(
                     docQualquerUrlPorProcesso[notif.processo_id],
@@ -1061,6 +1218,7 @@
 
                 const camposCP = {
                     notif_id: notif.id,
+                    proc_id: notif.processo_id,
                     n_notificacao: notif.numero || 'S/N',
                     nome: dadosProcNotif.contribuinte?.nome || '',
                     n_inscricao: dadosProcNotif.contribuinte?.cpf_cnpj || dadosProcNotif.imovel?.inscricao_imovel || '',
@@ -1076,6 +1234,7 @@
                 if (elegivel.pontuar) {
                     const camposRP = {
                         notif_id: notif.id,
+                        proc_id: notif.processo_id,
                         n_notificacao: notif.numero || 'S/N',
                         descricao: notif.descricao || '',
                         data: dataFormatadaBR,
@@ -1133,6 +1292,17 @@
 
             // Filtrar no JS: etapa >= 15 (sem bloquear por data)
             const processosDividaAtiva = (todosProcessosDoFiscal || []).filter(p => {
+                // A etapa sozinha não basta: há processo em etapa 16 que continua como
+                // Notificação Preliminar (nunca virou Auto de Infração) e, portanto, não houve
+                // montagem de processo para inscrição em dívida ativa. Cancelado também não conta.
+                if (processoCancelado(p)) {
+                    console.log(`[Sincronização SEMAC] 🚫 Dívida Ativa ignorada: processo ${p.numero_processo || p.id} está cancelado.`);
+                    return false;
+                }
+                if (processoAindaEmNotificacao(p)) {
+                    console.log(`[Sincronização SEMAC] 🚫 Dívida Ativa ignorada: processo ${p.numero_processo || p.id} ainda está em Notificação Preliminar.`);
+                    return false;
+                }
                 const etapaNum = extrairEtapaNumero(p);
                 return etapaNum >= 15;
             });
@@ -1242,6 +1412,15 @@
 
     window.executarSincronizacaoDiaria = executarSincronizacaoDiaria;
     window.sincronizarDadosCompleto = executarSincronizacaoDiaria;
+
+    // Regras de situação do processo, expostas para a limpeza de registros antigos
+    // (limpeza-sincronizacao.js) usar exatamente os mesmos critérios desta sincronização.
+    window.SemacSituacaoProcesso = {
+        status: statusDoProcesso,
+        porDecreto: processoPorDecreto,
+        cancelado: processoCancelado,
+        aindaEmNotificacao: processoAindaEmNotificacao
+    };
 
     // =============================================
     // AGENDAMENTO AUTOMÁTICO (roda 1x por dia)
