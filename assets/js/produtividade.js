@@ -138,7 +138,7 @@ const CATEGORIAS = [
         campos: [
             { nome: 'tipo_documento_referencia', label: 'Tipo de Documento de Referência', tipo: 'select', obrigatorio: false, opcoes: ['Auto de Fiscalização', 'REDS/Boletim de Ocorrência', 'Denúncia'] },
             { nome: 'numero_documento_referencia', label: 'Nº do Documento de Referência', tipo: 'text', obrigatorio: false, condicional: { campo: 'tipo_documento_referencia', valor_diferente: '' } },
-            { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
+            { nome: 'processo_administrativo', label: 'Protocolo n°', tipo: 'text', obrigatorio: true },
             { nome: 'nome', label: 'Nome do(a) autuado(a)', tipo: 'text', obrigatorio: true },
             { nome: 'cpf_contribuinte', label: 'CNPJ/CPF', tipo: 'text', obrigatorio: true },
             { nome: 'rua_autuado', label: 'Rua do autuado', tipo: 'text', obrigatorio: true },
@@ -274,7 +274,7 @@ const CATEGORIAS = [
             { nome: 'bairro', label: 'Bairro do Imóvel', tipo: 'select_bairro', obrigatorio: true },
             { nome: 'cep_imovel', label: 'CEP', tipo: 'text', obrigatorio: true },
             { nome: 'inscricao', label: 'Inscrição', tipo: 'text', obrigatorio: false },
-            { nome: 'processo_administrativo', label: 'Processo Administrativo n°', tipo: 'text', obrigatorio: true },
+            { nome: 'processo_administrativo', label: 'Protocolo n°', tipo: 'text', obrigatorio: true },
             { nome: 'irregularidades', label: 'Irregularidades Constatadas', tipo: 'textarea', obrigatorio: true },
             { nome: 'providencias', label: 'Providências', tipo: 'textarea', obrigatorio: false },
             { nome: 'dispositivos', label: 'Dispositivo(s) legal(is) transgredido(s)', tipo: 'textarea', obrigatorio: true },
@@ -5175,8 +5175,9 @@ async function salvarDetalhesHist(id) {
     let pontosAdicionadosAutom = false;
     let pontosAddTxt = '';
 
-    // Automação: Se for Notificação Preliminar (1.1) e estiver mudando para ATENDIDO
-    if (reg.categoria_id === '1.1') {
+    // Automação: Notificação Preliminar (1.1) ou Auto de Fiscalização/Meio Ambiente (1.9)
+    // mudando para ATENDIDO geram pontuação na 15° (Notificação Preliminar regularizados).
+    if (reg.categoria_id === '1.1' || reg.categoria_id === '1.9') {
         const respostaAntiga = (reg.campos.resposta_fiscal || '').toLowerCase();
         const respostaNova = (novosCampos.resposta_fiscal || '').toLowerCase();
 
@@ -5189,7 +5190,9 @@ async function salvarDetalhesHist(id) {
 
             const campos15 = {
                 n_notificacao: reg.numero_sequencial || novosCampos.n_notificacao || novosCampos.nome || '',
-                descricao: 'Atendimento Automático',
+                descricao: reg.categoria_id === '1.9'
+                    ? 'Atendimento Automático (Auto de Fiscalização)'
+                    : 'Atendimento Automático',
                 data: dataAtual
             };
 
@@ -6467,6 +6470,37 @@ async function abrirEditorAutoInfracao() {
     }
 }
 
+// Passo a passo de defesa pelo sistema de protocolo (Betha).
+// Usado no Auto de Infração e no Auto de Fiscalização do Meio Ambiente, no lugar
+// do antigo link único do GovDigital.
+const LINK_PROTOCOLO_BETHA = 'https://protocolo.betha.cloud/#/cidadao/solicitacao-abertura/ZGF0YWJhc2U6MTE5NyxlbnRpZGFkZToxMDA2NQ==';
+const LINK_MANUAL_PROTOCOLO = 'https://servicos.prefeituradivinopolis.com.br/govdigital/adm/external/doc/global/Manual%20de%20Consulta%20a%20Protocolos_1.pdf';
+
+function blocoPassoAPassoDefesa() {
+    const passos = [
+        `Acessar o link:<br><a href="${LINK_PROTOCOLO_BETHA}" target="_blank" style="color: blue; text-decoration: none;">${LINK_PROTOCOLO_BETHA}</a>`,
+        'Criar um acesso ou entrar com login e senha, caso já tenha cadastro, ou entrar através da senha do Gov.br;',
+        'Ir em "Gestão de Processos" no canto esquerdo da tela;',
+        'Clicar em "SIM";',
+        'Clicar em "Visualizar meus Processos";',
+        'Localizar o número do protocolo indicado na Notificação ou Auto de Fiscalização ou Auto de Infração;',
+        'Clicar na aba "Documentos" para inserir defesa e documentos;',
+        'Clicar na aba "Comentários" para exposição das alegações e inserção de demais documentos (para inserir documentos clicar no ícone do Clipe);',
+        'Clicar em "Salvar";',
+        'Clicar em "Movimentar" e "Devolver ao Solicitante".'
+    ];
+
+    const itens = passos
+        .map((texto, i) => `<p style="margin: 0 0 6px 0; text-align: justify;">${i + 1}) ${texto}</p>`)
+        .join('\n        ');
+
+    return `
+        <p style="margin-top: 20px; margin-bottom: 8px;"><strong>Passo a passo para inserir documentos para defesa no sistema protocolo</strong></p>
+        ${itens}
+        <p style="margin-top: 14px; text-align: justify;">Em caso de dúvidas, acessar o manual através do link:<br>
+        <a href="${LINK_MANUAL_PROTOCOLO}" target="_blank" style="color: blue; text-decoration: none;">${LINK_MANUAL_PROTOCOLO}</a></p>`;
+}
+
 // --- GERADOR DE AUTO DE INFRAÇÃO AMBIENTAL (DOCX) ---
 async function abrirEditorAutoInfracaoAmbiental() {
     if (!categoriaAtual) return;
@@ -6610,13 +6644,13 @@ async function abrirEditorAutoInfracaoAmbiental() {
         ${campos.tipo_documento_referencia ? `
         <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black; margin-bottom: 20px;">
             <tr>
-                <td width="50%" style="border: 1px solid black; padding: 8px;">Processo Administrativo n° ${campos.processo_administrativo || ''}</td>
+                <td width="50%" style="border: 1px solid black; padding: 8px;">Protocolo n° ${campos.processo_administrativo || ''}</td>
                 <td width="50%" style="border: 1px solid black; padding: 8px;">${campos.tipo_documento_referencia} - Nº ${campos.numero_documento_referencia || ''}</td>
             </tr>
         </table>` : `
         <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; border: 1px solid black; margin-bottom: 20px;">
             <tr>
-                <td style="border: 1px solid black; padding: 8px;">Processo Administrativo n° ${campos.processo_administrativo || ''}</td>
+                <td style="border: 1px solid black; padding: 8px;">Protocolo n° ${campos.processo_administrativo || ''}</td>
             </tr>
         </table>`}
         
@@ -6682,8 +6716,8 @@ async function abrirEditorAutoInfracaoAmbiental() {
             </tr>
         </table>
 
-        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Processo Administrativo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste. A defesa e documentos deverão ser encaminhados pelo link:<br>
-        <a href="https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200" target="_blank" style="color: blue; text-decoration: none;">https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200</a></p>
+        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Protocolo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste.</p>
+        ${blocoPassoAPassoDefesa()}
 
         <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
 
@@ -6907,8 +6941,8 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
             </tr>
         </table>
 
-        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Processo Administrativo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste. A defesa e documentos deverão ser encaminhados pelo link:<br>
-        <a href="https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200" target="_blank" style="color: blue; text-decoration: none;">https://servicos.prefeituradivinopolis.com.br/govdigital/Microsservicos/instrucao/200</a></p>
+        <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Protocolo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste.</p>
+        ${blocoPassoAPassoDefesa()}
 
         <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
 
@@ -7012,7 +7046,7 @@ async function gerarDocxAutoFiscalizacaoAmbiental(campos, numSequencial, nomeFis
             return substituirTextoParagrafo(match, texto.replace('XX/XX/20XX', dataAssinatura));
         }
         if (texto.includes('Processo Administrativo n°')) {
-            return substituirTextoParagrafo(match, `Processo Administrativo n° ${processo}`);
+            return substituirTextoParagrafo(match, `Protocolo n° ${processo}`);
         }
         if (texto.includes('Auto de Fiscalização xxxx (Campo Opcional)')) {
             return substituirTextoParagrafo(match, textoReferencia || texto);
@@ -7055,7 +7089,7 @@ async function gerarDocxAutoFiscalizacaoAmbiental(campos, numSequencial, nomeFis
             return substituirTextoParagrafo(match, `PENALIDADE(S): ${campos.penalidades || ''}`);
         }
         if (texto.includes('prazo máximo de')) {
-            let novo = texto.replace(/Processo Administrativo n°\s*XXXX/, `Processo Administrativo n° ${processo}`);
+            let novo = texto.replace(/Processo Administrativo n°\s*XXXX/, `Protocolo n° ${processo}`);
             novo = novo.replace(/(\d+)\s*dias/, `${prazoDefesa} dias`);
             return substituirTextoParagrafo(match, novo);
         }
