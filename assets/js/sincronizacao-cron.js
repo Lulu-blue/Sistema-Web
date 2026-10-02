@@ -134,6 +134,76 @@
      * — nesse caso a tolerância de reabertura do mês anterior NÃO deve mais se aplicar, senão a
      * sincronização reinsere pontos que o fiscal já fechou/zerou deliberadamente.
      */
+    // =============================================
+    // MARCA DE LIMPEZA ("limpei até a data X")
+    // =============================================
+    // Guardada em profiles.limpeza_realizada_ate (vale para qualquer aparelho) com
+    // localStorage como espelho local, para o caso de a leitura do banco falhar.
+    //
+    // Antes, a sincronização DEDUZIA que a limpeza tinha sido feita contando registros
+    // do mês anterior: zero registros = "limpou". A dedução falhava de duas formas —
+    // era tirada uma única vez no começo da execução (uma limpeza feita no meio da
+    // sincronização passava despercebida) e bastava um registro reentrar para a contagem
+    // voltar a ser > 0, reabrindo a tolerância e deixando entrar mais registros antigos.
+    let marcaLimpeza = null;   // Date ou null, válida durante a execução
+
+    function lerMarcaLimpezaLocal(userId) {
+        try {
+            const iso = localStorage.getItem('semac_limpeza_realizada_ate_' + userId);
+            if (!iso) return null;
+            const dt = new Date(iso);
+            return isNaN(dt.getTime()) ? null : dt;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function carregarMarcaLimpeza(semacClient, userId) {
+        if (!userId) return null;
+
+        const local = lerMarcaLimpezaLocal(userId);
+
+        const { data, error } = await semacClient
+            .from('profiles')
+            .select('limpeza_realizada_ate')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (error) {
+            console.warn('[Sincronização SEMAC] Não foi possível ler a marca de limpeza do banco:', error.message);
+            marcaLimpeza = local;
+            return marcaLimpeza;
+        }
+
+        const doBanco = data?.limpeza_realizada_ate ? new Date(data.limpeza_realizada_ate) : null;
+        const valida = doBanco && !isNaN(doBanco.getTime()) ? doBanco : null;
+
+        // A mais recente entre banco e espelho local manda: se o fiscal acabou de limpar
+        // neste aparelho, o local pode estar à frente do que já foi lido do banco.
+        marcaLimpeza = (valida && local) ? new Date(Math.max(valida.getTime(), local.getTime())) : (valida || local);
+        return marcaLimpeza;
+    }
+
+    /**
+     * Chamada pela limpeza (produtividade.js) assim que ela termina. Atualiza a marca em
+     * memória na hora, de modo que uma sincronização JÁ EM ANDAMENTO passe a respeitá-la
+     * nas inserções seguintes, em vez de continuar com o valor lido lá no começo.
+     */
+    function registrarLimpezaRealizada(dataCorte) {
+        const dt = dataCorte instanceof Date ? dataCorte : new Date(dataCorte);
+        if (isNaN(dt.getTime())) return;
+        if (!marcaLimpeza || dt > marcaLimpeza) marcaLimpeza = dt;
+        console.log(`[Sincronização SEMAC] 🧹 Marca de limpeza atualizada para ${dt.toISOString()}.`);
+    }
+
+    /** Registro anterior à limpeza do fiscal não deve voltar a pontuar. */
+    function anteriorALimpeza(dataRegistro) {
+        if (!marcaLimpeza || !dataRegistro) return false;
+        const dt = dataRegistro instanceof Date ? dataRegistro : new Date(dataRegistro);
+        if (isNaN(dt.getTime())) return false;
+        return dt < marcaLimpeza;
+    }
+
     async function limpezaGeralJaFeitaMesAnterior(semacClient, userId) {
         if (!userId) return false;
         const hoje = new Date();
@@ -371,15 +441,9 @@
         campos.origem = 'sincronizacao_fluxograma';
         campos.data_sincronizacao = new Date().toISOString();
 
-        // Se o usuário realizou limpeza manual anterior a esta data, ajustar pontuação
-        const limpezaIso = localStorage.getItem('semac_limpeza_realizada_ate_' + userId);
-        if (limpezaIso) {
-            const dtLimpeza = new Date(limpezaIso);
-            const dataRegStr = campos._created_at || campos.data || campos.data_vistoria;
-            let dtReg = dataRegStr ? new Date(dataRegStr) : new Date();
-            if (!isNaN(dtReg.getTime()) && !isNaN(dtLimpeza.getTime()) && dtReg < dtLimpeza) {
-                pontuacao = 0;
-            }
+        // Registro anterior à limpeza do fiscal entra no histórico, mas sem pontuar.
+        if (anteriorALimpeza(campos._created_at || campos.data || campos.data_vistoria)) {
+            pontuacao = 0;
         }
 
         // 1. Verificar se já existe pelo identificador único do Mestre (doc_id, notif_id, proc_id ou auto_id)
@@ -559,15 +623,10 @@
         campos.origem = 'sincronizacao_fluxograma';
         campos.data_sincronizacao = new Date().toISOString();
 
-        // Se o usuário realizou limpeza manual anterior a esta data, ignorar registros_produtividade já excluídos
-        const limpezaIso = localStorage.getItem('semac_limpeza_realizada_ate_' + userId);
-        if (limpezaIso) {
-            const dtLimpeza = new Date(limpezaIso);
-            const dataRegStr = campos._created_at || campos.data || campos.data_vistoria;
-            let dtReg = dataRegStr ? new Date(dataRegStr) : new Date();
-            if (!isNaN(dtReg.getTime()) && !isNaN(dtLimpeza.getTime()) && dtReg < dtLimpeza) {
-                return false;
-            }
+        // Registro anterior à limpeza do fiscal foi apagado de propósito: não recriar.
+        if (anteriorALimpeza(campos._created_at || campos.data || campos.data_vistoria)) {
+            console.log(`[Sincronização SEMAC] 🧹 RP (${catId}) ignorado: anterior à limpeza do fiscal.`);
+            return false;
         }
 
         const chaveUnica = campos.doc_id || campos.notif_id || campos.auto_id || campos.proc_id;
@@ -757,9 +816,17 @@
             let inseridosControle = 0;
             let inseridosProdutividade = 0;
 
-            // Calculado uma única vez por execução: usado pela tolerância do mês anterior em
-            // verificarElegibilidadePontuacao() (ver comentário na definição da função).
-            const limpezaMesAnteriorFeita = await limpezaGeralJaFeitaMesAnterior(semacClient, semacUserId);
+            // Marca explícita de limpeza (profiles.limpeza_realizada_ate). É ela que manda:
+            // a contagem de registros do mês anterior só é usada como último recurso, para
+            // fiscais que ainda não têm a marca gravada (limpezas feitas antes desta correção).
+            await carregarMarcaLimpeza(semacClient, semacUserId);
+
+            const inicioMesAtual = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+            const limpezaMesAnteriorFeita = marcaLimpeza
+                ? marcaLimpeza >= inicioMesAtual
+                : await limpezaGeralJaFeitaMesAnterior(semacClient, semacUserId);
+
+            console.log(`[Sincronização SEMAC] 🧹 Marca de limpeza: ${marcaLimpeza ? marcaLimpeza.toISOString() : 'nenhuma'} | limpeza do mês anterior feita: ${limpezaMesAnteriorFeita}`);
 
             // ------------------------------------------------------------------
             // PASSO 1: BUSCA E DIAGNÓSTICO EM TODAS AS TABELAS DO FLUXOGRAMA
@@ -937,6 +1004,11 @@
                     numeroNotificacaoPorProcesso[n.processo_id] = n.numero;
                 }
             });
+
+            // A leitura do Fluxograma acima pode levar minutos. Se o fiscal rodou a limpeza
+            // nesse meio tempo, a marca lida no início está velha — relê antes de inserir
+            // qualquer coisa, para não recriar o que acabou de ser apagado.
+            await carregarMarcaLimpeza(semacClient, semacUserId);
 
             // ------------------------------------------------------------------
             // PASSO 2: SINCRONIZAR TABELA DOCUMENTOS
@@ -1412,6 +1484,21 @@
 
     window.executarSincronizacaoDiaria = executarSincronizacaoDiaria;
     window.sincronizarDadosCompleto = executarSincronizacaoDiaria;
+
+    // Avisa a sincronização de que o fiscal acabou de limpar (ver registrarLimpezaRealizada).
+    window.registrarLimpezaRealizada = registrarLimpezaRealizada;
+
+    /**
+     * Espera uma sincronização em andamento terminar, para a limpeza não apagar registros
+     * enquanto a sincronização ainda está inserindo. Devolve true se o caminho está livre.
+     */
+    window.aguardarSincronizacaoTerminar = async function (timeoutMs = 90000) {
+        const limite = Date.now() + timeoutMs;
+        while (sincronizacaoEmAndamento && Date.now() < limite) {
+            await new Promise(r => setTimeout(r, 500));
+        }
+        return !sincronizacaoEmAndamento;
+    };
 
     // Regras de situação do processo, expostas para a limpeza de registros antigos
     // (limpeza-sincronizacao.js) usar exatamente os mesmos critérios desta sincronização.

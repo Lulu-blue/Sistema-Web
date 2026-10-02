@@ -5651,6 +5651,15 @@ async function executarLimpezaMensal(silencioso = false) {
         const { data: { user } } = await getAuthUser();
         if (!user) return;
 
+        // A sincronização roda sozinha ao entrar no painel e pode levar minutos. Se ela
+        // estiver inserindo enquanto a limpeza apaga, os registros do mês passado voltam.
+        if (typeof window.aguardarSincronizacaoTerminar === 'function') {
+            const livre = await window.aguardarSincronizacaoTerminar();
+            if (!livre) {
+                console.warn('[Limpeza] Sincronização ainda em andamento após a espera; seguindo mesmo assim.');
+            }
+        }
+
         // 1. Zera a pontuação no Controle Processual APENAS para registros anteriores ao mês atual
         const { error: errorCP } = await supabaseClient
             .from('controle_processual')
@@ -5716,6 +5725,37 @@ async function executarLimpezaMensal(silencioso = false) {
 
         const chaveMes = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
         localStorage.setItem('semac_ultimo_mes_limpeza_' + user.id, chaveMes);
+
+        // Marca "limpei tudo que é anterior a esta data". É o que impede a sincronização de
+        // recriar, com pontuação, os registros do mês passado que acabaram de ser apagados.
+        // Vai para o banco (vale em qualquer aparelho) e para o localStorage (espelho local),
+        // e avisa na hora uma sincronização que já esteja rodando nesta aba.
+        try {
+            localStorage.setItem('semac_limpeza_realizada_ate_' + user.id, inicioMesIso);
+        } catch (e) {
+            console.warn('[Limpeza] Não foi possível gravar a marca local:', e);
+        }
+
+        const { error: errMarca } = await supabaseClient
+            .from('profiles')
+            .update({ limpeza_realizada_ate: inicioMesIso })
+            .eq('id', user.id);
+
+        if (errMarca) {
+            console.error('[Limpeza] Falha ao gravar a marca de limpeza no banco:', errMarca.message);
+            if (!silencioso && typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Limpeza feita, mas atenção',
+                    text: 'Não foi possível registrar a marca de limpeza no banco. A sincronização pode trazer de volta registros do mês passado em outro aparelho. Avise o suporte.',
+                    confirmButtonColor: '#f59e0b'
+                });
+            }
+        }
+
+        if (typeof window.registrarLimpezaRealizada === 'function') {
+            window.registrarLimpezaRealizada(inicioMesAtual);
+        }
 
         if (!silencioso && typeof Swal !== 'undefined') {
             Swal.fire('Concluído!', 'Registros de meses anteriores foram limpos. Os registros do mês atual permanecem intocados.', 'success');
@@ -6478,7 +6518,7 @@ const LINK_MANUAL_PROTOCOLO = 'https://servicos.prefeituradivinopolis.com.br/gov
 
 function blocoPassoAPassoDefesa() {
     const passos = [
-        `Acessar o link:<br><a href="${LINK_PROTOCOLO_BETHA}" target="_blank" style="color: blue; text-decoration: none;">${LINK_PROTOCOLO_BETHA}</a>`,
+        `Acessar o link:<br><a href="${LINK_PROTOCOLO_BETHA}" target="_blank" style="color: blue; text-decoration: none; font-size: 10pt;">${LINK_PROTOCOLO_BETHA}</a>`,
         'Criar um acesso ou entrar com login e senha, caso já tenha cadastro, ou entrar através da senha do Gov.br;',
         'Ir em "Gestão de Processos" no canto esquerdo da tela;',
         'Clicar em "SIM";',
@@ -6490,15 +6530,20 @@ function blocoPassoAPassoDefesa() {
         'Clicar em "Movimentar" e "Devolver ao Solicitante".'
     ];
 
+    // O corpo do documento é 12pt; este bloco é instrução de rodapé, em 10pt.
+    // O tamanho vai em cada parágrafo (e não só num <div> em volta) porque a
+    // exportação para Word nem sempre herda o estilo do elemento pai.
+    const estiloItem = 'margin: 0 0 5px 0; text-align: justify; font-size: 10pt;';
+
     const itens = passos
-        .map((texto, i) => `<p style="margin: 0 0 6px 0; text-align: justify;">${i + 1}) ${texto}</p>`)
+        .map((texto, i) => `<p style="${estiloItem}">${i + 1}) ${texto}</p>`)
         .join('\n        ');
 
     return `
-        <p style="margin-top: 20px; margin-bottom: 8px;"><strong>Passo a passo para inserir documentos para defesa no sistema protocolo</strong></p>
+        <p style="margin-top: 24px; margin-bottom: 8px; font-size: 10pt;"><strong>Passo a passo para inserir documentos para defesa no sistema protocolo</strong></p>
         ${itens}
-        <p style="margin-top: 14px; text-align: justify;">Em caso de dúvidas, acessar o manual através do link:<br>
-        <a href="${LINK_MANUAL_PROTOCOLO}" target="_blank" style="color: blue; text-decoration: none;">${LINK_MANUAL_PROTOCOLO}</a></p>`;
+        <p style="margin-top: 12px; text-align: justify; font-size: 10pt;">Em caso de dúvidas, acessar o manual através do link:<br>
+        <a href="${LINK_MANUAL_PROTOCOLO}" target="_blank" style="color: blue; text-decoration: none; font-size: 10pt;">${LINK_MANUAL_PROTOCOLO}</a></p>`;
 }
 
 // --- GERADOR DE AUTO DE INFRAÇÃO AMBIENTAL (DOCX) ---
@@ -6717,7 +6762,6 @@ async function abrirEditorAutoInfracaoAmbiental() {
         </table>
 
         <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Protocolo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste.</p>
-        ${blocoPassoAPassoDefesa()}
 
         <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Infração, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
 
@@ -6736,8 +6780,10 @@ async function abrirEditorAutoInfracaoAmbiental() {
                 </td>
             </tr>
         </table>
-        `;
 
+        ${blocoPassoAPassoDefesa()}
+        `;
+        
         const editor = document.getElementById('editor-texto');
         if (editor) editor.innerHTML = htmlPreview;
 
@@ -6942,7 +6988,6 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
         </table>
 
         <p style="margin-top: 20px; text-align: justify;">O(a) autuado(a) deverá apresentar defesa, por escrito, no Protocolo n° ${campos.processo_administrativo}, no prazo máximo de <strong>${campos.prazo_defesa} dias</strong>, a contar da data do recebimento deste.</p>
-        ${blocoPassoAPassoDefesa()}
 
         <p style="margin-top: 20px; text-align: justify;">${campos.tem_testemunhas === 'Sim' ? 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.' : 'O Auto de Fiscalização, lavrado em três vias, que vai assinado pelo fiscal, pelo representante ou técnico do estabelecimento, e na ausência ou recusa destes últimos, será assinado por duas testemunhas.'}</p>
 
@@ -6961,6 +7006,8 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
                 </td>
             </tr>
         </table>
+
+        ${blocoPassoAPassoDefesa()}
         `;
 
         const editor = document.getElementById('editor-texto');
