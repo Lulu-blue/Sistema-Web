@@ -152,10 +152,10 @@ function renderizarCardsLiquidacoes() {
                         <span style="display:inline-block; width:12px; height:12px; background:${liq._corFixa}; border-radius:50%;"></span>
                         <div>
                             <h3 style="margin: 0 0 4px 0; color: ${tituloCor}; font-size: 1.1rem;">
-                                Ata: ${liq.ata || 'Não informada'}
+                                Fornecedor: ${liq.fornecedor || '---'} ${liq.cnpj ? '<span style="font-size: 0.8rem; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-left: 4px;">CNPJ: ' + liq.cnpj + '</span>' : ''}
                             </h3>
                             <div style="font-size: 0.85rem; color: #64748b;">
-                                <strong>Fornecedor:</strong> ${liq.fornecedor || '---'} ${liq.cnpj ? '<span style="font-size: 0.8rem; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-left: 4px;">CNPJ: ' + liq.cnpj + '</span>' : ''} | <strong>Recebimento:</strong> ${liq.data_recebimento ? formatarDataBR(liq.data_recebimento) : '---'}
+                                <strong>Ata:</strong> ${liq.ata || 'Não informada'} | <strong>Recebimento:</strong> ${liq.data_recebimento ? formatarDataBR(liq.data_recebimento) : '---'}
                             </div>
                         </div>
                     </div>
