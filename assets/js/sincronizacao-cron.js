@@ -435,6 +435,23 @@
      * Insere no controle_processual do SEMAC se ainda não existir (verifica por doc_id/notif_id OU numero_sequencial).
      * Retorna true se inseriu, false se já existia ou houve erro.
      */
+    // Campos que podem chegar vazios na primeira sincronização e ser preenchidos depois por
+    // outra pessoa no Fluxograma (ex: o Administrativo cadastra o AR dias depois do fiscal ter
+    // expedido a Notificação). Quando o fiscal loga de novo e a sincronização revarre o
+    // histórico, isso reconfere e atualiza retroativamente um registro que já existe no SEMAC.
+    const CAMPOS_ATUALIZAVEIS_RETROATIVAMENTE = ['anexo_pdf', 'numero_ar', 'data_recebimento_ar', 'anexo_ar', 'data_vencimento'];
+    function calcularAtualizacaoRetroativa(camposExistentes, camposNovos) {
+        let houveMudanca = false;
+        const resultado = { ...(camposExistentes || {}) };
+        CAMPOS_ATUALIZAVEIS_RETROATIVAMENTE.forEach(chave => {
+            if (camposNovos[chave] && camposNovos[chave] !== resultado[chave]) {
+                resultado[chave] = camposNovos[chave];
+                houveMudanca = true;
+            }
+        });
+        return houveMudanca ? resultado : null;
+    }
+
     async function inserirControleProcessual(semacClient, userId, fiscalNome, catId, catNome, numSeq, pontuacao, campos) {
         // Garantir marcação clara de identificação da sincronização
         campos.sincronizado = true;
@@ -466,9 +483,8 @@
                 .maybeSingle();
 
             if (existeChave) {
-                // Se o registro existente tem anexo_pdf diferente/vazio e agora temos um anexo_pdf, atualizar retroativamente
-                if (campos.anexo_pdf && existeChave.campos?.anexo_pdf !== campos.anexo_pdf) {
-                    const novosCampos = { ...(existeChave.campos || {}), anexo_pdf: campos.anexo_pdf };
+                const novosCampos = calcularAtualizacaoRetroativa(existeChave.campos, campos);
+                if (novosCampos) {
                     await semacClient
                         .from('controle_processual')
                         .update({ campos: novosCampos })
@@ -489,8 +505,8 @@
                 .maybeSingle();
 
             if (existeNumProc) {
-                if (campos.anexo_pdf && existeNumProc.campos?.anexo_pdf !== campos.anexo_pdf) {
-                    const novosCampos = { ...(existeNumProc.campos || {}), anexo_pdf: campos.anexo_pdf };
+                const novosCampos = calcularAtualizacaoRetroativa(existeNumProc.campos, campos);
+                if (novosCampos) {
                     await semacClient
                         .from('controle_processual')
                         .update({ campos: novosCampos })
@@ -511,8 +527,8 @@
                 .maybeSingle();
 
             if (existeSeq) {
-                if (campos.anexo_pdf && existeSeq.campos?.anexo_pdf !== campos.anexo_pdf) {
-                    const novosCampos = { ...(existeSeq.campos || {}), anexo_pdf: campos.anexo_pdf };
+                const novosCampos = calcularAtualizacaoRetroativa(existeSeq.campos, campos);
+                if (novosCampos) {
                     await semacClient
                         .from('controle_processual')
                         .update({ campos: novosCampos })
@@ -865,7 +881,7 @@
             if (allUserIds.length > 0) {
                 const { data: d1, error: errD1 } = await buscarEmLotesPorFiltro(
                     'documentos',
-                    'id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
+                    'id, processo_id, notificacao_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
                     'usuario_id',
                     allUserIds
                 );
@@ -876,7 +892,7 @@
             if (procIdsDoFiscal.length > 0) {
                 const { data: d2, error: errD2 } = await buscarEmLotesPorFiltro(
                     'documentos',
-                    'id, processo_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
+                    'id, processo_id, notificacao_id, tipo, numero_sequencial, url, created_at, nome_arquivo, usuario_id',
                     'processo_id',
                     procIdsDoFiscal
                 );
@@ -921,7 +937,7 @@
             if (procIdsDoFiscal.length > 0) {
                 const { data: notifs, error: errN } = await buscarEmLotesPorFiltro(
                     'notificacoes',
-                    'id, numero, descricao, status, created_at, processo_id',
+                    'id, numero, descricao, status, created_at, processo_id, data_vencimento',
                     'processo_id',
                     procIdsDoFiscal
                 );
@@ -985,6 +1001,12 @@
             const docAutoUrlPorProcesso = {};
             const docQualquerUrlPorProcesso = {};
 
+            // Anexo do AR (comprovante/scan do Aviso de Recebimento dos Correios) — a mesma
+            // tabela `documentos`, tipo fixo 'Anexo AR', gravado pelo Administrativo na Etapa
+            // 16/30 do Fluxograma. Indexa por notificação (mais preciso) e por processo (fallback).
+            const docArUrlPorNotifId = {};
+            const docArUrlPorProcessoId = {};
+
             (documentos || []).forEach(d => {
                 const u = extrairUrlCloudinary(d.url);
                 if (u && d.processo_id) {
@@ -992,9 +1014,40 @@
                     if (tLower.includes('auto') || tLower.includes('infra')) {
                         if (!docAutoUrlPorProcesso[d.processo_id]) docAutoUrlPorProcesso[d.processo_id] = u;
                     }
+                    if (tLower === 'anexo ar') {
+                        if (d.notificacao_id && !docArUrlPorNotifId[d.notificacao_id]) docArUrlPorNotifId[d.notificacao_id] = u;
+                        if (!docArUrlPorProcessoId[d.processo_id]) docArUrlPorProcessoId[d.processo_id] = u;
+                    }
                     if (!docQualquerUrlPorProcesso[d.processo_id]) docQualquerUrlPorProcesso[d.processo_id] = u;
                 }
             });
+
+            // Data de vencimento por notificação — é coluna real de `notificacoes`, não vive
+            // dentro do JSON do processo (diferente do número do AR).
+            const vencimentoPorNotifId = {};
+            (notificacoes || []).forEach(n => {
+                if (n && n.id && n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento;
+            });
+
+            // Número do AR e data de recebimento pelo proprietário: o Administrativo preenche
+            // isso na Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo.
+            // - Notificação Preliminar: UM AR cobre o processo inteiro -> dados.campos.etapa16.
+            // - Auto de Infração: cada Auto (de cada notificação) tem seu próprio ciclo de AR ->
+            //   dados.campos.ciclos_ar_auto[<notificacao_id>].etapa16.
+            function extrairInfoAR(dadosProc) {
+                const etapa16 = dadosProc?.campos?.etapa16 || {};
+                return {
+                    numero_ar: etapa16.numero_ar || '',
+                    data_recebimento_ar: etapa16.data_recebimento || etapa16.data_recebimento_proprietario || ''
+                };
+            }
+            function extrairInfoARAuto(dadosProc, notificacaoId) {
+                const ciclo = dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]?.etapa16 || {};
+                return {
+                    numero_ar: ciclo.numero_ar || '',
+                    data_recebimento_ar: ciclo.data_recebimento || ''
+                };
+            }
 
             // Número da notificação por processo: serve de segunda fonte quando o documento
             // de notificação vem sem numero_sequencial.
@@ -1049,6 +1102,7 @@
                 // --- Auto de Infração ---
                 if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao') || (tipoLower.includes('auto') && tipoLower.includes('infra'))) {
                     const ptsCP = elegivel.pontuar ? 5 : 0;
+                    const infoAR = extrairInfoARAuto(dadosProc, doc.notificacao_id);
                     const camposCP = {
                         doc_id: doc.id,
                         proc_id: doc.processo_id,
@@ -1058,6 +1112,10 @@
                         motivo: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || '',
                         data: dataFormatadaBR,
                         anexo_pdf: docUrl,
+                        numero_ar: infoAR.numero_ar,
+                        data_recebimento_ar: infoAR.data_recebimento_ar,
+                        anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                        data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || '',
                         _created_at: createdAt
                     };
                     if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.2', 'Controle Processual: Auto de Infração', numSeq, ptsCP, camposCP)) {
@@ -1089,6 +1147,7 @@
                     }
 
                     const ptsCP = elegivel.pontuar ? 5 : 0;
+                    const infoAR = extrairInfoAR(dadosProc);
                     const camposCP = {
                         doc_id: doc.id,
                         proc_id: doc.processo_id,
@@ -1098,6 +1157,10 @@
                         bairro: bairroImovel,
                         motivo: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || '',
                         anexo_pdf: docUrl,
+                        numero_ar: infoAR.numero_ar,
+                        data_recebimento_ar: infoAR.data_recebimento_ar,
+                        anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                        data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || '',
                         _created_at: createdAt
                     };
                     if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.1', 'Controle Processual: Notificação Preliminar', numSeq, ptsCP, camposCP)) {
@@ -1219,6 +1282,7 @@
 
                 const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
                 const ptsCP = elegivel.pontuar ? 5 : 0;
+                const infoAR = extrairInfoARAuto(dadosProcAuto, auto.notificacao_id);
 
                 const camposCP = {
                     auto_id: auto.id,
@@ -1229,6 +1293,10 @@
                     motivo: auto.dados?.motivo || auto.dados?.descricao || '',
                     data: dataFormatadaBR,
                     anexo_pdf: autoUrl,
+                    numero_ar: infoAR.numero_ar,
+                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    anexo_ar: docArUrlPorNotifId[auto.notificacao_id] || docArUrlPorProcessoId[auto.processo_id] || '',
+                    data_vencimento: vencimentoPorNotifId[auto.notificacao_id] || '',
                     _created_at: createdAt
                 };
 
@@ -1287,6 +1355,7 @@
 
                 const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
                 const ptsCP = elegivel.pontuar ? 5 : 0;
+                const infoAR = extrairInfoAR(dadosProcNotif);
 
                 const camposCP = {
                     notif_id: notif.id,
@@ -1297,6 +1366,10 @@
                     bairro: dadosProcNotif.imovel?.bairro || '',
                     motivo: notif.descricao || '',
                     anexo_pdf: notifUrl,
+                    numero_ar: infoAR.numero_ar,
+                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    anexo_ar: docArUrlPorNotifId[notif.id] || docArUrlPorProcessoId[notif.processo_id] || '',
+                    data_vencimento: notif.data_vencimento || '',
                     _created_at: createdAt
                 };
                 if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.1', 'Controle Processual: Notificação Preliminar', notif.numero || 'S/N', ptsCP, camposCP)) {

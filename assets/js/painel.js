@@ -526,6 +526,9 @@ async function carregarDadosIniciais() {
                     var btnCuidadoAnimal = document.getElementById('btn-toggle-cuidado-animal');
                     if (btnCuidadoAnimal) btnCuidadoAnimal.style.display = 'none';
                 }
+                // Apuração de Dados: visível apenas para Diretor(a) de Meio Ambiente (não para Diretor(a) geral/Cuidado Animal)
+                var btnApuracaoDiretor = document.getElementById('btn-nav-apuracao-dados-diretor');
+                if (btnApuracaoDiretor) btnApuracaoDiretor.style.display = isDiretorMeioAmbiente ? 'flex' : 'none';
 
                 // Carrega dashboard do Diretor (gestão de gerentes)
                 if (typeof carregarDashboardDiretor === 'function') carregarDashboardDiretor();
@@ -1125,6 +1128,10 @@ function mudarAba(idAba) {
             var btnAtivo = document.querySelector('#sub-abas-denuncias .sub-aba-btn.active');
             mudarSubAbaDenuncias(subAbaDenunciasAtual || 'comunicacao_interna', btnAtivo);
         }
+    }
+
+    if (idAba === 'apuracao-dados') {
+        if (typeof carregarApuracaoDados === 'function') carregarApuracaoDados();
     }
 }
 

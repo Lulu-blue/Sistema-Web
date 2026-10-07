@@ -235,6 +235,14 @@
                         </svg>
                         Tarefas
                     </button>
+                    <!-- Apuração de Dados: só para Diretor(a) de Meio Ambiente (oculto para os demais Diretores) -->
+                    <button class="nav-btn" id="btn-nav-apuracao-dados-diretor" style="display:none;" onclick="mudarAba('apuracao-dados')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Apuração de Dados
+                    </button>
                     <!-- Botão Toggle Gerencia -->
                     <button class="nav-btn" onclick="toggleGerenciaPosturas()" id="btn-toggle-gerencia">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -305,6 +313,13 @@
                             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                         </svg>
                         Tarefas
+                    </button>
+                    <button class="nav-btn" onclick="mudarAba('apuracao-dados')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Apuração de Dados
                     </button>
                     <!-- Botão Toggle Direção -->
                     <button class="nav-btn" onclick="toggleDirecaoMeioAmbiente()" id="btn-toggle-direcao">
@@ -2662,6 +2677,155 @@
                 </div>
             </section>
 
+            <!-- ABA: APURAÇÃO DE DADOS (Secretário e Diretor(a) de Meio Ambiente) -->
+            <section id="aba-apuracao-dados" class="content-section" style="display: none;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:20px; background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px 20px;">
+                    <div style="display:flex; align-items:center; gap:14px;">
+                        <div style="width:46px; height:46px; border-radius:10px; background:#fff7ed; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        </div>
+                        <div>
+                            <h1 style="margin:0; font-size:1.3rem;">Apuração de Dados</h1>
+                            <p style="color:#64748b; margin:2px 0 0; font-size:13px;">Relatório gerencial de desempenho dos fiscais e multas encaminhadas para a Fazenda</p>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+                        <div>
+                            <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Ano:</label>
+                            <select id="apuracao-filtro-ano" onchange="if(typeof aplicarFiltroAnoApuracao==='function') aplicarFiltroAnoApuracao(this.value);" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#f8fafc;">
+                                <option value="">Personalizado</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Início:</label>
+                            <input type="date" id="apuracao-data-inicio" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Fim:</label>
+                            <input type="date" id="apuracao-data-fim" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                        </div>
+                        <button onclick="if(typeof carregarApuracaoDados==='function') carregarApuracaoDados();" style="padding:9px 16px; background:#0f172a; color:white; border:none; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            Filtrar / Atualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="apuracao-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:20px;">
+                    <div class="apuracao-kpi-card" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;">
+                        <div style="font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;">Total de Processos</div>
+                        <div id="apuracao-kpi-total-processos" style="font-size:1.8rem; font-weight:800; color:#1e293b;">–</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Total de processos registrados no Fluxograma</div>
+                    </div>
+                    <div class="apuracao-kpi-card" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;">
+                        <div style="font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;">Total de Multas Enviadas à Fazenda</div>
+                        <div id="apuracao-kpi-total-multas" style="font-size:1.8rem; font-weight:800; color:#16a34a;">–</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Soma do controle de multas abaixo</div>
+                    </div>
+                    <div class="apuracao-kpi-card" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;">
+                        <div style="font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;">Fiscais Ativos</div>
+                        <div id="apuracao-kpi-fiscais-ativos" style="font-size:1.8rem; font-weight:800; color:#1e293b;">–</div>
+                        <div id="apuracao-kpi-media-proc" style="font-size:12px; color:#94a3b8; margin-top:4px;">Média de processos/fiscal</div>
+                    </div>
+                    <div class="apuracao-kpi-card" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;">
+                        <div style="font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;">Média Multa / Fiscal</div>
+                        <div id="apuracao-kpi-media-multa" style="font-size:1.8rem; font-weight:800; color:#f97316;">–</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Entre fiscais com multa no período</div>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:16px; margin-bottom:20px;">
+                    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px;">
+                        <h3 style="margin:0 0 4px; font-size:1rem;">📋 Processos por Fiscal</h3>
+                        <p style="color:#94a3b8; font-size:12px; margin:0 0 12px;">Quantidade de processos atribuídos a cada fiscal (Fluxograma)</p>
+                        <div style="height:280px;"><canvas id="apuracao-grafico-processos"></canvas></div>
+                    </div>
+                    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px;">
+                        <h3 style="margin:0 0 4px; font-size:1rem;">💰 Multas Enviadas à Fazenda por Fiscal (R$)</h3>
+                        <p style="color:#94a3b8; font-size:12px; margin:0 0 12px;">Soma em reais das multas registradas no controle abaixo</p>
+                        <div style="height:280px;"><canvas id="apuracao-grafico-multas"></canvas></div>
+                    </div>
+                </div>
+
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px; margin-bottom:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:4px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1rem;">🧑‍💼 Detalhamento Individual por Fiscal</h3>
+                            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Processos no Fluxograma x multas registradas no controle da Fazenda</p>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto; margin-top:12px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <thead>
+                                <tr style="text-align:left; border-bottom:2px solid #e2e8f0; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+                                    <th style="padding:8px 10px;">Fiscal</th>
+                                    <th style="padding:8px 10px;">Total Processos</th>
+                                    <th style="padding:8px 10px;">Multas Geradas</th>
+                                    <th style="padding:8px 10px;">Total Multas (R$)</th>
+                                    <th style="padding:8px 10px;">% da Arrecadação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="apuracao-tabela-fiscais-body">
+                                <tr><td colspan="5" style="padding:20px; text-align:center; color:#94a3b8;">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+                        <div>
+                            <h3 style="margin:0; font-size:1rem;">🧾 Controle de Multas Enviadas para a Fazenda (Dívida Ativa)</h3>
+                            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Registro manual — mesmas colunas da planilha de controle</p>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <label style="padding:9px 14px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                Importar Planilha (.csv, .ods, .xlsx)
+                                <input type="file" id="apuracao-import-csv-input" accept=".csv,.ods,.xlsx,.xls" style="display:none;" onchange="if(typeof importarPlanilhaMultasFazenda==='function') importarPlanilhaMultasFazenda(this);">
+                            </label>
+                            <button onclick="if(typeof corrigirResponsaveisExistentes==='function') corrigirResponsaveisExistentes();" style="padding:9px 14px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;" title="Resolve nomes abreviados de Responsável (ex: 'LUIZ') pro cadastro completo, em todos os registros já importados">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                Corrigir Responsáveis
+                            </button>
+                            <button onclick="if(typeof baixarCSVMultasFazenda==='function') baixarCSVMultasFazenda();" style="padding:9px 14px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Baixar CSV Completo
+                            </button>
+                            <button onclick="if(typeof abrirModalNovaMultaFazenda==='function') abrirModalNovaMultaFazenda();" style="padding:9px 14px; background:#0f172a; color:white; border:none; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Nova Linha
+                            </button>
+                        </div>
+                    </div>
+                    <div id="apuracao-import-status" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12.5px; white-space:nowrap;">
+                            <thead>
+                                <tr style="text-align:left; border-bottom:2px solid #e2e8f0; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.03em;">
+                                    <th style="padding:8px 10px;">Envio Fazenda</th>
+                                    <th style="padding:8px 10px;">PA / Auto Infração</th>
+                                    <th style="padding:8px 10px;">Área</th>
+                                    <th style="padding:8px 10px;">Nome/Razão Social</th>
+                                    <th style="padding:8px 10px;">CPF/CNPJ</th>
+                                    <th style="padding:8px 10px;">Valor Multa</th>
+                                    <th style="padding:8px 10px;">Vencimento</th>
+                                    <th style="padding:8px 10px;">Nº AR</th>
+                                    <th style="padding:8px 10px;">Nº Proc. BETHA</th>
+                                    <th style="padding:8px 10px;">Responsável</th>
+                                    <th style="padding:8px 10px;">Defesa</th>
+                                    <th style="padding:8px 10px;">Obs.</th>
+                                    <th style="padding:8px 10px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="apuracao-tabela-multas-body">
+                                <tr><td colspan="13" style="padding:20px; text-align:center; color:#94a3b8;">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- ABA: PROJETOS (Calendário do Gerente) -->
             <section id="aba-projetos" class="content-section" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -3550,6 +3714,7 @@
     <script src="assets/geojson/municipio_divinopolis_geojson.js"></script>
     <script src="assets/js/gerente.js"></script>
     <script src="assets/js/tarefas.js"></script>
+    <script src="assets/js/apuracao-dados.js"></script>
     <script src="assets/js/projetos.js"></script>
     <script src="assets/js/fechamento.js"></script>
     <script src="assets/js/liquidacoes.js"></script>

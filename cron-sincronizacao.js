@@ -50,6 +50,29 @@ function normalizarNumeroSequencial(numero) {
 }
 
 /**
+ * Número do AR e data de recebimento pelo proprietário: o Administrativo preenche isso na
+ * Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo.
+ * - Notificação Preliminar: UM AR cobre o processo inteiro -> dados.campos.etapa16.
+ * - Auto de Infração: cada Auto (de cada notificação) tem seu próprio ciclo de AR ->
+ *   dados.campos.ciclos_ar_auto[<notificacao_id>].etapa16.
+ */
+function extrairInfoAR(dadosProc) {
+    const etapa16 = (dadosProc && dadosProc.campos && dadosProc.campos.etapa16) || {};
+    return {
+        numero_ar: etapa16.numero_ar || '',
+        data_recebimento_ar: etapa16.data_recebimento || etapa16.data_recebimento_proprietario || ''
+    };
+}
+function extrairInfoARAuto(dadosProc, notificacaoId) {
+    const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
+    const ciclo = (ciclos[notificacaoId] && ciclos[notificacaoId].etapa16) || {};
+    return {
+        numero_ar: ciclo.numero_ar || '',
+        data_recebimento_ar: ciclo.data_recebimento || ''
+    };
+}
+
+/**
  * Verifica se o fiscal já rodou a "Limpeza Geral" (Home) para o mês anterior ao atual: essa ação
  * apaga permanentemente os registros de `registros_produtividade` de meses passados. Se não sobrou
  * NENHUM registro do fiscal no mês anterior, é sinal de que a limpeza já foi feita — nesse caso a
@@ -137,6 +160,7 @@ async function rodarCronSincronizacao() {
                 id,
                 usuario_id,
                 processo_id,
+                notificacao_id,
                 tipo,
                 numero_sequencial,
                 url,
@@ -162,6 +186,36 @@ async function rodarCronSincronizacao() {
         // select de `documentos` acima) — de propósito NÃO consultamos as tabelas `contribuintes`
         // nem `imoveis` diretamente: são cadastros de PII de contribuinte mais amplos que o
         // necessário aqui, e não há necessidade de abrir leitura anônima neles no Fluxograma.
+
+        // Anexo do AR (comprovante dos Correios, tabela `documentos` tipo 'Anexo AR') e data de
+        // vencimento (coluna real em `notificacoes`, não vive no JSON do processo).
+        const processoIdsDoLote = [...new Set(documentos.map(d => d.processo_id).filter(Boolean))];
+        const notificacaoIdsDoLote = [...new Set(documentos.map(d => d.notificacao_id).filter(Boolean))];
+
+        const docArUrlPorNotifId = {};
+        const docArUrlPorProcessoId = {};
+        if (processoIdsDoLote.length > 0) {
+            const { data: docsAR } = await masterClient
+                .from('documentos')
+                .select('processo_id, notificacao_id, url, tipo')
+                .eq('tipo', 'Anexo AR')
+                .in('processo_id', processoIdsDoLote);
+            (docsAR || []).forEach(d => {
+                if (!d.url) return;
+                if (d.notificacao_id && !docArUrlPorNotifId[d.notificacao_id]) docArUrlPorNotifId[d.notificacao_id] = d.url;
+                if (d.processo_id && !docArUrlPorProcessoId[d.processo_id]) docArUrlPorProcessoId[d.processo_id] = d.url;
+            });
+        }
+
+        const vencimentoPorNotifId = {};
+        if (notificacaoIdsDoLote.length > 0) {
+            const { data: notifsVenc } = await masterClient
+                .from('notificacoes')
+                .select('id, data_vencimento')
+                .in('id', notificacaoIdsDoLote);
+            (notifsVenc || []).forEach(n => { if (n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento; });
+        }
+
         let inseridosCP = 0;
         let inseridosRP = 0;
 
@@ -218,13 +272,18 @@ async function rodarCronSincronizacao() {
             if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao')) {
                 catControle = { id: '1.2', nome: 'Controle Processual: Auto de Infração', pontuacao: 5 };
                 catProdutividade = { id: '16', nome: 'Autos de Infração expedidos', pontuacao: 30, campoChave: 'n_auto' };
+                const infoAR = extrairInfoARAuto(dadosProc, doc.notificacao_id);
                 camposCP = {
                     n_auto: numSeq,
                     nome: nomeContribuinte,
                     bairro: bairroImovel,
                     motivo: '',
                     data: dataFormatadaBR,
-                    anexo_pdf: docUrl
+                    anexo_pdf: docUrl,
+                    numero_ar: infoAR.numero_ar,
+                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                    data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || ''
                 };
                 camposRP = {
                     n_auto: numSeq,
@@ -234,13 +293,18 @@ async function rodarCronSincronizacao() {
             } else if (tipoLower.includes('notificação preliminar') || tipoLower.includes('notificacao preliminar')) {
                 catControle = { id: '1.1', nome: 'Controle Processual: Notificação Preliminar', pontuacao: 5 };
                 catProdutividade = { id: '14', nome: 'Notificação Preliminar expedidos', pontuacao: 20, campoChave: 'n_notificacao' };
+                const infoAR = extrairInfoAR(dadosProc);
                 camposCP = {
                     n_notificacao: numSeq,
                     nome: nomeContribuinte,
                     n_inscricao: inscricaoImovel,
                     bairro: bairroImovel,
                     motivo: '',
-                    anexo_pdf: docUrl
+                    anexo_pdf: docUrl,
+                    numero_ar: infoAR.numero_ar,
+                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                    data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || ''
                 };
                 camposRP = {
                     n_notificacao: numSeq,

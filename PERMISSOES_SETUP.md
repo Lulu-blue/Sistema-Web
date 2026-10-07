@@ -3820,3 +3820,113 @@ ALTER TABLE public.registros_produtividade
 > **Nota:** `NULL` nunca conflita com outro `NULL` em uma constraint UNIQUE do Postgres — então registros manuais (sem `origem_unica`) e registros antigos sem número sequencial confiável continuam podendo coexistir livremente, sem serem barrados por esta constraint.
 
 > **Atenção com a ordem:** aplique esta migração **antes** de corrigir o RLS do Fluxograma mencionado nos logs de `sincronizacao-cron.js` (tabelas `processos`/`documentos`/`notificacoes` hoje retornam vazio para o `masterClient` sem sessão). Sem a constraint, destravar esse RLS faria a mesma Notificação/Auto ser processado por duas tabelas de origem ao mesmo tempo (`documentos` e `notificacoes`/`autos_infracao`), piorando a duplicação em vez de resolvê-la.
+
+---
+
+## 🆕 Tabela: `controle_multas_fazenda` (Apuração de Dados — Controle de Multas Enviadas à Fazenda)
+
+> **Adicionado:** Outubro/2026
+
+Nova aba "Apuração de Dados", visível só para **Secretário(a)** e **Diretor(a) de Meio Ambiente**. `controle_multas_fazenda` é a **fonte única** dos gráficos/KPIs/detalhamento — tudo ali lê só dessa tabela, nunca faz merge em memória com o Fluxograma na hora de desenhar a tela. O Fluxograma entra só como **criador de linhas que estão faltando**: toda vez que a tela carrega, `sincronizarProcessosFaltantesDoFluxograma()` busca os processos do período no Fluxograma e, **só pros PA que ainda não existem na tabela** (independente de data — ver `origem` abaixo), insere uma linha usando `processos.valor_total_multas` como valor. PA que já está na tabela (veio de planilha, digitado à mão ou de uma sincronização anterior) nunca é buscado de novo nem sobrescrito automaticamente.
+
+A coluna `origem` marca de onde veio cada linha: `'fluxograma'` (criada pela sincronização, ainda não conferida pela Secretaria — aparece com um aviso na tela), `'planilha'` (veio de importação) ou `'manual'` (digitada ou editada por alguém na tela — editar uma linha sempre marca como `'manual'`, mesmo que tenha nascido do Fluxograma). Quando uma planilha é importada e encontra um PA que já está na tabela com `origem='fluxograma'`, ela **atualiza** essa linha com o dado real em vez de criar uma segunda.
+
+Digitação do PA (`numero_processo`) é obrigatória — mas **não é único sozinho**: testamos contra a planilha real e confirmamos que o mesmo PA pode ter mais de uma multa legítima (ex: dois Autos de Infração diferentes sob o mesmo processo, com valores diferentes). A chave usada pra detectar duplicidade (tela "Nova Linha" e importação de planilha) é **PA + valor da multa** — bate quando é a mesma multa repetida (ex: linha colada duas vezes na planilha), mas permite uma segunda multa real sob o mesmo PA com valor diferente.
+
+### Estrutura SQL
+
+```sql
+CREATE TABLE IF NOT EXISTS public.controle_multas_fazenda (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    data_envio_fazenda date NOT NULL,
+    numero_processo text NOT NULL,
+    tipo_fiscalizacao text,
+    nome_razao_social text,
+    cpf_cnpj text,
+    valor_multa numeric(12,2) DEFAULT 0,
+    data_vencimento date,
+    numero_ar text,
+    numero_processo_betha text,
+    responsavel text,
+    defesa text,
+    observacoes text,
+    created_at timestamp with time zone DEFAULT now(),
+    created_by uuid REFERENCES auth.users(id),
+    origem text DEFAULT 'manual' -- 'manual' | 'planilha' | 'fluxograma' (ver seção de sincronização abaixo)
+);
+
+-- Se a tabela já existia antes desta coluna:
+ALTER TABLE public.controle_multas_fazenda ADD COLUMN IF NOT EXISTS origem text DEFAULT 'manual';
+
+-- ⚠️ Se você já rodou uma versão anterior desta migração com UNIQUE(numero_processo)
+-- sozinho, rode isto primeiro pra remover — ela bloqueia uma segunda multa real no
+-- mesmo PA, o que acontece de verdade na planilha:
+-- ALTER TABLE public.controle_multas_fazenda DROP CONSTRAINT IF EXISTS ux_controle_multas_fazenda_numero_processo;
+
+-- Chave real de duplicidade: PA + valor da multa (reforça, no banco, a checagem que a
+-- tela/importação já fazem antes de inserir). Mesmo PA com valor diferente = multa
+-- diferente, permitido; mesmo PA com mesmo valor repetido = duplicata, bloqueado.
+ALTER TABLE public.controle_multas_fazenda
+    ADD CONSTRAINT ux_controle_multas_fazenda_pa_valor UNIQUE (numero_processo, valor_multa);
+
+ALTER TABLE public.controle_multas_fazenda ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY controle_multas_fazenda_select ON public.controle_multas_fazenda
+FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+          )
+    )
+);
+
+CREATE POLICY controle_multas_fazenda_insert ON public.controle_multas_fazenda
+FOR INSERT TO authenticated
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+          )
+    )
+);
+
+CREATE POLICY controle_multas_fazenda_update ON public.controle_multas_fazenda
+FOR UPDATE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+          )
+    )
+);
+
+CREATE POLICY controle_multas_fazenda_delete ON public.controle_multas_fazenda
+FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+          )
+    )
+);
+```
+
+> **Nota:** se uma planilha antiga tiver dois PAs iguais por engano, a constraint `UNIQUE` acima vai recusar o segundo na importação — a tela mostra quantas linhas foram ignoradas por já existir, então isso aparece como "ignorada", não como erro.
+
+### Front-end
+
+- Aba nova em `painel.html` (`#aba-apuracao-dados`), com botões de navegação em `diretor-options` (mostrado só para Diretor(a) de Meio Ambiente, via `assets/js/painel.js`) e em `secretario-options`.
+- Lógica completa em `assets/js/apuracao-dados.js`: KPIs, 2 gráficos (Chart.js), tabela de detalhamento por fiscal (merge Fluxograma + `controle_multas_fazenda`), CRUD de linha, importação de CSV com checagem de PA duplicado, exportação do CSV completo.
