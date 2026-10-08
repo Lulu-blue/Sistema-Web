@@ -3450,9 +3450,6 @@ async function excluirRegistro() {
     try {
         const tabela = registroSelecionado._tabela || 'registros_produtividade';
 
-        // Nota: Ao excluir um registro do histórico antigo, a numeração NÃO é devolvida
-        // para a fila pública para evitar furos ou saltos fora de ordem cronológica.
-
         const { error } = await supabaseClient
             .from(tabela)
             .delete()
@@ -3462,6 +3459,15 @@ async function excluirRegistro() {
             console.error('Erro ao excluir:', error);
             alert('Erro ao excluir: ' + error.message);
             return;
+        }
+
+        // Devolve o número sequencial pra fila de reaproveitamento (numeros_disponiveis) — só
+        // depois que a exclusão já foi confirmada, pra nunca devolver um número cujo registro
+        // não foi apagado de verdade.
+        const numSeq = registroSelecionado.numero_sequencial;
+        const catId = registroSelecionado.categoria_id;
+        if (numSeq && numSeq !== 'S/N' && catId && podeDevolverNumeroAoExcluir(registroSelecionado.created_at) && typeof devolverNumeroSequencialCompleto === 'function') {
+            await devolverNumeroSequencialCompleto(catId, numSeq, new Date(registroSelecionado.created_at).getFullYear());
         }
 
         fecharDetalhes();
@@ -3664,6 +3670,24 @@ async function devolverNumeroSequencialCompleto(categoriaId, numero, ano) {
     }
 }
 window.devolverNumeroSequencialCompleto = devolverNumeroSequencialCompleto;
+
+/**
+ * Ao excluir um registro do histórico, o número só volta pra fila de reaproveitamento
+ * (numeros_disponiveis) se o registro for do ANO ATUAL e tiver no máximo 1 mês. Registro de
+ * outro ano ou com mais de 1 mês mantém o furo na numeração (evita devolver um número antigo
+ * que reabriria uma sequência já fechada/fora de ordem cronológica).
+ */
+function podeDevolverNumeroAoExcluir(createdAt) {
+    if (!createdAt) return false;
+    const dataRegistro = new Date(createdAt);
+    if (isNaN(dataRegistro.getTime())) return false;
+
+    const hoje = new Date();
+    if (dataRegistro.getFullYear() !== hoje.getFullYear()) return false;
+
+    const UM_MES_MS = 30 * 24 * 60 * 60 * 1000;
+    return (hoje.getTime() - dataRegistro.getTime()) <= UM_MES_MS;
+}
 
 // --- HISTÓRICO GERAL (SUB-ABAS) ---
 let subAbaAtual = 'np-af';
@@ -5291,8 +5315,6 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         const isDestaque = ['1.1', '1.2', '1.2.MA', '1.3', '1.4', '1.5', '1.5.MA', '1.6', '1.7', '1.9', '11'].includes(categoriaId) || categoriaId === 'np-af' || categoriaId === 'ai-ma' || categoriaId === 'relatorio-ma';
         const targetTable = isDestaque ? 'controle_processual' : 'registros_produtividade';
 
-        // Nota: Excluir registro do histórico não devolve número para não furar sequência cronológica.
-
         const { error } = await supabaseClient
             .from(targetTable)
             .delete()
@@ -5302,6 +5324,14 @@ async function excluirRegistroHistGeral(id, categoriaId) {
             console.error('Erro ao excluir:', error);
             alert('Erro ao excluir: ' + error.message);
             return;
+        }
+
+        // Devolve o número sequencial pra fila de reaproveitamento (numeros_disponiveis) — só
+        // depois que a exclusão já foi confirmada, pra nunca devolver um número cujo registro
+        // não foi apagado de verdade.
+        const numSeq = reg.numero_sequencial;
+        if (numSeq && numSeq !== 'S/N' && categoriaId && podeDevolverNumeroAoExcluir(reg.created_at) && typeof devolverNumeroSequencialCompleto === 'function') {
+            await devolverNumeroSequencialCompleto(categoriaId, numSeq, new Date(reg.created_at).getFullYear());
         }
 
         // Fechar modal

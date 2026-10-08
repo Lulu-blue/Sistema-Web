@@ -614,6 +614,20 @@ async function carregarDadosIniciais() {
 function mudarAba(idAba) {
     console.log('DEBUG - mudarAba chamada com:', idAba, 'userRoleGlobal:', window.userRoleGlobal);
 
+    // Trocar de aba pelo menu lateral com um documento em andamento (editor WYSIWYG aberto)
+    // abandonava o rascunho e o número reservado em silêncio — nem o registro era apagado, nem
+    // o número devolvido pra fila, criando buracos permanentes na numeração. Mesmo aviso e mesma
+    // ação de cancelamento já usados ao fechar o editor pelo X (fecharEditorDocumento).
+    if (typeof rascunhoDocumento !== 'undefined' && rascunhoDocumento) {
+        const confirmarSaida = confirm('Você tem um documento em andamento. Se sair agora, o registro será cancelado e o número não será reservado. Deseja continuar?');
+        if (!confirmarSaida) return;
+        if (typeof cancelarRascunhoDocumento === 'function') {
+            cancelarRascunhoDocumento();
+        }
+        const modalEditor = document.getElementById('modal-editor-documento');
+        if (modalEditor) modalEditor.style.display = 'none';
+    }
+
     // Se for Diretor, fechar submenu ao mudar para abas fora dele
     var roleLower = (window.userRoleGlobal || '').toLowerCase();
     var isDiretorCuidadoAnimal = roleLower.includes('diretor') && roleLower.includes('cuidado') && roleLower.includes('animal');
