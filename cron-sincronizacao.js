@@ -51,25 +51,55 @@ function normalizarNumeroSequencial(numero) {
 
 /**
  * Número do AR e data de recebimento pelo proprietário: o Administrativo preenche isso na
- * Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo.
+ * Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo em dados.campos.etapa16.
+ * Confirmado com um JSON real: o campo certo da data é `data_recebimento_proprietario` (não
+ * `data_recebimento`, que é um espelho que nem sempre bate).
  * - Notificação Preliminar: UM AR cobre o processo inteiro -> dados.campos.etapa16.
- * - Auto de Infração: cada Auto (de cada notificação) tem seu próprio ciclo de AR ->
+ * - Auto de Infração normal (de uma notificação): ciclo próprio ->
  *   dados.campos.ciclos_ar_auto[<notificacao_id>].etapa16.
+ * - Auto de Infração "por decreto" (nasce sem Notificação Preliminar, não tem notificacao_id
+ *   nem ciclos_ar_auto): o AR fica direto em dados.campos.etapa16, no mesmo lugar que a NP
+ *   usaria — por isso o fallback abaixo.
  */
 function extrairInfoAR(dadosProc) {
     const etapa16 = (dadosProc && dadosProc.campos && dadosProc.campos.etapa16) || {};
     return {
         numero_ar: etapa16.numero_ar || '',
-        data_recebimento_ar: etapa16.data_recebimento || etapa16.data_recebimento_proprietario || ''
+        data_recebimento_ar: etapa16.data_recebimento_proprietario || etapa16.data_recebimento || ''
     };
 }
 function extrairInfoARAuto(dadosProc, notificacaoId) {
     const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
-    const ciclo = (ciclos[notificacaoId] && ciclos[notificacaoId].etapa16) || {};
-    return {
-        numero_ar: ciclo.numero_ar || '',
-        data_recebimento_ar: ciclo.data_recebimento || ''
-    };
+    const cicloEspecifico = (notificacaoId && ciclos[notificacaoId] && ciclos[notificacaoId].etapa16) || {};
+    if (cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento) {
+        return {
+            numero_ar: cicloEspecifico.numero_ar || '',
+            data_recebimento_ar: cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento || ''
+        };
+    }
+    return extrairInfoAR(dadosProc); // processo por decreto — cai pro etapa16 da raiz
+}
+
+/**
+ * O insert de controle_processual deste script usa upsert com ignoreDuplicates:true (protege
+ * contra duplicidade), o que tem um efeito colateral: quando a linha já existe, o Supabase NÃO
+ * atualiza nada. Isso é correto pra a maioria dos campos, mas o AR (preenchido pelo Administrativo
+ * dias depois do Auto/Notificação já ter sido sincronizado) nunca seria preenchido retroativamente
+ * sem esta checagem — usada ANTES do upsert pra só completar os campos do AR enquanto ainda
+ * estiverem vazios, sem jamais sobrescrever um valor já registrado (nem o da própria sincronização,
+ * nem uma correção manual do fiscal no Histórico).
+ */
+const CAMPOS_AR_PREENCHER_UMA_VEZ = ['ar', 'data_entrada', 'anexo_ar', 'data_vencimento'];
+function calcularAtualizacaoRetroativaAR(camposExistentes, camposNovos) {
+    let houveMudanca = false;
+    const resultado = Object.assign({}, camposExistentes || {});
+    CAMPOS_AR_PREENCHER_UMA_VEZ.forEach(function (chave) {
+        if (camposNovos[chave] && !resultado[chave]) {
+            resultado[chave] = camposNovos[chave];
+            houveMudanca = true;
+        }
+    });
+    return houveMudanca ? resultado : null;
 }
 
 /**
@@ -207,6 +237,9 @@ async function rodarCronSincronizacao() {
             });
         }
 
+        // `notificacoes.data_vencimento` é o prazo da Notificação Preliminar; o Auto de Infração
+        // tem o SEU PRÓPRIO prazo em `autos_infracao.data_vencimento` — usar o da notificação pro
+        // Auto pegaria o prazo errado (da NP, não do Auto).
         const vencimentoPorNotifId = {};
         if (notificacaoIdsDoLote.length > 0) {
             const { data: notifsVenc } = await masterClient
@@ -214,6 +247,27 @@ async function rodarCronSincronizacao() {
                 .select('id, data_vencimento')
                 .in('id', notificacaoIdsDoLote);
             (notifsVenc || []).forEach(n => { if (n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento; });
+        }
+
+        // Prazo do Auto de Infração é sempre 20 dias úteis, fixo — não varia por tipo de infração
+        // (isso era só pra Notificação Preliminar, categoria diferente).
+        const PRAZO_DIAS_UTEIS_AUTO_INFRACAO = 20;
+
+        // dias úteis = pula sábado/domingo (feriado não entra, sem calendário de feriados no
+        // sistema). Conta a partir do dia seguinte ao recebimento.
+        function calcularVencimentoAR(dataRecebimentoStr, prazoDias) {
+            if (!dataRecebimentoStr || prazoDias === null || prazoDias === undefined || prazoDias === '') return '';
+            const dias = parseInt(prazoDias, 10);
+            if (isNaN(dias) || dias < 0) return '';
+            const base = new Date(dataRecebimentoStr + 'T00:00:00Z');
+            if (isNaN(base.getTime())) return '';
+            let diasUteisContados = 0;
+            while (diasUteisContados < dias) {
+                base.setUTCDate(base.getUTCDate() + 1);
+                const diaSemana = base.getUTCDay();
+                if (diaSemana !== 0 && diaSemana !== 6) diasUteisContados++;
+            }
+            return base.toISOString().split('T')[0];
         }
 
         let inseridosCP = 0;
@@ -280,10 +334,10 @@ async function rodarCronSincronizacao() {
                     motivo: '',
                     data: dataFormatadaBR,
                     anexo_pdf: docUrl,
-                    numero_ar: infoAR.numero_ar,
-                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    ar: infoAR.numero_ar,
+                    data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
-                    data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || ''
+                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO)
                 };
                 camposRP = {
                     n_auto: numSeq,
@@ -301,8 +355,8 @@ async function rodarCronSincronizacao() {
                     bairro: bairroImovel,
                     motivo: '',
                     anexo_pdf: docUrl,
-                    numero_ar: infoAR.numero_ar,
-                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    ar: infoAR.numero_ar,
+                    data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
                     data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || ''
                 };
@@ -350,31 +404,48 @@ async function rodarCronSincronizacao() {
 
             if (catControle && userId) {
                 const origemUnicaCP = normalizarNumeroSequencial(numSeq) || `doc_id:${docId}`;
-                const payloadCP = {
-                    user_id: userId,
-                    fiscal_nome: fiscalNome,
-                    categoria_id: catControle.id,
-                    categoria_nome: catControle.nome,
-                    numero_sequencial: numSeq,
-                    pontuacao: elegivel.pontuar ? catControle.pontuacao : 0,
-                    campos: {
-                        ...camposCP,
-                        doc_id: docId,
-                        numero_processo: numProc,
-                        origem: 'sincronizacao_fluxograma',
-                        _created_at: createdAt
-                    },
-                    origem_unica: origemUnicaCP,
-                    created_at: createdAt
+                const camposCPCompletos = {
+                    ...camposCP,
+                    doc_id: docId,
+                    numero_processo: numProc,
+                    origem: 'sincronizacao_fluxograma',
+                    _created_at: createdAt
                 };
-                // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica):
-                // protege contra duplicidade mesmo se este cron rodar em paralelo com a sincronização
-                // do navegador ou for reexecutado para a mesma data.
-                const { data: insCP, error: errCP } = await semacClient
+
+                const { data: linhaExistenteCP } = await semacClient
                     .from('controle_processual')
-                    .upsert([payloadCP], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
-                    .select('id');
-                if (!errCP && insCP && insCP.length > 0) inseridosCP++;
+                    .select('id, campos')
+                    .eq('user_id', userId)
+                    .eq('categoria_id', catControle.id)
+                    .eq('origem_unica', origemUnicaCP)
+                    .maybeSingle();
+
+                if (linhaExistenteCP) {
+                    const camposAtualizados = calcularAtualizacaoRetroativaAR(linhaExistenteCP.campos, camposCPCompletos);
+                    if (camposAtualizados) {
+                        await semacClient.from('controle_processual').update({ campos: camposAtualizados }).eq('id', linhaExistenteCP.id);
+                    }
+                } else {
+                    const payloadCP = {
+                        user_id: userId,
+                        fiscal_nome: fiscalNome,
+                        categoria_id: catControle.id,
+                        categoria_nome: catControle.nome,
+                        numero_sequencial: numSeq,
+                        pontuacao: elegivel.pontuar ? catControle.pontuacao : 0,
+                        campos: camposCPCompletos,
+                        origem_unica: origemUnicaCP,
+                        created_at: createdAt
+                    };
+                    // Upsert com ON CONFLICT na constraint UNIQUE(user_id, categoria_id, origem_unica):
+                    // protege contra duplicidade mesmo se este cron rodar em paralelo com a sincronização
+                    // do navegador ou for reexecutado para a mesma data.
+                    const { data: insCP, error: errCP } = await semacClient
+                        .from('controle_processual')
+                        .upsert([payloadCP], { onConflict: 'user_id,categoria_id,origem_unica', ignoreDuplicates: true })
+                        .select('id');
+                    if (!errCP && insCP && insCP.length > 0) inseridosCP++;
+                }
             }
 
             if (catProdutividade && userId && elegivel.pontuar) {

@@ -197,6 +197,14 @@
                         </svg>
                         Bairros
                     </button>
+                    <!-- Apuração de Dados: Gerente de Posturas e Administrativo de Posturas podem ver (sem excluir linhas) -->
+                    <button class="nav-btn" id="btn-nav-apuracao-dados-gerente" onclick="mudarAba('apuracao-dados')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Apuração de Dados
+                    </button>
                 </div> <!-- /gerente-options -->
 
                 <!-- Botões visíveis apenas para GERENTE DE POSTURAS -->
@@ -2704,10 +2712,6 @@
                             <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Fim:</label>
                             <input type="date" id="apuracao-data-fim" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
                         </div>
-                        <button onclick="if(typeof carregarApuracaoDados==='function') carregarApuracaoDados();" style="padding:9px 16px; background:#0f172a; color:white; border:none; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                            Filtrar / Atualizar
-                        </button>
                     </div>
                 </div>
 
@@ -2744,6 +2748,19 @@
                         <h3 style="margin:0 0 4px; font-size:1rem;">💰 Multas Enviadas à Fazenda por Fiscal (R$)</h3>
                         <p style="color:#94a3b8; font-size:12px; margin:0 0 12px;">Soma em reais das multas registradas no controle abaixo</p>
                         <div style="height:280px;"><canvas id="apuracao-grafico-multas"></canvas></div>
+                    </div>
+                </div>
+
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px; margin-bottom:20px;">
+                    <div style="margin-bottom:12px;">
+                        <h3 style="margin:0; font-size:1rem;">🥧 % da Arrecadação por Fiscal</h3>
+                        <p style="color:#94a3b8; font-size:12px; margin:2px 0 0;">Participação de cada fiscal no valor total de multas. Os 5 maiores aparecem separados; os demais, em "Outros" (todos estão na tabela abaixo).</p>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:20px;">
+                        <div style="position:relative; height:260px; flex:1 1 260px; min-width:0; max-width:380px; margin:0 auto;">
+                            <canvas id="apuracao-grafico-pizza-arrecadacao" role="img" aria-label="Gráfico de pizza com a porcentagem da arrecadação de multas por fiscal"></canvas>
+                        </div>
+                        <ul id="apuracao-legenda-pizza-arrecadacao" style="list-style:none; margin:0; padding:0; flex:1 1 220px; min-width:0; display:flex; flex-direction:column; gap:10px;"></ul>
                     </div>
                 </div>
 
@@ -2799,27 +2816,36 @@
                         </div>
                     </div>
                     <div id="apuracao-import-status" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
-                    <div style="overflow-x:auto;">
+
+                    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <input type="text" id="apuracao-multas-busca" placeholder="Buscar por nº de processo ou de Auto de Infração..." oninput="if(typeof filtrarTabelaMultasFazenda==='function') filtrarTabelaMultasFazenda();" style="flex:1; min-width:240px; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                        <div id="apuracao-filtros-conferencia" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                        <div id="apuracao-filtros-status" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                    </div>
+
+                    <div style="overflow:auto; max-height:65vh; border:1px solid #e2e8f0; border-radius:8px;">
                         <table style="width:100%; border-collapse:collapse; font-size:12.5px; white-space:nowrap;">
                             <thead>
                                 <tr style="text-align:left; border-bottom:2px solid #e2e8f0; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.03em;">
-                                    <th style="padding:8px 10px;">Envio Fazenda</th>
-                                    <th style="padding:8px 10px;">PA / Auto Infração</th>
-                                    <th style="padding:8px 10px;">Área</th>
-                                    <th style="padding:8px 10px;">Nome/Razão Social</th>
-                                    <th style="padding:8px 10px;">CPF/CNPJ</th>
-                                    <th style="padding:8px 10px;">Valor Multa</th>
-                                    <th style="padding:8px 10px;">Vencimento</th>
-                                    <th style="padding:8px 10px;">Nº AR</th>
-                                    <th style="padding:8px 10px;">Nº Proc. BETHA</th>
-                                    <th style="padding:8px 10px;">Responsável</th>
-                                    <th style="padding:8px 10px;">Defesa</th>
-                                    <th style="padding:8px 10px;">Obs.</th>
-                                    <th style="padding:8px 10px;"></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('status');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Status<span id="apuracao-sort-icon-status"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('data_envio_fazenda');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Envio Fazenda<span id="apuracao-sort-icon-data_envio_fazenda"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('numero_processo');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">PA<span id="apuracao-sort-icon-numero_processo"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('numero_auto_infracao');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Nº Auto<span id="apuracao-sort-icon-numero_auto_infracao"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('tipo_fiscalizacao');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Área<span id="apuracao-sort-icon-tipo_fiscalizacao"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('nome_razao_social');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Nome/Razão Social<span id="apuracao-sort-icon-nome_razao_social"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('cpf_cnpj');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">CPF/CNPJ<span id="apuracao-sort-icon-cpf_cnpj"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('valor_multa');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Valor Multa<span id="apuracao-sort-icon-valor_multa"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('data_vencimento');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Vencimento<span id="apuracao-sort-icon-data_vencimento"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('numero_ar');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Nº AR<span id="apuracao-sort-icon-numero_ar"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('numero_processo_betha');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Nº Proc. BETHA<span id="apuracao-sort-icon-numero_processo_betha"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('responsavel');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Responsável<span id="apuracao-sort-icon-responsavel"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('defesa');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Defesa<span id="apuracao-sort-icon-defesa"></span></th>
+                                    <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('observacoes');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Obs.<span id="apuracao-sort-icon-observacoes"></span></th>
+                                    <th style="padding:8px 10px; position:sticky; top:0; background:#fff; z-index:5;"></th>
                                 </tr>
                             </thead>
                             <tbody id="apuracao-tabela-multas-body">
-                                <tr><td colspan="13" style="padding:20px; text-align:center; color:#94a3b8;">Carregando...</td></tr>
+                                <tr><td colspan="15" style="padding:20px; text-align:center; color:#94a3b8;">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>

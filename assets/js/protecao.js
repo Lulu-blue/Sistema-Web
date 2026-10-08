@@ -228,6 +228,12 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
             console.log('[Auth Event] Usuário realizou login. Executando sincronização de produtividade...');
             window.executarSincronizacaoDiaria();
         }
+        // Sincroniza a Apuração de Dados no login (só roda de fato se o cargo tiver acesso:
+        // Secretário(a), Diretor(a) de Meio Ambiente, Gerente de Posturas ou Administrativo(a)
+        // de Posturas — a própria função confere o cargo antes de buscar qualquer coisa).
+        if (typeof window.executarSincronizacaoApuracaoDados === 'function') {
+            window.executarSincronizacaoApuracaoDados();
+        }
     }
     if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
         console.warn("Sessão encerrada pelo sistema. Redirecionando...");

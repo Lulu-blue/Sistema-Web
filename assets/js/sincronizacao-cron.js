@@ -439,13 +439,36 @@
     // outra pessoa no Fluxograma (ex: o Administrativo cadastra o AR dias depois do fiscal ter
     // expedido a Notificação). Quando o fiscal loga de novo e a sincronização revarre o
     // histórico, isso reconfere e atualiza retroativamente um registro que já existe no SEMAC.
-    const CAMPOS_ATUALIZAVEIS_RETROATIVAMENTE = ['anexo_pdf', 'numero_ar', 'data_recebimento_ar', 'anexo_ar', 'data_vencimento'];
+    // Ligados ao MESMO evento (chegada do AR): uma vez que o SEMAC já tem um valor (seja pela
+    // própria sincronização ou por correção manual do fiscal no Histórico), a sincronização
+    // NUNCA mais sobrescreve — só preenche enquanto o campo ainda estiver vazio. Isso evita que
+    // uma rodada futura desfaça uma correção manual ou troque um AR já certo por outro.
+    const CAMPOS_AR_PREENCHER_UMA_VEZ = ['ar', 'data_entrada', 'anexo_ar', 'data_vencimento'];
+    // O anexo principal pode legitimamente trocar (ex: documento reemitido no Fluxograma) —
+    // esse continua sendo atualizado sempre que um valor novo e diferente chegar.
+    const CAMPOS_ATUALIZAVEIS_SEMPRE = ['anexo_pdf'];
+    // Nomes antigos usados antes de alinhar com os campos que produtividade.js já lê
+    // (numero_ar -> ar, data_recebimento_ar -> data_entrada) — limpa registros sincronizados
+    // com os nomes errados em vez de deixar as duas versões penduradas em `campos`.
+    const CAMPOS_LEGADOS_PARA_REMOVER = ['numero_ar', 'data_recebimento_ar'];
     function calcularAtualizacaoRetroativa(camposExistentes, camposNovos) {
         let houveMudanca = false;
         const resultado = { ...(camposExistentes || {}) };
-        CAMPOS_ATUALIZAVEIS_RETROATIVAMENTE.forEach(chave => {
+        CAMPOS_AR_PREENCHER_UMA_VEZ.forEach(chave => {
+            if (camposNovos[chave] && !resultado[chave]) {
+                resultado[chave] = camposNovos[chave];
+                houveMudanca = true;
+            }
+        });
+        CAMPOS_ATUALIZAVEIS_SEMPRE.forEach(chave => {
             if (camposNovos[chave] && camposNovos[chave] !== resultado[chave]) {
                 resultado[chave] = camposNovos[chave];
+                houveMudanca = true;
+            }
+        });
+        CAMPOS_LEGADOS_PARA_REMOVER.forEach(chave => {
+            if (chave in resultado) {
+                delete resultado[chave];
                 houveMudanca = true;
             }
         });
@@ -909,7 +932,7 @@
             if (allUserIds.length > 0) {
                 const { data: a1, error: errA1 } = await buscarEmLotesPorFiltro(
                     'autos_infracao',
-                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados',
+                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados, data_vencimento, prazo_dias',
                     'usuario_id',
                     allUserIds
                 );
@@ -920,7 +943,7 @@
             if (procIdsDoFiscal.length > 0) {
                 const { data: a2, error: errA2 } = await buscarEmLotesPorFiltro(
                     'autos_infracao',
-                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados',
+                    'id, processo_id, notificacao_id, usuario_id, numero, status, created_at, dados, data_vencimento, prazo_dias',
                     'processo_id',
                     procIdsDoFiscal
                 );
@@ -1022,31 +1045,64 @@
                 }
             });
 
-            // Data de vencimento por notificação — é coluna real de `notificacoes`, não vive
-            // dentro do JSON do processo (diferente do número do AR).
+            // Data de vencimento da Notificação Preliminar: coluna `notificacoes.data_vencimento`,
+            // já calculada e gravada pelo próprio Fluxograma (confirmado no código de lá).
             const vencimentoPorNotifId = {};
             (notificacoes || []).forEach(n => {
                 if (n && n.id && n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento;
             });
 
+            // Data de vencimento do Auto de Infração: NÃO existe pronta em lugar nenhum — só os
+            // ingredientes. `autos_infracao.prazo_dias` tem a quantidade de dias ÚTEIS (pula sábado
+            // e domingo — feriado não entra, não temos calendário de feriados no sistema), e a data
+            // base pra contar esse prazo é a data de recebimento do AR (dados.campos.etapa16, já
+            // extraída por extrairInfoAR/extrairInfoARAuto). Conta a partir do dia seguinte ao
+            // recebimento (não inclui o próprio dia do recebimento).
+            function calcularVencimentoAR(dataRecebimentoStr, prazoDias) {
+                if (!dataRecebimentoStr || prazoDias === null || prazoDias === undefined || prazoDias === '') return '';
+                const dias = parseInt(prazoDias, 10);
+                if (isNaN(dias) || dias < 0) return '';
+                const base = new Date(dataRecebimentoStr + 'T00:00:00Z');
+                if (isNaN(base.getTime())) return '';
+                let diasUteisContados = 0;
+                while (diasUteisContados < dias) {
+                    base.setUTCDate(base.getUTCDate() + 1);
+                    const diaSemana = base.getUTCDay(); // 0 = domingo, 6 = sábado
+                    if (diaSemana !== 0 && diaSemana !== 6) diasUteisContados++;
+                }
+                return base.toISOString().split('T')[0];
+            }
+            // Prazo do Auto de Infração é sempre 20 dias úteis, fixo — não varia por tipo de
+            // infração (isso era só pra Notificação Preliminar, categoria diferente).
+            const PRAZO_DIAS_UTEIS_AUTO_INFRACAO = 20;
+
             // Número do AR e data de recebimento pelo proprietário: o Administrativo preenche
-            // isso na Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo.
+            // isso na Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo em
+            // dados.campos.etapa16. Confirmado com um JSON real: o campo certo da data é
+            // `data_recebimento_proprietario` (não `data_recebimento`, que é um espelho que nem
+            // sempre bate).
             // - Notificação Preliminar: UM AR cobre o processo inteiro -> dados.campos.etapa16.
-            // - Auto de Infração: cada Auto (de cada notificação) tem seu próprio ciclo de AR ->
+            // - Auto de Infração normal (de uma notificação): ciclo próprio ->
             //   dados.campos.ciclos_ar_auto[<notificacao_id>].etapa16.
+            // - Auto de Infração "por decreto" (nasce sem Notificação Preliminar, não tem
+            //   notificacao_id nem ciclos_ar_auto): o AR fica direto em dados.campos.etapa16,
+            //   no mesmo lugar que a NP usaria — por isso o fallback abaixo.
             function extrairInfoAR(dadosProc) {
                 const etapa16 = dadosProc?.campos?.etapa16 || {};
                 return {
                     numero_ar: etapa16.numero_ar || '',
-                    data_recebimento_ar: etapa16.data_recebimento || etapa16.data_recebimento_proprietario || ''
+                    data_recebimento_ar: etapa16.data_recebimento_proprietario || etapa16.data_recebimento || ''
                 };
             }
             function extrairInfoARAuto(dadosProc, notificacaoId) {
-                const ciclo = dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]?.etapa16 || {};
-                return {
-                    numero_ar: ciclo.numero_ar || '',
-                    data_recebimento_ar: ciclo.data_recebimento || ''
-                };
+                const cicloEspecifico = (notificacaoId && dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]?.etapa16) || {};
+                if (cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento) {
+                    return {
+                        numero_ar: cicloEspecifico.numero_ar || '',
+                        data_recebimento_ar: cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento || ''
+                    };
+                }
+                return extrairInfoAR(dadosProc); // processo por decreto — cai pro etapa16 da raiz
             }
 
             // Número da notificação por processo: serve de segunda fonte quando o documento
@@ -1112,10 +1168,10 @@
                         motivo: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || '',
                         data: dataFormatadaBR,
                         anexo_pdf: docUrl,
-                        numero_ar: infoAR.numero_ar,
-                        data_recebimento_ar: infoAR.data_recebimento_ar,
+                        ar: infoAR.numero_ar,
+                        data_entrada: infoAR.data_recebimento_ar,
                         anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
-                        data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || '',
+                        data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO),
                         _created_at: createdAt
                     };
                     if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.2', 'Controle Processual: Auto de Infração', numSeq, ptsCP, camposCP)) {
@@ -1157,8 +1213,8 @@
                         bairro: bairroImovel,
                         motivo: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || '',
                         anexo_pdf: docUrl,
-                        numero_ar: infoAR.numero_ar,
-                        data_recebimento_ar: infoAR.data_recebimento_ar,
+                        ar: infoAR.numero_ar,
+                        data_entrada: infoAR.data_recebimento_ar,
                         anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
                         data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || '',
                         _created_at: createdAt
@@ -1293,10 +1349,10 @@
                     motivo: auto.dados?.motivo || auto.dados?.descricao || '',
                     data: dataFormatadaBR,
                     anexo_pdf: autoUrl,
-                    numero_ar: infoAR.numero_ar,
-                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    ar: infoAR.numero_ar,
+                    data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[auto.notificacao_id] || docArUrlPorProcessoId[auto.processo_id] || '',
-                    data_vencimento: vencimentoPorNotifId[auto.notificacao_id] || '',
+                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO),
                     _created_at: createdAt
                 };
 
@@ -1366,8 +1422,8 @@
                     bairro: dadosProcNotif.imovel?.bairro || '',
                     motivo: notif.descricao || '',
                     anexo_pdf: notifUrl,
-                    numero_ar: infoAR.numero_ar,
-                    data_recebimento_ar: infoAR.data_recebimento_ar,
+                    ar: infoAR.numero_ar,
+                    data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[notif.id] || docArUrlPorProcessoId[notif.processo_id] || '',
                     data_vencimento: notif.data_vencimento || '',
                     _created_at: createdAt

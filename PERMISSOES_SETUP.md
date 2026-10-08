@@ -3926,7 +3926,259 @@ USING (
 
 > **Nota:** se uma planilha antiga tiver dois PAs iguais por engano, a constraint `UNIQUE` acima vai recusar o segundo na importação — a tela mostra quantas linhas foram ignoradas por já existir, então isso aparece como "ignorada", não como erro.
 
+### 🆕 Migração Outubro/2026 — Nº do Auto de Infração, Status e acesso de Gerência/Administrativo
+
+Um mesmo PA pode ter **mais de um Auto de Infração** (cada Auto com seu próprio número e valor). Pra separar essas linhas de forma confiável — em vez de depender só do valor da multa pra diferenciar — foi adicionada a coluna `numero_auto_infracao`. Quando ela vem preenchida (planilha nova ou digitação manual), a duplicidade passa a ser checada por **PA + nº do Auto**; só quando o Auto não é informado (linhas antigas, formato anterior) a checagem continua caindo pra **PA + valor**, como antes.
+
+Também foi adicionada a coluna `status` (pago / não pago / aguardando envio / com defesa / arquivado / cancelado), usada nos filtros coloridos da tela, e a visualização da aba foi liberada para **Gerente de Posturas** e **Administrativo(a) de Posturas** — mas só leitura/edição de linha; a exclusão continua restrita a Secretário(a) e Diretor(a) de Meio Ambiente (o botão de excluir já fica oculto no front via `usuarioPodeExcluirMultaFazenda()` em `assets/js/apuracao-dados.js`, e agora o RLS reforça isso no banco).
+
+```sql
+-- Novas colunas
+ALTER TABLE public.controle_multas_fazenda ADD COLUMN IF NOT EXISTS numero_auto_infracao text;
+ALTER TABLE public.controle_multas_fazenda ADD COLUMN IF NOT EXISTS status text DEFAULT 'nao_pago';
+-- 'pago' | 'nao_pago' | 'aguardando_envio' | 'com_defesa' | 'arquivado' | 'cancelado'
+
+-- Remove a constraint antiga (PA + valor sempre), ela não dá espaço pra diferenciar
+-- por número de Auto quando ele existe:
+ALTER TABLE public.controle_multas_fazenda DROP CONSTRAINT IF EXISTS ux_controle_multas_fazenda_pa_valor;
+
+-- Duas constraints parciais no lugar: quando NÃO tem nº de Auto, duplicidade é por
+-- PA + valor (comportamento antigo, pras linhas antigas); quando TEM nº de Auto,
+-- duplicidade é por PA + nº do Auto (cada Auto é único dentro do PA).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_multas_fazenda_pa_valor_sem_auto
+    ON public.controle_multas_fazenda (numero_processo, valor_multa)
+    WHERE numero_auto_infracao IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_multas_fazenda_pa_auto
+    ON public.controle_multas_fazenda (numero_processo, numero_auto_infracao)
+    WHERE numero_auto_infracao IS NOT NULL;
+
+-- RLS: SELECT/INSERT/UPDATE agora incluem Gerente de Posturas e Administrativo(a) de
+-- Posturas. DELETE continua só Secretário(a)/Diretor(a) de Meio Ambiente — por isso
+-- recriamos só as 3 primeiras policies, a de delete fica como já estava.
+DROP POLICY IF EXISTS controle_multas_fazenda_select ON public.controle_multas_fazenda;
+CREATE POLICY controle_multas_fazenda_select ON public.controle_multas_fazenda
+FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+              OR (p.role ILIKE '%gerente%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrativ%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrador%' AND p.role ILIKE '%postura%')
+          )
+    )
+);
+
+DROP POLICY IF EXISTS controle_multas_fazenda_insert ON public.controle_multas_fazenda;
+CREATE POLICY controle_multas_fazenda_insert ON public.controle_multas_fazenda
+FOR INSERT TO authenticated
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+              OR (p.role ILIKE '%gerente%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrativ%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrador%' AND p.role ILIKE '%postura%')
+          )
+    )
+);
+
+DROP POLICY IF EXISTS controle_multas_fazenda_update ON public.controle_multas_fazenda;
+CREATE POLICY controle_multas_fazenda_update ON public.controle_multas_fazenda
+FOR UPDATE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND (
+              p.role ILIKE '%secretári%' OR p.role ILIKE '%secretari%'
+              OR (p.role ILIKE '%diretor%' AND p.role ILIKE '%meio%' AND p.role ILIKE '%ambiente%')
+              OR (p.role ILIKE '%gerente%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrativ%' AND p.role ILIKE '%postura%')
+              OR (p.role ILIKE '%administrador%' AND p.role ILIKE '%postura%')
+          )
+    )
+);
+
+-- controle_multas_fazenda_delete NÃO muda — continua só Secretário(a)/Diretor(a) de Meio Ambiente.
+```
+
 ### Front-end
 
-- Aba nova em `painel.html` (`#aba-apuracao-dados`), com botões de navegação em `diretor-options` (mostrado só para Diretor(a) de Meio Ambiente, via `assets/js/painel.js`) e em `secretario-options`.
-- Lógica completa em `assets/js/apuracao-dados.js`: KPIs, 2 gráficos (Chart.js), tabela de detalhamento por fiscal (merge Fluxograma + `controle_multas_fazenda`), CRUD de linha, importação de CSV com checagem de PA duplicado, exportação do CSV completo.
+- Aba nova em `painel.html` (`#aba-apuracao-dados`), com botões de navegação em `diretor-options` (mostrado só para Diretor(a) de Meio Ambiente, via `assets/js/painel.js`), `secretario-options` e `gerente-options` (mostrado pra Gerente de Posturas e Administrativo(a) de Posturas — ambos sem a opção de excluir linha, controlada por `usuarioPodeExcluirMultaFazenda()`).
+- Lógica completa em `assets/js/apuracao-dados.js`: KPIs, 2 gráficos (Chart.js), tabela de detalhamento por fiscal (lê só de `controle_multas_fazenda`), CRUD de linha, filtros coloridos por status, busca por PA/Auto, importação de CSV/ODS/XLSX com checagem de PA+Auto (ou PA+valor quando sem Auto) duplicado, exportação do CSV completo.
+
+### 🆕 Sincronização automática no login (Outubro/2026)
+
+Antes, a sincronização com o Fluxograma (`sincronizarProcessosFaltantesDoFluxograma`) só rodava quando a aba Apuração de Dados era aberta, e só pro período que estivesse filtrado na tela naquele momento. Agora ela também dispara automaticamente no **login**, igual já acontecia pra sincronização de produtividade do Fiscal:
+
+- `assets/js/protecao.js` chama `window.executarSincronizacaoApuracaoDados()` dentro do handler `onAuthStateChange` (evento `SIGNED_IN`), do mesmo jeito que já chama `window.executarSincronizacaoDiaria()`.
+- A função (definida em `assets/js/apuracao-dados.js`) busca o cargo de quem acabou de logar direto no banco (`profiles.role`, não depende de nenhuma variável já carregada por outra tela) e só segue se for **Secretário(a)**, **Diretor(a) de Meio Ambiente**, **Gerente de Posturas** ou **Administrativo(a) de Posturas** — pra qualquer outro cargo (Fiscal, outros Gerentes/Diretores, etc.) ela não faz nada.
+- Quando o cargo bate, ela busca os processos do Fluxograma do **ano atual** (1º de janeiro até hoje) e cria as linhas que ainda não existem em `controle_multas_fazenda` — exatamente a mesma lógica de "só cria o que falta" usada na tela, nunca sobrescreve nada. PA de anos anteriores que ainda faltarem continuam entrando quando alguém filtrar aquele ano na tela ou importar a planilha.
+- Assim, quando a pessoa abre a aba, as linhas novas já estão lá — não precisa esperar a sincronização rodar na hora.
+
+### 🆕 Limpeza de duplicados antigos por formato do PA (Outubro/2026)
+
+Antes da correção em `normalizarPA` (a função que reconhece que `"2026/0000454"` e `"PA 454/2026"` são o mesmo processo), algumas linhas podem ter entrado duas vezes em `controle_multas_fazenda` — uma vez com o PA em cada formato. A função abaixo replica em SQL a mesma lógica de normalização usada no front-end, pra achar esses casos.
+
+**Passo 1 — criar a função de normalização** (igual à `normalizarPA` de `assets/js/apuracao-dados.js`):
+
+```sql
+CREATE OR REPLACE FUNCTION public.normalizar_pa_multas(p_numero text)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    v_str text;
+    v_partes text[];
+    v_d0 text;
+    v_d1 text;
+    v_d0_eh_ano boolean;
+    v_d1_eh_ano boolean;
+    v_num text;
+    v_ano text;
+    v_so_digitos text;
+BEGIN
+    IF p_numero IS NULL OR btrim(p_numero) = '' THEN
+        RETURN '';
+    END IF;
+    v_str := btrim(p_numero);
+    v_partes := regexp_split_to_array(v_str, '/');
+
+    IF array_length(v_partes, 1) = 2 THEN
+        v_d0 := regexp_replace(v_partes[1], '\D', '', 'g');
+        v_d1 := regexp_replace(v_partes[2], '\D', '', 'g');
+        v_d0_eh_ano := (length(v_d0) = 4 AND left(v_d0, 2) IN ('19', '20'));
+        v_d1_eh_ano := (length(v_d1) = 4 AND left(v_d1, 2) IN ('19', '20'));
+
+        IF v_d0_eh_ano AND NOT v_d1_eh_ano THEN
+            v_ano := v_d0;
+            v_num := v_d1;
+        ELSE
+            v_num := v_d0;
+            v_ano := v_d1;
+        END IF;
+
+        v_num := regexp_replace(v_num, '^0+(?=\d)', '');
+        IF v_num <> '' THEN
+            RETURN v_num || '/' || v_ano;
+        END IF;
+    END IF;
+
+    v_so_digitos := regexp_replace(v_str, '\D', '', 'g');
+    v_so_digitos := regexp_replace(v_so_digitos, '^0+(?=\d)', '');
+    IF v_so_digitos <> '' THEN
+        RETURN v_so_digitos;
+    END IF;
+    RETURN lower(v_str);
+END;
+$$;
+```
+
+**Passo 2 — ver os duplicados antes de apagar qualquer coisa.** Considera duplicado real quando o PA normalizado, o valor da multa **e** o nº do Auto (quando tiver) são iguais — ou seja, é mesmo a mesma multa digitada duas vezes com o PA escrito diferente, não uma segunda multa legítima no mesmo processo:
+
+```sql
+WITH candidatos AS (
+    SELECT
+        id, numero_processo, numero_auto_infracao, valor_multa, responsavel,
+        data_envio_fazenda, origem, created_at,
+        normalizar_pa_multas(numero_processo) AS pa_normalizado,
+        coalesce(numero_auto_infracao, '') AS auto_chave
+    FROM public.controle_multas_fazenda
+),
+grupos AS (
+    SELECT pa_normalizado, valor_multa, auto_chave
+    FROM candidatos
+    GROUP BY pa_normalizado, valor_multa, auto_chave
+    HAVING count(*) > 1
+)
+SELECT c.*
+FROM candidatos c
+JOIN grupos g USING (pa_normalizado, valor_multa, auto_chave)
+ORDER BY c.pa_normalizado, c.valor_multa, c.created_at;
+```
+
+Dá uma olhada nesse resultado — confira se cada grupo é mesmo a mesma multa repetida (PA igual, valor igual) e não duas multas diferentes que coincidiram de ter o mesmo valor.
+
+**Passo 3 — apagar os duplicados, mantendo a linha mais completa de cada grupo.** Prioriza a linha com mais campos preenchidos (e entre as de origem `'planilha'`/`'manual'` sobre as criadas automaticamente pela sincronização `'fluxograma'`); em caso de empate, mantém a mais recente:
+
+```sql
+WITH candidatos AS (
+    SELECT
+        id,
+        normalizar_pa_multas(numero_processo) AS pa_normalizado,
+        valor_multa,
+        coalesce(numero_auto_infracao, '') AS auto_chave,
+        (
+            (CASE WHEN nome_razao_social IS NOT NULL AND nome_razao_social <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN cpf_cnpj IS NOT NULL AND cpf_cnpj <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN data_vencimento IS NOT NULL THEN 1 ELSE 0 END) +
+            (CASE WHEN numero_ar IS NOT NULL AND numero_ar <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN numero_processo_betha IS NOT NULL AND numero_processo_betha <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN responsavel IS NOT NULL AND responsavel <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN defesa IS NOT NULL AND defesa <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN observacoes IS NOT NULL AND observacoes <> '' THEN 1 ELSE 0 END) +
+            (CASE WHEN origem IN ('planilha', 'manual') THEN 2 ELSE 0 END)
+        ) AS completude,
+        created_at
+    FROM public.controle_multas_fazenda
+),
+ranking AS (
+    SELECT
+        id,
+        row_number() OVER (
+            PARTITION BY pa_normalizado, valor_multa, auto_chave
+            ORDER BY completude DESC, created_at DESC
+        ) AS posicao
+    FROM candidatos
+)
+DELETE FROM public.controle_multas_fazenda
+WHERE id IN (SELECT id FROM ranking WHERE posicao > 1);
+```
+
+**Passo 4 — o outro tipo de duplicata: placeholder da sincronização (`origem='fluxograma'`) que devia ter sido substituído por um registro real, mas não foi.** Isso acontecia especificamente ao usar o botão **"Nova Linha"**: a checagem de duplicidade dali comparava o PA **digitado literalmente**, então "PA 695/2026" não reconhecia "2026/000695" como o mesmo processo e criava uma segunda linha em vez de atualizar o placeholder — mesmo com valores diferentes (o placeholder geralmente entra com valor 0,00, já que é só um "rascunho" criado pela sincronização). Isso **já foi corrigido** em `assets/js/apuracao-dados.js` (`salvarMultaFazenda` agora compara pelo PA normalizado e, quando acha um placeholder do mesmo PA, atualiza ele em vez de inserir — igual a importação de planilha já fazia). Essa parte do SQL é só pra limpar os casos que já ficaram duplicados assim:
+
+```sql
+-- Preview: cada placeholder de sincronização cujo PA já tem um registro real (planilha/manual)
+-- escrito em formato diferente — são esses pares que o Passo 3 não pegou, porque o valor é diferente
+SELECT
+    p.id AS id_placeholder, p.numero_processo AS pa_placeholder, p.valor_multa AS valor_placeholder,
+    r.id AS id_real, r.numero_processo AS pa_real, r.valor_multa AS valor_real, r.origem AS origem_real
+FROM public.controle_multas_fazenda p
+JOIN public.controle_multas_fazenda r
+  ON r.id <> p.id
+ AND r.origem <> 'fluxograma'
+ AND normalizar_pa_multas(r.numero_processo) = normalizar_pa_multas(p.numero_processo)
+WHERE p.origem = 'fluxograma'
+ORDER BY p.numero_processo;
+```
+
+Confira o preview e, se bater (mesmo PA, um é claramente o rascunho e o outro o real), roda a limpeza — primeiro aproveita nome/CPF do placeholder pro registro real caso ele esteja com esses campos vazios, depois apaga o placeholder:
+
+```sql
+UPDATE public.controle_multas_fazenda r
+SET nome_razao_social = COALESCE(NULLIF(r.nome_razao_social, ''), p.nome_razao_social),
+    cpf_cnpj = COALESCE(NULLIF(r.cpf_cnpj, ''), p.cpf_cnpj)
+FROM public.controle_multas_fazenda p
+WHERE p.origem = 'fluxograma'
+  AND r.origem <> 'fluxograma'
+  AND normalizar_pa_multas(p.numero_processo) = normalizar_pa_multas(r.numero_processo);
+
+DELETE FROM public.controle_multas_fazenda p
+WHERE p.origem = 'fluxograma'
+  AND EXISTS (
+      SELECT 1 FROM public.controle_multas_fazenda r
+      WHERE r.origem <> 'fluxograma'
+        AND normalizar_pa_multas(r.numero_processo) = normalizar_pa_multas(p.numero_processo)
+  );
+```
+
+> ⚠️ Rode sempre o preview (SELECT) de cada passo antes do DELETE correspondente e confira o resultado — nenhum dos apagamentos acima tem como desfazer. Depois dessa limpeza e da correção no código, nem a tela nem a importação voltam a duplicar por causa do formato do PA (ambas já normalizam antes de comparar).

@@ -20,16 +20,26 @@
 
     var _apuracaoChartProcessos = null;
     var _apuracaoChartMultas = null;
+    var _apuracaoChartPizzaArrecadacao = null;
     var _apuracaoMultaEditandoId = null;
     var _apuracaoTodasMultas = []; // cache da tabela controle_multas_fazenda (sem filtro de data)
 
+    // Reconhece o PA independente da ordem/formato: "PA 454/2026", "454/2026" e "2026/0000454"
+    // devem todos normalizar pro mesmo valor. Detecta qual dos dois lados do "/" é o ano (4
+    // dígitos começando com 19 ou 20) em vez de assumir sempre "número/ano".
     function normalizarPA(numero) {
         if (!numero) return '';
         var str = String(numero).trim();
         var partes = str.split('/');
         if (partes.length === 2) {
-            var num = partes[0].replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-            var ano = partes[1].replace(/\D/g, '');
+            var d0 = partes[0].replace(/\D/g, '');
+            var d1 = partes[1].replace(/\D/g, '');
+            var d0EhAno = d0.length === 4 && (d0.indexOf('19') === 0 || d0.indexOf('20') === 0);
+            var d1EhAno = d1.length === 4 && (d1.indexOf('19') === 0 || d1.indexOf('20') === 0);
+            var num, ano;
+            if (d0EhAno && !d1EhAno) { ano = d0; num = d1; } // formato "ANO/NUMERO" (ex: 2026/0000454)
+            else { num = d0; ano = d1; } // formato padrão "NUMERO/ANO" (ex: PA 454/2026, 454/2026)
+            num = num.replace(/^0+(?=\d)/, '');
             if (num) return num + '/' + ano;
         }
         var soDigitos = str.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
@@ -152,21 +162,29 @@
     // ---------------------------------------------------------------------------
     // ---------------------------------------------------------------------------
     // Sincronização: a tabela controle_multas_fazenda é a fonte ÚNICA dos gráficos/KPIs —
-    // isso aqui só CRIA LINHAS pros processos do Fluxograma que ainda não existem na tabela
-    // (por PA, independente de data). PA que já está na tabela nunca é buscado de novo nem
-    // sobrescrito automaticamente — quem decide se um valor está certo é quem edita a linha
-    // ou importa a planilha de verdade por cima.
+    // isso aqui CRIA LINHAS pros processos do Fluxograma que ainda não existem na tabela (por
+    // PA, independente de data). PA que já está na tabela nunca tem seus dados sobrescritos
+    // automaticamente — quem decide se um valor está certo é quem edita a linha ou importa a
+    // planilha de verdade por cima. ÚNICA EXCEÇÃO: o Nº do AR — como ele normalmente só é
+    // cadastrado pelo Administrativo no Fluxograma DIAS depois do processo já estar nesta
+    // tabela, ele é preenchido retroativamente enquanto ainda estiver vazio (nunca sobrescreve
+    // um valor já preenchido, seja pela sincronização ou por edição manual).
     // ---------------------------------------------------------------------------
     async function sincronizarProcessosFaltantesDoFluxograma(dataInicio, dataFim) {
         var masterClient = window.supabaseMaster;
         if (!masterClient) return;
 
-        var { data: existentesData, error: errExistentes } = await supabaseClient.from('controle_multas_fazenda').select('numero_processo');
+        var { data: existentesData, error: errExistentes } = await supabaseClient.from('controle_multas_fazenda').select('id, numero_processo, numero_ar');
         if (errExistentes) {
             console.error('[Apuração de Dados] Erro ao conferir PAs já cadastrados:', errExistentes.message);
             return;
         }
-        var pasJaNaTabela = new Set((existentesData || []).map(function (r) { return normalizarPA(r.numero_processo); }));
+        var existentesPorPA = {};
+        (existentesData || []).forEach(function (r) {
+            var pa = normalizarPA(r.numero_processo);
+            if (pa) existentesPorPA[pa] = r;
+        });
+        var pasJaNaTabela = new Set(Object.keys(existentesPorPA));
 
         var todos = [];
         var offset = 0;
@@ -176,13 +194,16 @@
         // nome/CPF do contribuinte estourava o tempo limite do Postgres em períodos largos (ex: ano
         // inteiro). `contribuinte:dados->contribuinte` pede só esse pedacinho do JSON ao banco, bem
         // mais leve — e se mesmo assim travar, cai pra trás: tenta sem contribuinte, depois com lote
-        // menor, antes de desistir.
+        // menor, antes de desistir. O Nº do AR (dados.campos.etapa16.numero_ar — mesmo local usado
+        // pela sincronização de produtividade pra NP/Auto por decreto) é pedido do mesmo jeito leve,
+        // direto como texto.
         var incluirContribuinte = true;
         while (true) {
             var camposBase = colunaValorDisponivel
                 ? 'id, fiscal_id, numero_processo, valor_total_multas, created_at'
                 : 'id, fiscal_id, numero_processo, created_at';
             var campos = incluirContribuinte ? (camposBase + ', contribuinte:dados->contribuinte') : camposBase;
+            campos += ', ar_fluxograma:dados->campos->etapa16->>numero_ar';
             var query = masterClient.from('processos').select(campos);
             if (dataInicio) query = query.gte('created_at', dataInicio + 'T00:00:00');
             if (dataFim) query = query.lte('created_at', dataFim + 'T23:59:59');
@@ -214,6 +235,25 @@
             todos = todos.concat(lote);
             if (lote.length < tamanhoLote) break;
             offset += tamanhoLote;
+        }
+
+        // Preenchimento retroativo do AR: PAs que já estão na tabela, mas sem Nº de AR, e cujo
+        // processo no Fluxograma já tem um AR cadastrado. Roda sempre, mesmo quando não há PA
+        // novo pra criar.
+        var idsJaAtualizados = new Set();
+        for (var i = 0; i < todos.length; i++) {
+            var procExistente = todos[i];
+            var paExistente = normalizarPA(procExistente.numero_processo);
+            var linhaExistente = paExistente && existentesPorPA[paExistente];
+            if (!linhaExistente || linhaExistente.numero_ar || !procExistente.ar_fluxograma) continue;
+            if (idsJaAtualizados.has(linhaExistente.id)) continue;
+            idsJaAtualizados.add(linhaExistente.id);
+
+            var { error: errUpdAR } = await supabaseClient
+                .from('controle_multas_fazenda')
+                .update({ numero_ar: procExistente.ar_fluxograma })
+                .eq('id', linhaExistente.id);
+            if (errUpdAR) console.error('[Apuração de Dados] Erro ao preencher Nº do AR retroativamente (PA ' + procExistente.numero_processo + '):', errUpdAR.message);
         }
 
         var faltantes = todos.filter(function (p) {
@@ -249,7 +289,7 @@
                 cpf_cnpj: contribuinte.cpf_cnpj || '',
                 valor_multa: colunaValorDisponivel ? (Number(p.valor_total_multas) || 0) : 0,
                 data_vencimento: null,
-                numero_ar: '',
+                numero_ar: p.ar_fluxograma || '',
                 numero_processo_betha: '',
                 responsavel: fiscalResolvido ? fiscalResolvido.full_name : nomeFluxograma,
                 defesa: '',
@@ -344,7 +384,10 @@
         }
         ['apuracao-data-inicio', 'apuracao-data-fim'].forEach(function (id) {
             var input = document.getElementById(id);
-            if (input) input.addEventListener('change', function () { select.value = ''; });
+            if (input) input.addEventListener('change', function () {
+                select.value = '';
+                carregarApuracaoDados();
+            });
         });
     }
 
@@ -384,6 +427,52 @@
         renderizarTabelaMultasFazenda();
     };
 
+    function cargoTemAcessoApuracaoDados(role) {
+        var r = (role || '').toLowerCase();
+        var ehSecretario = r.indexOf('secretári') !== -1 || r.indexOf('secretari') !== -1;
+        var ehDiretorMA = r.indexOf('diretor') !== -1 && r.indexOf('meio') !== -1 && r.indexOf('ambiente') !== -1;
+        var ehGerentePosturas = r.indexOf('gerente') !== -1 && r.indexOf('postura') !== -1;
+        var ehAdminPosturas = (r.indexOf('administrativ') !== -1 || r.indexOf('administrador') !== -1) && r.indexOf('postura') !== -1;
+        return ehSecretario || ehDiretorMA || ehGerentePosturas || ehAdminPosturas;
+    }
+
+    var _apuracaoSincronizacaoLoginEmAndamento = false;
+
+    // Disparado no login (via protecao.js), pra quem tem acesso à aba Apuração de Dados —
+    // assim as linhas novas do Fluxograma já chegam na tabela antes mesmo da pessoa abrir a
+    // aba, em vez de esperar o carregamento manual (que só sincroniza o período filtrado na
+    // tela, podendo não cobrir dados bem recentes se o filtro escolhido for outro).
+    window.executarSincronizacaoApuracaoDados = async function executarSincronizacaoApuracaoDados() {
+        if (_apuracaoSincronizacaoLoginEmAndamento) return;
+        _apuracaoSincronizacaoLoginEmAndamento = true;
+        try {
+            if (!supabaseClient || !window.supabaseMaster) return;
+            var { data: authData } = await supabaseClient.auth.getUser();
+            var authUser = authData && authData.user;
+            if (!authUser) return;
+
+            var { data: perfil } = await supabaseClient
+                .from('profiles')
+                .select('role')
+                .eq('id', authUser.id)
+                .maybeSingle();
+            if (!cargoTemAcessoApuracaoDados(perfil && perfil.role)) return;
+
+            // Janela igual ao padrão da tela: do início do ano atual até hoje. PA de anos
+            // anteriores que ainda faltarem só entram quando alguém filtrar aquele ano na tela
+            // (ou importar a planilha) — evita escanear o histórico inteiro a cada login.
+            var hoje = new Date();
+            var inicioAno = hoje.getFullYear() + '-01-01';
+            var dataFim = hoje.toISOString().slice(0, 10);
+            console.log('[Apuração de Dados] Sincronizando processos novos do Fluxograma após login...');
+            await sincronizarProcessosFaltantesDoFluxograma(inicioAno, dataFim);
+        } catch (err) {
+            console.error('[Apuração de Dados] Erro na sincronização pós-login:', err);
+        } finally {
+            _apuracaoSincronizacaoLoginEmAndamento = false;
+        }
+    };
+
     function renderizarApuracaoDados(dadosAgregados) {
         var totalProcessos = dadosAgregados.totalProcessos || 0;
         var porFiscal = dadosAgregados.porFiscal || {};
@@ -403,6 +492,7 @@
         // Gráficos (mesma fonte/mesma chave de fiscal para os dois — sem risco de nomes não baterem)
         renderizarGraficoProcessos(porFiscal);
         renderizarGraficoMultas(porFiscal);
+        renderizarPizzaArrecadacao(porFiscal);
 
         // Tabela de detalhamento
         renderizarTabelaDetalhamento(porFiscal, totalMultasValor);
@@ -495,6 +585,85 @@
         });
     }
 
+    // % da arrecadação por fiscal: os 5 maiores em fatias próprias e o resto agrupado em
+    // "Outros". A legenda ao lado repete nome, % e valor em texto (mesmo padrão do gráfico
+    // equivalente na Apuração de Dados do Fluxograma).
+    var CORES_PIZZA_ARRECADACAO = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+    var COR_PIZZA_OUTROS = '#cbd5e1';
+    var FATIAS_PIZZA_COM_NOME = 5;
+
+    function renderizarPizzaArrecadacao(porFiscal) {
+        var canvas = document.getElementById('apuracao-grafico-pizza-arrecadacao');
+        var legenda = document.getElementById('apuracao-legenda-pizza-arrecadacao');
+        if (!canvas || !legenda) return;
+        if (_apuracaoChartPizzaArrecadacao) {
+            _apuracaoChartPizzaArrecadacao.destroy();
+            _apuracaoChartPizzaArrecadacao = null;
+        }
+
+        var pct = function (v) { return v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'; };
+
+        var comValor = Object.values(porFiscal)
+            .filter(function (f) { return (f.totalValor || 0) > 0; })
+            .sort(function (a, b) { return b.totalValor - a.totalValor; });
+        var total = comValor.reduce(function (s, f) { return s + f.totalValor; }, 0);
+
+        if (total <= 0 || typeof Chart === 'undefined') {
+            canvas.style.display = 'none';
+            legenda.innerHTML = '<li style="color:#94a3b8; font-size:13px;">Nenhuma multa gerada no período selecionado.</li>';
+            return;
+        }
+        canvas.style.display = '';
+
+        var fatias = comValor.slice(0, FATIAS_PIZZA_COM_NOME).map(function (f, i) {
+            return { nome: f.nome, valor: f.totalValor, cor: CORES_PIZZA_ARRECADACAO[i] };
+        });
+        var resto = comValor.slice(FATIAS_PIZZA_COM_NOME);
+        if (resto.length > 0) {
+            fatias.push({
+                nome: 'Outros (' + resto.length + ' ' + (resto.length > 1 ? 'fiscais' : 'fiscal') + ')',
+                valor: resto.reduce(function (s, f) { return s + f.totalValor; }, 0),
+                cor: COR_PIZZA_OUTROS
+            });
+        }
+
+        _apuracaoChartPizzaArrecadacao = new Chart(canvas.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: fatias.map(function (f) { return f.nome; }),
+                datasets: [{
+                    data: fatias.map(function (f) { return f.valor; }),
+                    backgroundColor: fatias.map(function (f) { return f.cor; }),
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) { return ' ' + ctx.label + ': ' + formatarMoeda(ctx.raw || 0) + ' (' + pct(((ctx.raw || 0) / total) * 100) + ')'; }
+                        },
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: 12, cornerRadius: 8
+                    }
+                }
+            }
+        });
+
+        legenda.innerHTML = fatias.map(function (f) {
+            return '<li style="display:flex; align-items:center; gap:10px; font-size:13px;">'
+                + '<span style="width:12px; height:12px; border-radius:3px; background:' + f.cor + '; flex-shrink:0;"></span>'
+                + '<span style="flex:1; min-width:0; color:#1e293b; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + escapeHtmlApuracao(f.nome) + '">' + escapeHtmlApuracao(f.nome) + '</span>'
+                + '<span style="color:#0f172a; font-weight:800;">' + pct((f.valor / total) * 100) + '</span>'
+                + '<span style="color:#64748b; font-size:12px; min-width:92px; text-align:right;">' + formatarMoeda(f.valor) + '</span>'
+                + '</li>';
+        }).join('');
+    }
+
     function renderizarTabelaDetalhamento(porFiscal, totalMultasValor) {
         var tbody = document.getElementById('apuracao-tabela-fiscais-body');
         if (!tbody) return;
@@ -527,6 +696,7 @@
     var CAMPOS_MULTA_FAZENDA = [
         { chave: 'data_envio_fazenda', label: 'DATA ENVIO PARA A FAZENDA', tipo: 'data' },
         { chave: 'numero_processo', label: 'PROCESSO ADMINISTRATIVO/AUTO DE INFRAÇÃO', tipo: 'texto' },
+        { chave: 'numero_auto_infracao', label: 'Nº DO AUTO DE INFRAÇÃO', tipo: 'texto' },
         { chave: 'tipo_fiscalizacao', label: 'MEIO AMBIENTE OU FISCALIZAÇÃO DE POSTURAS', tipo: 'texto' },
         { chave: 'nome_razao_social', label: 'NOME/RAZÃO SOCIAL', tipo: 'texto' },
         { chave: 'cpf_cnpj', label: 'CPF/CNPJ', tipo: 'texto' },
@@ -536,26 +706,195 @@
         { chave: 'numero_processo_betha', label: 'Nº PROCESSO BETHA', tipo: 'texto' },
         { chave: 'responsavel', label: 'RESPONSÁVEL', tipo: 'texto' },
         { chave: 'defesa', label: 'DEFESA', tipo: 'texto' },
-        { chave: 'observacoes', label: 'OBSERVAÇÕES', tipo: 'texto' }
+        { chave: 'observacoes', label: 'OBSERVAÇÕES', tipo: 'texto' },
+        { chave: 'status', label: 'STATUS', tipo: 'status' }
     ];
+
+    var STATUS_MULTA_FAZENDA = [
+        { valor: 'pago', label: 'Pago', cor: '#10b981' },
+        { valor: 'nao_pago', label: 'Não Pago', cor: '#ef4444' },
+        { valor: 'aguardando_envio', label: 'Aguardando Envio', cor: '#94a3b8' },
+        { valor: 'com_defesa', label: 'Com Defesa', cor: '#3b82f6' },
+        { valor: 'arquivado', label: 'Arquivado', cor: '#a78bfa' },
+        { valor: 'cancelado', label: 'Cancelado', cor: '#b8a07e' }
+    ];
+    function infoStatusMulta(valor) {
+        return STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === valor; }) || STATUS_MULTA_FAZENDA[1]; // default: Não Pago
+    }
+
+    // Só Secretário e Diretor(a) de Meio Ambiente podem excluir — Gerente de Posturas e
+    // Administrativo veem/editam a tabela, mas sem a opção de apagar linha.
+    function usuarioPodeExcluirMultaFazenda() {
+        var role = (window.userRoleGlobal || '').toLowerCase();
+        var ehSecretario = role.indexOf('secretári') !== -1 || role.indexOf('secretari') !== -1;
+        var ehDiretorMA = role.indexOf('diretor') !== -1 && role.indexOf('meio') !== -1 && role.indexOf('ambiente') !== -1;
+        return ehSecretario || ehDiretorMA;
+    }
+
+    var _apuracaoStatusAtivos = new Set(STATUS_MULTA_FAZENDA.map(function (s) { return s.valor; }));
+
+    // Filtro de Conferência: separa as linhas criadas automaticamente pela sincronização
+    // com o Fluxograma (origem='fluxograma', ainda não revisadas por ninguém) das linhas
+    // já conferidas (criadas/editadas manualmente na tela ou pela importação de planilha).
+    var FILTROS_CONFERENCIA = [
+        { valor: 'todos', label: 'Todos' },
+        { valor: 'conferidos', label: 'Conferidos' },
+        { valor: 'nao_conferidos', label: 'Não Conferidos' }
+    ];
+    var _apuracaoFiltroConferencia = 'todos';
+
+    function registroConferido(m) {
+        return m.origem !== 'fluxograma';
+    }
+
+    function renderizarFiltroConferenciaMultas() {
+        var container = document.getElementById('apuracao-filtros-conferencia');
+        if (!container) return;
+        var html = '';
+        FILTROS_CONFERENCIA.forEach(function (f) {
+            var ativo = _apuracaoFiltroConferencia === f.valor;
+            html += '<button type="button" onclick="toggleFiltroConferenciaMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #92400e; background:' + (ativo ? '#92400e' : 'white') + '; color:' + (ativo ? '#fff' : '#92400e') + '; transition:0.15s;">' + f.label + '</button>';
+        });
+        container.innerHTML = html;
+    }
+    window.toggleFiltroConferenciaMulta = function toggleFiltroConferenciaMulta(valor) {
+        _apuracaoFiltroConferencia = valor;
+        renderizarFiltroConferenciaMultas();
+        renderizarTabelaMultasFazenda();
+    };
+
+    // Ordenação por coluna: clique no cabeçalho ordena "de maior pra menor" (datas/valores)
+    // ou em ordem alfabética (texto/status) na primeira vez; clicar de novo na mesma coluna
+    // inverte a direção. Linhas com o campo vazio sempre ficam por último, nos dois sentidos.
+    var COLUNAS_TABELA_MULTAS = [
+        { chave: 'status', tipo: 'status' },
+        { chave: 'data_envio_fazenda', tipo: 'data' },
+        { chave: 'numero_processo', tipo: 'texto' },
+        { chave: 'numero_auto_infracao', tipo: 'texto' },
+        { chave: 'tipo_fiscalizacao', tipo: 'texto' },
+        { chave: 'nome_razao_social', tipo: 'texto' },
+        { chave: 'cpf_cnpj', tipo: 'texto' },
+        { chave: 'valor_multa', tipo: 'valor' },
+        { chave: 'data_vencimento', tipo: 'data' },
+        { chave: 'numero_ar', tipo: 'texto' },
+        { chave: 'numero_processo_betha', tipo: 'texto' },
+        { chave: 'responsavel', tipo: 'texto' },
+        { chave: 'defesa', tipo: 'texto' },
+        { chave: 'observacoes', tipo: 'texto' }
+    ];
+    var _apuracaoSortColuna = null;
+    var _apuracaoSortDirecao = 'asc';
+
+    function compararValoresColuna(va, vb, tipo, direcao) {
+        var aVazio = va === null || va === undefined || va === '';
+        var bVazio = vb === null || vb === undefined || vb === '';
+        if (aVazio && bVazio) return 0;
+        if (aVazio) return 1; // vazios sempre por último, nos dois sentidos
+        if (bVazio) return -1;
+
+        var resultado;
+        if (tipo === 'valor') {
+            resultado = Number(va) - Number(vb);
+        } else if (tipo === 'data') {
+            resultado = new Date(va) - new Date(vb);
+        } else {
+            resultado = String(va).localeCompare(String(vb), 'pt-BR', { sensitivity: 'base' });
+        }
+        return direcao === 'desc' ? -resultado : resultado;
+    }
+
+    window.ordenarTabelaMultasFazenda = function ordenarTabelaMultasFazenda(chave) {
+        var coluna = COLUNAS_TABELA_MULTAS.find(function (c) { return c.chave === chave; });
+        if (!coluna) return;
+        if (_apuracaoSortColuna === chave) {
+            _apuracaoSortDirecao = _apuracaoSortDirecao === 'asc' ? 'desc' : 'asc';
+        } else {
+            _apuracaoSortColuna = chave;
+            // Padrão: datas/valores começam do maior pro menor; texto/status, em ordem alfabética.
+            _apuracaoSortDirecao = (coluna.tipo === 'valor' || coluna.tipo === 'data') ? 'desc' : 'asc';
+        }
+        renderizarTabelaMultasFazenda();
+    };
+
+    function atualizarIconesOrdenacaoMultas() {
+        COLUNAS_TABELA_MULTAS.forEach(function (c) {
+            var el = document.getElementById('apuracao-sort-icon-' + c.chave);
+            if (!el) return;
+            el.textContent = _apuracaoSortColuna === c.chave ? (_apuracaoSortDirecao === 'asc' ? ' ▲' : ' ▼') : '';
+        });
+    }
+
+    function renderizarFiltrosStatusMultas() {
+        var container = document.getElementById('apuracao-filtros-status');
+        if (!container) return;
+        var html = '';
+        STATUS_MULTA_FAZENDA.forEach(function (s) {
+            var ativo = _apuracaoStatusAtivos.has(s.valor);
+            html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
+            html += '<span style="width:8px; height:8px; border-radius:50%; background:' + (ativo ? '#fff' : s.cor) + '; flex-shrink:0;"></span>' + s.label;
+            html += '</button>';
+        });
+        container.innerHTML = html;
+    }
+    window.toggleFiltroStatusMulta = function toggleFiltroStatusMulta(valor) {
+        if (_apuracaoStatusAtivos.has(valor)) _apuracaoStatusAtivos.delete(valor);
+        else _apuracaoStatusAtivos.add(valor);
+        renderizarFiltrosStatusMultas();
+        renderizarTabelaMultasFazenda();
+    };
+    window.filtrarTabelaMultasFazenda = function filtrarTabelaMultasFazenda() {
+        renderizarTabelaMultasFazenda();
+    };
 
     function renderizarTabelaMultasFazenda() {
         var tbody = document.getElementById('apuracao-tabela-multas-body');
         if (!tbody) return;
+        renderizarFiltrosStatusMultas();
+        renderizarFiltroConferenciaMultas();
+        atualizarIconesOrdenacaoMultas();
 
-        if (_apuracaoTodasMultas.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="13" style="padding:20px; text-align:center; color:#94a3b8;">Nenhum registro ainda. Use "Nova Linha" ou importe a planilha.</td></tr>';
+        var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
+        var linhasFiltradas = _apuracaoTodasMultas.filter(function (m) {
+            var statusAtual = (m.status || 'nao_pago');
+            if (!_apuracaoStatusAtivos.has(statusAtual)) return false;
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
+            if (!termoBusca) return true;
+            var pa = (m.numero_processo || '').toLowerCase();
+            var auto = (m.numero_auto_infracao || '').toLowerCase();
+            return pa.indexOf(termoBusca) !== -1 || auto.indexOf(termoBusca) !== -1;
+        });
+
+        if (_apuracaoSortColuna) {
+            var colunaAtiva = COLUNAS_TABELA_MULTAS.find(function (c) { return c.chave === _apuracaoSortColuna; });
+            if (colunaAtiva) {
+                linhasFiltradas = linhasFiltradas.slice().sort(function (a, b) {
+                    var va = colunaAtiva.tipo === 'status' ? infoStatusMulta(a.status || 'nao_pago').label : a[colunaAtiva.chave];
+                    var vb = colunaAtiva.tipo === 'status' ? infoStatusMulta(b.status || 'nao_pago').label : b[colunaAtiva.chave];
+                    var tipoComparacao = colunaAtiva.tipo === 'status' ? 'texto' : colunaAtiva.tipo;
+                    return compararValoresColuna(va, vb, tipoComparacao, _apuracaoSortDirecao);
+                });
+            }
+        }
+
+        if (linhasFiltradas.length === 0) {
+            var msg = _apuracaoTodasMultas.length === 0 ? 'Nenhum registro ainda. Use "Nova Linha" ou importe a planilha.' : 'Nenhum registro bate com a busca/filtro de status.';
+            tbody.innerHTML = '<tr><td colspan="15" style="padding:20px; text-align:center; color:#94a3b8;">' + msg + '</td></tr>';
             return;
         }
 
+        var podeExcluir = usuarioPodeExcluirMultaFazenda();
         var html = '';
-        _apuracaoTodasMultas.forEach(function (m) {
+        linhasFiltradas.forEach(function (m) {
             var naoConferido = m.origem === 'fluxograma';
-            html += '<tr style="border-bottom:1px solid #f1f5f9;' + (naoConferido ? ' background:#fffbeb;' : '') + '">';
+            var status = infoStatusMulta(m.status || 'nao_pago');
+            html += '<tr style="border-bottom:1px solid #f1f5f9; border-left:4px solid ' + status.cor + ';' + (naoConferido ? ' background:#fffbeb;' : '') + '">';
+            html += '<td style="padding:7px 10px;"><span title="' + status.label + '" style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:' + status.cor + ';"><span style="width:9px; height:9px; border-radius:50%; background:' + status.cor + '; flex-shrink:0;"></span>' + status.label + '</span></td>';
             html += '<td style="padding:7px 10px;">' + (m.data_envio_fazenda ? formatarDataExibicao(m.data_envio_fazenda) : '-') + '</td>';
             html += '<td style="padding:7px 10px; font-weight:600;">' + escapeHtmlApuracao(m.numero_processo);
             if (naoConferido) html += ' <span title="Criado automaticamente pela sincronização com o Fluxograma — ainda não conferido" style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:1px 5px; border-radius:6px; margin-left:4px;">NÃO CONFERIDO</span>';
             html += '</td>';
+            html += '<td style="padding:7px 10px;">' + (escapeHtmlApuracao(m.numero_auto_infracao) || '-') + '</td>';
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.tipo_fiscalizacao) + '</td>';
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.nome_razao_social) + '</td>';
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.cpf_cnpj) + '</td>';
@@ -568,7 +907,9 @@
             html += '<td style="padding:7px 10px; max-width:160px; white-space:normal;">' + escapeHtmlApuracao(m.observacoes) + '</td>';
             html += '<td style="padding:7px 10px; white-space:nowrap;">';
             html += '<button onclick="abrirModalNovaMultaFazenda(\'' + m.id + '\')" title="Editar" style="background:none; border:none; cursor:pointer; color:#3b82f6; padding:4px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>';
-            html += '<button onclick="excluirMultaFazenda(\'' + m.id + '\')" title="Excluir" style="background:none; border:none; cursor:pointer; color:#ef4444; padding:4px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+            if (podeExcluir) {
+                html += '<button onclick="excluirMultaFazenda(\'' + m.id + '\')" title="Excluir" style="background:none; border:none; cursor:pointer; color:#ef4444; padding:4px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+            }
             html += '</td>';
             html += '</tr>';
         });
@@ -597,7 +938,13 @@
         html += '</div><div class="modal-body">';
 
         html += campoModal('Data de Envio para a Fazenda', 'mf-data-envio', 'date', registro ? (registro.data_envio_fazenda || '') : '');
-        html += campoModal('Processo Administrativo / Auto de Infração (PA)', 'mf-numero-processo', 'text', registro ? (registro.numero_processo || '') : '', 'Ex: 2026/000123');
+        html += campoModal('Processo Administrativo (PA)', 'mf-numero-processo', 'text', registro ? (registro.numero_processo || '') : '', 'Ex: 2026/000123');
+        html += campoModal('Nº do Auto de Infração (deixe em branco se o PA tiver só 1 Auto)', 'mf-numero-auto', 'text', registro ? (registro.numero_auto_infracao || '') : '', 'Preencha só quando o mesmo PA tiver mais de um Auto');
+        html += '<div class="campo-grupo"><label>Status</label><select id="mf-status" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; background:#f8fafc;">';
+        STATUS_MULTA_FAZENDA.forEach(function (s) {
+            html += '<option value="' + s.valor + '"' + (registro && (registro.status || 'nao_pago') === s.valor ? ' selected' : '') + '>' + s.label + '</option>';
+        });
+        html += '</select></div>';
         html += '<div class="campo-grupo"><label>Meio Ambiente ou Fiscalização de Posturas</label><select id="mf-tipo-fiscalizacao" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; background:#f8fafc;">';
         html += '<option value="">Selecione...</option>';
         html += '<option value="Meio Ambiente"' + (registro && registro.tipo_fiscalizacao === 'Meio Ambiente' ? ' selected' : '') + '>Meio Ambiente</option>';
@@ -662,30 +1009,51 @@
         if (btn && btn.disabled) return;
 
         var numeroProcesso = (document.getElementById('mf-numero-processo').value || '').trim();
+        var numeroAuto = (document.getElementById('mf-numero-auto').value || '').trim();
         var dataEnvio = document.getElementById('mf-data-envio').value || null;
         var valorMulta = parseValorBR(document.getElementById('mf-valor').value);
 
-        if (!numeroProcesso) { alert('Preencha o Processo Administrativo / Auto de Infração (PA).'); return; }
+        if (!numeroProcesso) { alert('Preencha o Processo Administrativo (PA).'); return; }
         if (!dataEnvio) { alert('Preencha a Data de Envio para a Fazenda.'); return; }
 
         if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
 
         try {
-            // Verificação de duplicata por PA + valor da multa (ignora o próprio registro
-            // quando em edição) — o mesmo PA pode legitimamente ter mais de uma multa com
-            // valores diferentes, então só bloqueia quando PA e valor são iguais.
-            var queryDup = supabaseClient.from('controle_multas_fazenda').select('id')
-                .eq('numero_processo', numeroProcesso).eq('valor_multa', valorMulta);
-            if (_apuracaoMultaEditandoId) queryDup = queryDup.neq('id', _apuracaoMultaEditandoId);
-            var { data: existentes } = await queryDup;
-            if (existentes && existentes.length > 0) {
-                alert('Já existe um registro para o PA "' + numeroProcesso + '" com esse mesmo valor de multa. Se for uma multa diferente, confira se o valor está certo; se for a mesma, edite o registro existente em vez de duplicar.');
+            // Duplicata: compara pelo PA NORMALIZADO (não pelo texto literal) — assim "PA 695/2026"
+            // e "2026/000695" são reconhecidos como o mesmo processo mesmo escritos diferente. Se
+            // preencheu o Nº do Auto, dois registros do mesmo PA só colidem se tiverem o MESMO
+            // número de Auto (permite vários Autos reais sob o mesmo PA). Sem Nº do Auto, mantém a
+            // checagem antiga por PA + valor da multa.
+            var paNorm = normalizarPA(numeroProcesso);
+            var candidatosDoPA = _apuracaoTodasMultas.filter(function (m) {
+                return normalizarPA(m.numero_processo) === paNorm && m.id !== _apuracaoMultaEditandoId;
+            });
+            var autoFinalLower = numeroAuto.toLowerCase();
+            var duplicataExata = numeroAuto
+                ? candidatosDoPA.find(function (m) { return (m.numero_auto_infracao || '').trim().toLowerCase() === autoFinalLower; })
+                : candidatosDoPA.find(function (m) { return Number(m.valor_multa) === valorMulta; });
+            if (duplicataExata) {
+                var msgDup = numeroAuto
+                    ? 'Já existe um registro para o PA "' + numeroProcesso + '" com o Auto "' + numeroAuto + '". Edite o registro existente em vez de duplicar.'
+                    : 'Já existe um registro para o PA "' + numeroProcesso + '" com esse mesmo valor de multa. Se for um Auto diferente, preencha o "Nº do Auto de Infração" pra diferenciar; se for o mesmo, edite o registro existente.';
+                alert(msgDup);
                 return;
             }
+
+            // Se já existe uma linha desse PA criada pela sincronização automática (origem=
+            // 'fluxograma', ainda não conferida por ninguém) e esta não é uma edição, atualiza ela
+            // com o dado real em vez de criar uma segunda linha pro mesmo processo — mesmo
+            // comportamento já usado na importação de planilha.
+            var placeholderFluxograma = !_apuracaoMultaEditandoId
+                ? candidatosDoPA.find(function (m) { return m.origem === 'fluxograma'; })
+                : null;
+            var idParaSalvar = _apuracaoMultaEditandoId || (placeholderFluxograma ? placeholderFluxograma.id : null);
 
             var payload = {
                 data_envio_fazenda: dataEnvio,
                 numero_processo: numeroProcesso,
+                numero_auto_infracao: numeroAuto || null,
+                status: document.getElementById('mf-status').value || 'nao_pago',
                 tipo_fiscalizacao: document.getElementById('mf-tipo-fiscalizacao').value || null,
                 nome_razao_social: (document.getElementById('mf-nome').value || '').trim(),
                 cpf_cnpj: (document.getElementById('mf-cpf-cnpj').value || '').trim(),
@@ -700,8 +1068,8 @@
             };
 
             var result;
-            if (_apuracaoMultaEditandoId) {
-                result = await supabaseClient.from('controle_multas_fazenda').update(payload).eq('id', _apuracaoMultaEditandoId);
+            if (idParaSalvar) {
+                result = await supabaseClient.from('controle_multas_fazenda').update(payload).eq('id', idParaSalvar);
             } else {
                 payload.created_by = window.userIdGlobal || null;
                 result = await supabaseClient.from('controle_multas_fazenda').insert([payload]);
@@ -827,6 +1195,7 @@
                 var val = reg[c.chave];
                 if (c.tipo === 'data') val = val ? formatarDataExibicao(val) : '';
                 else if (c.tipo === 'valor') val = val != null ? String(val).replace('.', ',') : '0,00';
+                else if (c.tipo === 'status') val = infoStatusMulta(val || 'nao_pago').label;
                 val = (val === null || val === undefined) ? '' : String(val);
                 val = val.replace(/"/g, '""');
                 return '"' + val + '"';
@@ -857,6 +1226,7 @@
         var h = cabecalhoNormalizado;
         if (h.indexOf('BETHA') !== -1) return 'numero_processo_betha';
         if (h.indexOf('PROCESSO') !== -1 && (h.indexOf('ADMINISTRATIVO') !== -1 || h.indexOf('AUTO') !== -1 || h.indexOf('INFRA') !== -1)) return 'numero_processo';
+        if (h.indexOf('AUTO') !== -1) return 'numero_auto_infracao'; // coluna separada (planilhas futuras) — "PROCESSO...AUTO..." já foi tratado acima
         if (h.indexOf('FAZENDA') !== -1 || (h.indexOf('DATA') !== -1 && h.indexOf('ENVIO') !== -1)) return 'data_envio_fazenda';
         if (h.indexOf('MEIO AMBIENTE') !== -1 || h.indexOf('POSTURAS') !== -1 || h.indexOf('FISCALIZACAO') !== -1) return 'tipo_fiscalizacao';
         if (h.indexOf('RAZAO SOCIAL') !== -1 || h === 'NOME' || h.indexOf('NOME/') !== -1) return 'nome_razao_social';
@@ -1076,16 +1446,17 @@
 
         // Busca os registros já cadastrados pra cada PA (pode ter mais de um — vários Autos).
         // Três desfechos possíveis por linha da planilha:
-        // 1) já existe um registro com o mesmo PA+valor -> duplicata, ignora.
+        // 1) já existe um registro duplicado (mesmo PA+Auto quando a planilha traz Nº do Auto,
+        //    senão mesmo PA+valor) -> duplicata, ignora.
         // 2) existe um registro desse PA com origem='fluxograma' (criado pela sincronização,
         //    ainda não conferido) -> a planilha ATUALIZA essa linha com o dado real.
         // 3) nenhum dos dois -> é um Auto novo mesmo, insere linha nova.
-        var { data: existentesData } = await supabaseClient.from('controle_multas_fazenda').select('id, numero_processo, valor_multa, origem');
+        var { data: existentesData } = await supabaseClient.from('controle_multas_fazenda').select('id, numero_processo, numero_auto_infracao, valor_multa, origem');
         var existentesPorPA = {};
         (existentesData || []).forEach(function (r) {
             var pa = normalizarPA(r.numero_processo);
             if (!existentesPorPA[pa]) existentesPorPA[pa] = [];
-            existentesPorPA[pa].push({ id: r.id, valor: Number(r.valor_multa) || 0, origem: r.origem, consumido: false });
+            existentesPorPA[pa].push({ id: r.id, valor: Number(r.valor_multa) || 0, auto: (r.numero_auto_infracao || '').trim().toLowerCase(), origem: r.origem, consumido: false });
         });
 
         var linhasParaInserir = [];
@@ -1098,12 +1469,15 @@
             var pa = registro.numero_processo || ''; // já veio como string "trimada" do mapeamento acima
             if (!pa) { invalidas++; return; }
 
+            var autoFinal = (registro.numero_auto_infracao || '').trim();
             var paNorm = normalizarPA(pa);
             var valorFinal = parseValorBR(registro.valor_multa);
-            var chave = paNorm + '||' + valorFinal;
+            var chave = autoFinal ? (paNorm + '||auto:' + autoFinal.toLowerCase()) : (paNorm + '||valor:' + valorFinal);
             var existentesDoPA = existentesPorPA[paNorm] || [];
 
-            var jaExisteExato = existentesDoPA.some(function (e) { return e.valor === valorFinal; });
+            var jaExisteExato = autoFinal
+                ? existentesDoPA.some(function (e) { return e.auto === autoFinal.toLowerCase(); })
+                : existentesDoPA.some(function (e) { return e.valor === valorFinal; });
             if (jaExisteExato || chavesNestaImportacao.has(chave)) { ignoradas++; return; }
             chavesNestaImportacao.add(chave);
 
@@ -1120,6 +1494,7 @@
             var payload = {
                 data_envio_fazenda: parseDataBR(registro.data_envio_fazenda) || new Date().toISOString().slice(0, 10),
                 numero_processo: pa,
+                numero_auto_infracao: autoFinal || null,
                 tipo_fiscalizacao: registro.tipo_fiscalizacao || null,
                 nome_razao_social: registro.nome_razao_social || '',
                 cpf_cnpj: registro.cpf_cnpj || '',
