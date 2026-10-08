@@ -259,18 +259,29 @@ verificarAcesso();
 
 // 2. Monitoramento reativo em tempo real
 // Se o token expirar ou o usuário for deslogado em outra aba, redireciona aqui também.
+//
+// O Supabase dispara 'SIGNED_IN' não só no login de verdade, mas também quando a aba volta a
+// ficar em foco / o token é revalidado em segundo plano — isso podia re-rodar a sincronização
+// completa (bem pesada: várias consultas sequenciais ao Fluxograma + SEMAC) toda vez que a
+// pessoa trocava de aba do navegador, mesmo sem nada ter mudado. As flags abaixo garantem que
+// cada sincronização só dispara 1 vez por carregamento de página — um login de verdade (recarga
+// da página) volta a rodar normalmente, já que o script é recarregado do zero.
+let _sincronizacaoDiariaDisparadaNestaAba = false;
+let _sincronizacaoApuracaoDisparadaNestaAba = false;
 supabaseClient.auth.onAuthStateChange((event, session) => {
     console.log(`[Auth Event] ${event}`);
     if (event === 'SIGNED_IN' && session) {
         // Dispara a sincronização automática ao realizar login
-        if (typeof window.executarSincronizacaoDiaria === 'function') {
+        if (!_sincronizacaoDiariaDisparadaNestaAba && typeof window.executarSincronizacaoDiaria === 'function') {
+            _sincronizacaoDiariaDisparadaNestaAba = true;
             console.log('[Auth Event] Usuário realizou login. Executando sincronização de produtividade...');
             window.executarSincronizacaoDiaria();
         }
         // Sincroniza a Apuração de Dados no login (só roda de fato se o cargo tiver acesso:
         // Secretário(a), Diretor(a) de Meio Ambiente, Gerente de Posturas ou Administrativo(a)
         // de Posturas — a própria função confere o cargo antes de buscar qualquer coisa).
-        if (typeof window.executarSincronizacaoApuracaoDados === 'function') {
+        if (!_sincronizacaoApuracaoDisparadaNestaAba && typeof window.executarSincronizacaoApuracaoDados === 'function') {
+            _sincronizacaoApuracaoDisparadaNestaAba = true;
             window.executarSincronizacaoApuracaoDados();
         }
     }

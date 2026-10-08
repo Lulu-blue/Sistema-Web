@@ -6256,15 +6256,25 @@ async function cancelarRascunhoDocumento() {
     rascunhoDocumento = null;
 
     try {
+        // Apaga o rascunho ANTES de devolver o número: se a exclusão falhar (rede, RLS etc.),
+        // é melhor o número ficar "preso" (perde-se 1 número, inofensivo) do que devolvido pra
+        // fila enquanto o rascunho continua existindo com esse mesmo número — isso geraria um
+        // segundo rascunho reutilizando o número do primeiro, que nunca é apagado (bug real que
+        // já aconteceu: dois registros de Relatório Fiscal com o mesmo "132/2026").
+        const { error: errDelete } = await supabaseClient
+            .from('controle_processual')
+            .delete()
+            .eq('id', registroId);
+
+        if (errDelete) {
+            console.error('Erro ao excluir rascunho — número NÃO devolvido pra fila por segurança:', errDelete);
+            return;
+        }
+
         // Devolve o número para a fila global no banco (qualquer categoria que gere número, ex: 1.2, 1.4, 1.5, 1.8, 11)
         if (numeroSeq && categoriaId) {
             await devolverNumeroSequencialCompleto(categoriaId, numeroSeq, anoAtual);
         }
-
-        await supabaseClient
-            .from('controle_processual')
-            .delete()
-            .eq('id', registroId);
     } catch (e) {
         console.error('Erro ao excluir rascunho:', e);
     }
