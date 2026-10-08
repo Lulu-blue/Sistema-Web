@@ -8177,7 +8177,7 @@ async function carregarNPAIHome() {
     const { data: registros, error } = await supabaseClient
         .from('controle_processual')
         .select('*')
-        .in('categoria_id', ['1.1', '1.2', '1.2.MA', '1.9'])
+        .in('categoria_id', ['1.1', '1.9'])
         .eq('user_id', user.id);
 
     if (error || !registros) {

@@ -39,12 +39,22 @@ function normalizarNumeroSequencial(numero) {
     if (!numero) return null;
     const str = String(numero).trim();
     if (!str || str.toUpperCase() === 'S/N') return null;
+
     const partes = str.split('/');
     if (partes.length === 2) {
-        const num = partes[0].replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-        const ano = partes[1].replace(/\D/g, '');
-        if (num) return `${num}/${ano}`;
+        const a = partes[0].replace(/\D/g, '');
+        const b = partes[1].replace(/\D/g, '');
+        // O SEMAC digita SEQUENCIAL/ANO; o Fluxograma manda ANO/SEQUENCIAL. Sem
+        // descobrir qual é o ano, a versão antiga tirava os zeros da metade
+        // errada e "2026/050" virava uma chave diferente de "2026/50" — a mesma
+        // linha entrava duas vezes. Saída sempre em SEQUENCIAL/ANO, sem zeros.
+        const ehAno = (v) => /^\d{4}$/.test(v) && Number(v) >= 1900 && Number(v) <= 2100;
+        let seq = a, ano = b;
+        if (ehAno(a) && !ehAno(b)) { seq = b; ano = a; }
+        seq = seq.replace(/^0+(?=\d)/, '');
+        if (seq) return `${seq}/${ano}`;
     }
+
     const soDigitos = str.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
     return soDigitos || str.toLowerCase();
 }

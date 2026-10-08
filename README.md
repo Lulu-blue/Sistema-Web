@@ -145,8 +145,8 @@ Por segurança, toda sessão de usuário possui um **limite máximo contínuo de
 - **Colunas**: Tarefa (com nome da tarefa-pai se for subtarefa, prefixo `↳`), Prazo, Status (badge colorido), Progresso (barra visual de subtarefas).
 - **Clique** em qualquer linha navega direto para a aba Tarefas.
 
-### Alertas de NP / AI na Home (Fiscal)
-- Seção exclusiva para fiscais mostrando **Notificações Preliminares** e **Autos de Infração**.
+### Alertas de NP na Home (Fiscal)
+- Seção exclusiva para fiscais mostrando **Notificações Preliminares** (Posturas e a equivalente de Meio Ambiente, Auto de Fiscalização).
 - Duas abas: **Vencidos** (alertas vermelhos) e **Atendidos** (confirmados).
 - Contadores em badges coloridos indicando quantidade de itens em cada status.
 - Permite acompanhamento rápido de prazos processuais diretamente na Home.

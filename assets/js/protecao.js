@@ -112,24 +112,62 @@ function normalizarFormatoNumeroMestre(numeroMestre, ano = new Date().getFullYea
 window.normalizarFormatoNumeroMestre = normalizarFormatoNumeroMestre;
 
 /**
+ * Pergunta ao Fluxograma (banco mestre) se o número já está em uso. Na dúvida
+ * (erro de rede, RPC indisponível) devolve false, para não travar a emissão.
+ * O número vai no formato ANO/SEQUENCIAL, que é o do Fluxograma.
+ */
+async function numeroJaUsadoNoMestre(categoriaNome, numeroSemac, ano) {
+    try {
+        const seq = String(numeroSemac || '').split('/')[0].replace(/\D/g, '');
+        if (!seq) return false;
+        const { data, error } = await supabaseMaster.rpc('_numero_existe_em_uso', {
+            p_ano: ano,
+            p_categoria: categoriaNome,
+            p_cand: `${ano}/${seq}`
+        });
+        if (error) {
+            console.warn('[Numeração SEMAC] Não deu para conferir o número no Mestre:', error.message);
+            return false;
+        }
+        return data === true;
+    } catch (e) {
+        console.warn('[Numeração SEMAC] Falha ao conferir o número no Mestre:', e);
+        return false;
+    }
+}
+window.numeroJaUsadoNoMestre = numeroJaUsadoNoMestre;
+
+/**
  * Função mestre para geração/reserva atômica de números unificados (SEMAC + Fluxograma)
  */
 async function gerarNumeroMestre(categoria, ano = new Date().getFullYear()) {
     const categoriaNome = MAPA_CATEGORIAS_MESTRE[categoria] || categoria;
 
-    // 1. PRIMEIRA CONSULTA: Verificar se existe algum número descartado na tabela local numeros_disponiveis
+    // 1. PRIMEIRA CONSULTA: Verificar se existe algum número descartado na tabela local numeros_disponiveis.
+    // A fila é local do SEMAC: o Fluxograma não sabe o que há nela. Por isso, antes de
+    // entregar, perguntamos ao Mestre se aquele número já foi usado por alguém — sem essa
+    // conferência, um número que voltou para a fila por engano saía repetido.
     try {
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-            const { data: disponivel, error: errDisp } = await supabaseClient
+            const { data: disponiveis, error: errDisp } = await supabaseClient
                 .from('numeros_disponiveis')
                 .select('id, numero_sequencial')
                 .or(`categoria_id.eq.${categoria},categoria_id.eq.${categoriaNome}`)
                 .eq('ano', ano)
                 .order('created_at', { ascending: true })
-                .limit(1)
-                .maybeSingle();
+                .limit(20);
 
-            if (!errDisp && disponivel && disponivel.numero_sequencial) {
+            for (const disponivel of (disponiveis || [])) {
+                if (!disponivel.numero_sequencial) continue;
+
+                const candidato = normalizarFormatoNumeroMestre(disponivel.numero_sequencial, ano);
+                if (await numeroJaUsadoNoMestre(categoriaNome, candidato, ano)) {
+                    // Já está em uso: tira da fila para não tentar de novo e segue
+                    await supabaseClient.from('numeros_disponiveis').delete().eq('id', disponivel.id);
+                    console.warn(`[Numeração SEMAC] Número ${candidato} estava na fila mas já está em uso no Fluxograma. Descartado.`);
+                    continue;
+                }
+
                 // Remover da fila de descartados/disponíveis para utilizar este número
                 await supabaseClient
                     .from('numeros_disponiveis')
@@ -137,8 +175,9 @@ async function gerarNumeroMestre(categoria, ano = new Date().getFullYear()) {
                     .eq('id', disponivel.id);
 
                 console.log(`[Numeração SEMAC] Número reutilizado da fila de descartados (numeros_disponiveis): ${disponivel.numero_sequencial}`);
-                return normalizarFormatoNumeroMestre(disponivel.numero_sequencial, ano);
+                return candidato;
             }
+            if (errDisp) console.warn('[Numeração SEMAC] Erro ao consultar numeros_disponiveis local:', errDisp);
         }
     } catch (e) {
         console.warn('[Numeração SEMAC] Erro/aviso ao consultar numeros_disponiveis local:', e);
