@@ -710,16 +710,55 @@
         { chave: 'status', label: 'STATUS', tipo: 'status' }
     ];
 
+    // Mesmos 6 status (e cores) da legenda real da planilha "PROCESSOS ENVIADOS PARA A
+    // FAZENDA" (coluna N, linhas 3-8) — com 2 ajustes pedidos: "Redução de 50%" em cinza
+    // (em vez do rosa original da planilha) e "Sem Movimentação" mantido em amarelo clarinho.
     var STATUS_MULTA_FAZENDA = [
         { valor: 'pago', label: 'Pago', cor: '#10b981' },
-        { valor: 'nao_pago', label: 'Não Pago', cor: '#ef4444' },
-        { valor: 'aguardando_envio', label: 'Aguardando Envio', cor: '#94a3b8' },
-        { valor: 'com_defesa', label: 'Com Defesa', cor: '#3b82f6' },
-        { valor: 'arquivado', label: 'Arquivado', cor: '#a78bfa' },
-        { valor: 'cancelado', label: 'Cancelado', cor: '#b8a07e' }
+        { valor: 'enviou_divida_ativa', label: 'Enviou para Dívida Ativa', cor: '#ef4444' },
+        { valor: 'reducao_50', label: 'Redução de 50%', cor: '#94a3b8' },
+        { valor: 'sem_movimentacao', label: 'Sem Movimentação', cor: '#eab308' },
+        { valor: 'vencido_sem_divida_ativa', label: 'Vencido (Sem Dívida Ativa)', cor: '#64748b' },
+        { valor: 'cancelado', label: 'Cancelado', cor: '#fb923c' }
     ];
     function infoStatusMulta(valor) {
-        return STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === valor; }) || STATUS_MULTA_FAZENDA[1]; // default: Não Pago
+        return STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === valor; })
+            || STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === 'vencido_sem_divida_ativa'; });
+    }
+
+    // Permite ajustar manualmente a cor de cada status (clicando no quadradinho ao lado do
+    // filtro) sem precisar mexer em código — fica salvo no navegador de quem muda.
+    (function aplicarCoresPersonalizadasStatus() {
+        try {
+            var salvas = JSON.parse(localStorage.getItem('apuracao_cores_status_custom') || '{}');
+            STATUS_MULTA_FAZENDA.forEach(function (s) {
+                if (salvas[s.valor]) s.cor = salvas[s.valor];
+            });
+        } catch (e) { /* ignora, mantém as cores padrão */ }
+    })();
+
+    window.alterarCorStatusMulta = function alterarCorStatusMulta(valor, novaCor) {
+        var item = STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === valor; });
+        if (!item) return;
+        item.cor = novaCor;
+        try {
+            var salvas = JSON.parse(localStorage.getItem('apuracao_cores_status_custom') || '{}');
+            salvas[valor] = novaCor;
+            localStorage.setItem('apuracao_cores_status_custom', JSON.stringify(salvas));
+        } catch (e) { /* ignora */ }
+        renderizarFiltrosStatusMultas();
+        renderizarTabelaMultasFazenda();
+    };
+
+    // Converte "#rrggbb" em "rgba(r,g,b,alpha)" — usado pra pintar a linha inteira com uma
+    // versão clara da cor do status, sem deixar o texto ilegível.
+    function corStatusComOpacidade(hex, alpha) {
+        var h = (hex || '#64748b').replace('#', '');
+        if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        var r = parseInt(h.substring(0, 2), 16);
+        var g = parseInt(h.substring(2, 4), 16);
+        var b = parseInt(h.substring(4, 6), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     }
 
     // Só Secretário e Diretor(a) de Meio Ambiente podem excluir — Gerente de Posturas e
@@ -824,15 +863,34 @@
         });
     }
 
+    // input[type=color] nativo desenha o próprio ícone com borda/padding internos — isso
+    // "vazava" visualmente quando forçado a caber num círculo pequeno (ficava com cara de
+    // ícone zoado em vez de uma bolinha sólida). Essas regras removem o estilo nativo do
+    // miolo (::-webkit/moz-color-swatch) pra sobrar só a cor pura, redonda.
+    (function injetarEstiloCorStatusMulta() {
+        if (document.getElementById('apuracao-cor-status-style')) return;
+        var style = document.createElement('style');
+        style.id = 'apuracao-cor-status-style';
+        style.textContent =
+            '.apuracao-cor-status-input{-webkit-appearance:none;appearance:none;border:none;padding:0;}' +
+            '.apuracao-cor-status-input::-webkit-color-swatch-wrapper{padding:0;border-radius:50%;}' +
+            '.apuracao-cor-status-input::-webkit-color-swatch{border:none;border-radius:50%;}' +
+            '.apuracao-cor-status-input::-moz-color-swatch{border:none;border-radius:50%;}';
+        document.head.appendChild(style);
+    })();
+
     function renderizarFiltrosStatusMultas() {
         var container = document.getElementById('apuracao-filtros-status');
         if (!container) return;
         var html = '';
         STATUS_MULTA_FAZENDA.forEach(function (s) {
             var ativo = _apuracaoStatusAtivos.has(s.valor);
-            html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
+            html += '<span style="position:relative; display:inline-flex; align-items:center; margin-right:6px;">';
+            html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; align-items:center; gap:5px; padding:5px 14px 5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
             html += '<span style="width:8px; height:8px; border-radius:50%; background:' + (ativo ? '#fff' : s.cor) + '; flex-shrink:0;"></span>' + s.label;
             html += '</button>';
+            html += '<input type="color" class="apuracao-cor-status-input" value="' + s.cor + '" title="Personalizar a cor de \'' + s.label + '\'" onclick="event.stopPropagation();" onchange="alterarCorStatusMulta(\'' + s.valor + '\', this.value)" style="position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px white, 0 0 0 3px ' + s.cor + '; cursor:pointer;">';
+            html += '</span>';
         });
         container.innerHTML = html;
     }
@@ -855,7 +913,7 @@
 
         var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
         var linhasFiltradas = _apuracaoTodasMultas.filter(function (m) {
-            var statusAtual = (m.status || 'nao_pago');
+            var statusAtual = (m.status || 'vencido_sem_divida_ativa');
             if (!_apuracaoStatusAtivos.has(statusAtual)) return false;
             if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
             if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
@@ -869,8 +927,8 @@
             var colunaAtiva = COLUNAS_TABELA_MULTAS.find(function (c) { return c.chave === _apuracaoSortColuna; });
             if (colunaAtiva) {
                 linhasFiltradas = linhasFiltradas.slice().sort(function (a, b) {
-                    var va = colunaAtiva.tipo === 'status' ? infoStatusMulta(a.status || 'nao_pago').label : a[colunaAtiva.chave];
-                    var vb = colunaAtiva.tipo === 'status' ? infoStatusMulta(b.status || 'nao_pago').label : b[colunaAtiva.chave];
+                    var va = colunaAtiva.tipo === 'status' ? infoStatusMulta(a.status || 'vencido_sem_divida_ativa').label : a[colunaAtiva.chave];
+                    var vb = colunaAtiva.tipo === 'status' ? infoStatusMulta(b.status || 'vencido_sem_divida_ativa').label : b[colunaAtiva.chave];
                     var tipoComparacao = colunaAtiva.tipo === 'status' ? 'texto' : colunaAtiva.tipo;
                     return compararValoresColuna(va, vb, tipoComparacao, _apuracaoSortDirecao);
                 });
@@ -885,10 +943,11 @@
 
         var podeExcluir = usuarioPodeExcluirMultaFazenda();
         var html = '';
+        var estiloTextoLongo = 'padding:7px 10px; max-width:160px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal;';
         linhasFiltradas.forEach(function (m) {
             var naoConferido = m.origem === 'fluxograma';
-            var status = infoStatusMulta(m.status || 'nao_pago');
-            html += '<tr style="border-bottom:1px solid #f1f5f9; border-left:4px solid ' + status.cor + ';' + (naoConferido ? ' background:#fffbeb;' : '') + '">';
+            var status = infoStatusMulta(m.status || 'vencido_sem_divida_ativa');
+            html += '<tr style="border-bottom:1px solid #f1f5f9; background:' + corStatusComOpacidade(status.cor, 0.16) + ';">';
             html += '<td style="padding:7px 10px;"><span title="' + status.label + '" style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:' + status.cor + ';"><span style="width:9px; height:9px; border-radius:50%; background:' + status.cor + '; flex-shrink:0;"></span>' + status.label + '</span></td>';
             html += '<td style="padding:7px 10px;">' + (m.data_envio_fazenda ? formatarDataExibicao(m.data_envio_fazenda) : '-') + '</td>';
             html += '<td style="padding:7px 10px; font-weight:600;">' + escapeHtmlApuracao(m.numero_processo);
@@ -903,8 +962,8 @@
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.numero_ar) + '</td>';
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.numero_processo_betha) + '</td>';
             html += '<td style="padding:7px 10px;">' + escapeHtmlApuracao(m.responsavel) + '</td>';
-            html += '<td style="padding:7px 10px; max-width:160px; white-space:normal;">' + escapeHtmlApuracao(m.defesa) + '</td>';
-            html += '<td style="padding:7px 10px; max-width:160px; white-space:normal;">' + escapeHtmlApuracao(m.observacoes) + '</td>';
+            html += '<td style="' + estiloTextoLongo + '" title="' + escapeHtmlApuracao(m.defesa) + '">' + escapeHtmlApuracao(m.defesa) + '</td>';
+            html += '<td style="' + estiloTextoLongo + '" title="' + escapeHtmlApuracao(m.observacoes) + '">' + escapeHtmlApuracao(m.observacoes) + '</td>';
             html += '<td style="padding:7px 10px; white-space:nowrap;">';
             html += '<button onclick="abrirModalNovaMultaFazenda(\'' + m.id + '\')" title="Editar" style="background:none; border:none; cursor:pointer; color:#3b82f6; padding:4px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>';
             if (podeExcluir) {
@@ -942,7 +1001,7 @@
         html += campoModal('Nº do Auto de Infração (deixe em branco se o PA tiver só 1 Auto)', 'mf-numero-auto', 'text', registro ? (registro.numero_auto_infracao || '') : '', 'Preencha só quando o mesmo PA tiver mais de um Auto');
         html += '<div class="campo-grupo"><label>Status</label><select id="mf-status" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; background:#f8fafc;">';
         STATUS_MULTA_FAZENDA.forEach(function (s) {
-            html += '<option value="' + s.valor + '"' + (registro && (registro.status || 'nao_pago') === s.valor ? ' selected' : '') + '>' + s.label + '</option>';
+            html += '<option value="' + s.valor + '"' + (registro && (registro.status || 'vencido_sem_divida_ativa') === s.valor ? ' selected' : '') + '>' + s.label + '</option>';
         });
         html += '</select></div>';
         html += '<div class="campo-grupo"><label>Meio Ambiente ou Fiscalização de Posturas</label><select id="mf-tipo-fiscalizacao" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; background:#f8fafc;">';
@@ -1053,7 +1112,7 @@
                 data_envio_fazenda: dataEnvio,
                 numero_processo: numeroProcesso,
                 numero_auto_infracao: numeroAuto || null,
-                status: document.getElementById('mf-status').value || 'nao_pago',
+                status: document.getElementById('mf-status').value || 'vencido_sem_divida_ativa',
                 tipo_fiscalizacao: document.getElementById('mf-tipo-fiscalizacao').value || null,
                 nome_razao_social: (document.getElementById('mf-nome').value || '').trim(),
                 cpf_cnpj: (document.getElementById('mf-cpf-cnpj').value || '').trim(),
@@ -1195,7 +1254,7 @@
                 var val = reg[c.chave];
                 if (c.tipo === 'data') val = val ? formatarDataExibicao(val) : '';
                 else if (c.tipo === 'valor') val = val != null ? String(val).replace('.', ',') : '0,00';
-                else if (c.tipo === 'status') val = infoStatusMulta(val || 'nao_pago').label;
+                else if (c.tipo === 'status') val = infoStatusMulta(val || 'vencido_sem_divida_ativa').label;
                 val = (val === null || val === undefined) ? '' : String(val);
                 val = val.replace(/"/g, '""');
                 return '"' + val + '"';
