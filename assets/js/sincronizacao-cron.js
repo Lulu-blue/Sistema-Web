@@ -1053,10 +1053,9 @@
             });
 
             // Data de vencimento do Auto de Infração: NÃO existe pronta em lugar nenhum — só os
-            // ingredientes. `autos_infracao.prazo_dias` tem a quantidade de dias ÚTEIS (pula sábado
-            // e domingo — feriado não entra, não temos calendário de feriados no sistema), e a data
-            // base pra contar esse prazo é a data de recebimento do AR (dados.campos.etapa16, já
-            // extraída por extrairInfoAR/extrairInfoARAuto). Conta a partir do dia seguinte ao
+            // ingredientes. O prazo é sempre 20 dias CORRIDOS (não úteis — sem pular fim de semana
+            // nem feriado), contados a partir da data de recebimento do AR (dados.campos.etapa16,
+            // já extraída por extrairInfoAR/extrairInfoARAuto). Conta a partir do dia seguinte ao
             // recebimento (não inclui o próprio dia do recebimento).
             function calcularVencimentoAR(dataRecebimentoStr, prazoDias) {
                 if (!dataRecebimentoStr || prazoDias === null || prazoDias === undefined || prazoDias === '') return '';
@@ -1064,17 +1063,12 @@
                 if (isNaN(dias) || dias < 0) return '';
                 const base = new Date(dataRecebimentoStr + 'T00:00:00Z');
                 if (isNaN(base.getTime())) return '';
-                let diasUteisContados = 0;
-                while (diasUteisContados < dias) {
-                    base.setUTCDate(base.getUTCDate() + 1);
-                    const diaSemana = base.getUTCDay(); // 0 = domingo, 6 = sábado
-                    if (diaSemana !== 0 && diaSemana !== 6) diasUteisContados++;
-                }
+                base.setUTCDate(base.getUTCDate() + dias);
                 return base.toISOString().split('T')[0];
             }
-            // Prazo do Auto de Infração é sempre 20 dias úteis, fixo — não varia por tipo de
+            // Prazo do Auto de Infração é sempre 20 dias corridos, fixo — não varia por tipo de
             // infração (isso era só pra Notificação Preliminar, categoria diferente).
-            const PRAZO_DIAS_UTEIS_AUTO_INFRACAO = 20;
+            const PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO = 20;
 
             // Número do AR e data de recebimento pelo proprietário: o Administrativo preenche
             // isso na Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo em
@@ -1171,7 +1165,7 @@
                         ar: infoAR.numero_ar,
                         data_entrada: infoAR.data_recebimento_ar,
                         anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
-                        data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO),
+                        data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO),
                         _created_at: createdAt
                     };
                     if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.2', 'Controle Processual: Auto de Infração', numSeq, ptsCP, camposCP)) {
@@ -1352,7 +1346,7 @@
                     ar: infoAR.numero_ar,
                     data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[auto.notificacao_id] || docArUrlPorProcessoId[auto.processo_id] || '',
-                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO),
+                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO),
                     _created_at: createdAt
                 };
 

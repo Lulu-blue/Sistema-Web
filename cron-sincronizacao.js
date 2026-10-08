@@ -249,24 +249,19 @@ async function rodarCronSincronizacao() {
             (notifsVenc || []).forEach(n => { if (n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento; });
         }
 
-        // Prazo do Auto de Infração é sempre 20 dias úteis, fixo — não varia por tipo de infração
-        // (isso era só pra Notificação Preliminar, categoria diferente).
-        const PRAZO_DIAS_UTEIS_AUTO_INFRACAO = 20;
+        // Prazo do Auto de Infração é sempre 20 dias CORRIDOS, fixo — não varia por tipo de
+        // infração (isso era só pra Notificação Preliminar, categoria diferente).
+        const PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO = 20;
 
-        // dias úteis = pula sábado/domingo (feriado não entra, sem calendário de feriados no
-        // sistema). Conta a partir do dia seguinte ao recebimento.
+        // dias corridos = sem pular fim de semana nem feriado. Conta a partir do dia seguinte
+        // ao recebimento (não inclui o próprio dia do recebimento).
         function calcularVencimentoAR(dataRecebimentoStr, prazoDias) {
             if (!dataRecebimentoStr || prazoDias === null || prazoDias === undefined || prazoDias === '') return '';
             const dias = parseInt(prazoDias, 10);
             if (isNaN(dias) || dias < 0) return '';
             const base = new Date(dataRecebimentoStr + 'T00:00:00Z');
             if (isNaN(base.getTime())) return '';
-            let diasUteisContados = 0;
-            while (diasUteisContados < dias) {
-                base.setUTCDate(base.getUTCDate() + 1);
-                const diaSemana = base.getUTCDay();
-                if (diaSemana !== 0 && diaSemana !== 6) diasUteisContados++;
-            }
+            base.setUTCDate(base.getUTCDate() + dias);
             return base.toISOString().split('T')[0];
         }
 
@@ -337,7 +332,7 @@ async function rodarCronSincronizacao() {
                     ar: infoAR.numero_ar,
                     data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
-                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_UTEIS_AUTO_INFRACAO)
+                    data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO)
                 };
                 camposRP = {
                     n_auto: numSeq,

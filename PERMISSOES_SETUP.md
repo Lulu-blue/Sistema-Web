@@ -4182,3 +4182,52 @@ WHERE p.origem = 'fluxograma'
 ```
 
 > ⚠️ Rode sempre o preview (SELECT) de cada passo antes do DELETE correspondente e confira o resultado — nenhum dos apagamentos acima tem como desfazer. Depois dessa limpeza e da correção no código, nem a tela nem a importação voltam a duplicar por causa do formato do PA (ambas já normalizam antes de comparar).
+
+## 🆕 MIGRAÇÃO: Correção do vencimento do Auto de Infração (dias úteis → dias corridos, Outubro/2026)
+
+A sincronização calculava o vencimento do Auto de Infração (campo `data_vencimento` em `controle_processual`, categoria `1.2`) como **20 dias ÚTEIS** a partir da data de recebimento do AR (`data_entrada`). Isso estava errado — o prazo correto é **20 dias CORRIDOS**. Já corrigido em `assets/js/sincronizacao-cron.js` e `cron-sincronizacao.js`, mas só vale pra sincronizações futuras: `data_vencimento` está na lista de campos que a sincronização preenche **uma única vez** e nunca mais sobrescreve (pra não desfazer uma correção manual do fiscal), então os registros que já foram sincronizados com a fórmula antiga ficam errados pra sempre sem essa correção pontual.
+
+**Passo 1 — ver o que mudaria, sem alterar nada** (roda a correção dentro de uma transação e desfaz com `ROLLBACK` no final — seguro, nada fica gravado):
+
+```sql
+BEGIN;
+
+UPDATE public.controle_processual
+SET campos = jsonb_set(
+    campos,
+    '{data_vencimento}',
+    to_jsonb((to_date(campos->>'data_entrada', 'YYYY-MM-DD') + 20)::text)
+)
+WHERE categoria_id = '1.2'
+  AND campos->>'data_entrada' ~ '^\d{4}-\d{2}-\d{2}$'
+  AND (campos->>'data_vencimento') IS DISTINCT FROM (to_date(campos->>'data_entrada', 'YYYY-MM-DD') + 20)::text
+RETURNING
+    id,
+    fiscal_nome,
+    numero_sequencial,
+    campos->>'data_entrada' AS ar_recebido_em,
+    campos->>'data_vencimento' AS vencimento_novo;
+
+ROLLBACK;
+```
+
+**Passo 2 — aplicar de verdade**, só depois de revisar a lista do Passo 1 (idêntico, trocando `ROLLBACK` por `COMMIT`):
+
+```sql
+BEGIN;
+
+UPDATE public.controle_processual
+SET campos = jsonb_set(
+    campos,
+    '{data_vencimento}',
+    to_jsonb((to_date(campos->>'data_entrada', 'YYYY-MM-DD') + 20)::text)
+)
+WHERE categoria_id = '1.2'
+  AND campos->>'data_entrada' ~ '^\d{4}-\d{2}-\d{2}$'
+  AND (campos->>'data_vencimento') IS DISTINCT FROM (to_date(campos->>'data_entrada', 'YYYY-MM-DD') + 20)::text
+RETURNING id, fiscal_nome, numero_sequencial;
+
+COMMIT;
+```
+
+> O filtro `campos->>'data_entrada' ~ '^\d{4}-\d{2}-\d{2}$'` só pega registros com data em formato ISO válido (`AAAA-MM-DD`), evitando erro em algum valor fora do padrão. Registros sem `data_entrada` (Auto que nunca teve AR sincronizado) não são tocados — não há o que corrigir.
