@@ -4231,3 +4231,13 @@ COMMIT;
 ```
 
 > O filtro `campos->>'data_entrada' ~ '^\d{4}-\d{2}-\d{2}$'` só pega registros com data em formato ISO válido (`AAAA-MM-DD`), evitando erro em algum valor fora do padrão. Registros sem `data_entrada` (Auto que nunca teve AR sincronizado) não são tocados — não há o que corrigir.
+
+## 🆕 MIGRAÇÃO: Arquivar Tarefas (Outubro/2026)
+
+Adiciona a opção de arquivar/desarquivar uma tarefa (sem excluí-la) — só o **criador** ou um **responsável** pela tarefa pode fazer isso, sem limite de 24h (diferente de editar/excluir). Tarefas arquivadas saem do Kanban principal e ficam acessíveis pelo botão "Arquivadas" ao lado do Histórico, mas só pra quem é criador/responsável delas.
+
+```sql
+ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS arquivada BOOLEAN DEFAULT false;
+```
+
+Não foi preciso criar nenhuma policy RLS nova: a tabela `tarefas` já tem uma policy permissiva de UPDATE que cobre qualquer usuário autenticado (a mesma usada hoje por `alterarStatusTarefa`, que também faz um `UPDATE` direto do cliente sem RPC) — a regra de "só criador/responsável" é garantida no `assets/js/tarefas.js` (`window.arquivarTarefa`), buscando `criado_por` e `tarefa_responsaveis` antes de permitir a ação, do mesmo jeito que `alterarStatusTarefa` já faz pra mudança de status.

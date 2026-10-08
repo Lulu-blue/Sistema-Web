@@ -812,6 +812,7 @@ async function carregarTarefas() {
             .from('tarefas')
             .select('*')
             .is('tarefa_pai_id', null)
+            .or('arquivada.is.null,arquivada.eq.false')
             .order('prazo', { ascending: true });
 
         if (error) throw error;
@@ -3283,6 +3284,18 @@ async function abrirDetalheTarefa(id) {
             html += '<button onclick="excluirTarefa(\'' + id + '\')" style="margin-top:8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir Tarefa</button>';
         }
 
+        // Arquivar/Desarquivar — apenas responsável ou criador, sem limite de 24h (diferente de
+        // editar/excluir, que são mais restritos).
+        var podeArquivarTarefa = ehResponsavel || tarefa.criado_por === userIdGlobal;
+        if (podeArquivarTarefa) {
+            var iconeArquivo = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>';
+            if (tarefa.arquivada) {
+                html += '<button onclick="arquivarTarefa(\'' + id + '\', false)" style="margin-top:8px; background:#ecfdf5; color:#059669; border:1px solid #6ee7b7; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;">' + iconeArquivo + ' Desarquivar Tarefa</button>';
+            } else {
+                html += '<button onclick="arquivarTarefa(\'' + id + '\', true)" style="margin-top:8px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;">' + iconeArquivo + ' Arquivar Tarefa</button>';
+            }
+        }
+
         html += '</div></div></div>';
 
         var loadingEl = document.getElementById(loadingId);
@@ -3392,6 +3405,120 @@ async function alterarStatusTarefa(id, novoStatus) {
         carregarTarefas();
     } catch (err) { alert('Erro: ' + err.message); }
 }
+
+// Arquivar/desarquivar — regra própria, mais simples que editar/excluir: só responsável ou
+// criador, sem limite de 24h (uma tarefa antiga ainda precisa poder ser arquivada).
+window.arquivarTarefa = async function arquivarTarefa(id, arquivar) {
+    try {
+        var { data: tarefaBasica } = await supabaseClient
+            .from('tarefas')
+            .select('criado_por, tarefa_responsaveis(user_id)')
+            .eq('id', id)
+            .maybeSingle();
+
+        var ehCriador = tarefaBasica && tarefaBasica.criado_por === userIdGlobal;
+        var responsaveis = tarefaBasica && tarefaBasica.tarefa_responsaveis ? tarefaBasica.tarefa_responsaveis : [];
+        var ehResponsavel = responsaveis.some(function (r) { return r.user_id === userIdGlobal; });
+
+        if (!ehCriador && !ehResponsavel) {
+            Swal.fire('Acesso Negado', 'Apenas o criador ou um responsável pela tarefa pode arquivá-la.', 'error');
+            return;
+        }
+
+        var { error } = await supabaseClient.from('tarefas').update({ arquivada: arquivar }).eq('id', id);
+        if (error) {
+            Swal.fire('Erro', 'Não foi possível ' + (arquivar ? 'arquivar' : 'desarquivar') + ' a tarefa.', 'error');
+            return;
+        }
+
+        if (document.getElementById('modal-detalhe-tarefa')) fecharModal('modal-detalhe-tarefa');
+
+        if (document.getElementById('modal-tarefas-arquivadas')) {
+            document.getElementById('modal-tarefas-arquivadas').remove();
+            abrirTarefasArquivadas();
+        }
+
+        carregarTarefas();
+    } catch (err) {
+        console.error('Erro ao arquivar/desarquivar tarefa:', err);
+        alert('Erro: ' + err.message);
+    }
+};
+
+// Lista de tarefas arquivadas (onde o usuário é criador ou responsável) — acessível pelo
+// botão "Arquivadas" ao lado do Histórico.
+window.abrirTarefasArquivadas = async function abrirTarefasArquivadas() {
+    try {
+        var { data: tarefas, error } = await supabaseClient
+            .from('tarefas')
+            .select('id, titulo, descricao, prazo, status, criado_por, created_at, tarefa_responsaveis(user_id, user_name)')
+            .eq('arquivada', true)
+            .is('tarefa_pai_id', null)
+            .order('prazo', { ascending: false });
+
+        if (error) throw error;
+
+        var minhas = (tarefas || []).filter(function (t) {
+            var ehCriador = t.criado_por === userIdGlobal;
+            var ehResp = (t.tarefa_responsaveis || []).some(function (r) { return r.user_id === userIdGlobal; });
+            return ehCriador || ehResp;
+        });
+
+        // Nome de quem criou cada tarefa (mesmo padrão de carregarTarefas).
+        var criadorIds = [];
+        minhas.forEach(function (t) {
+            if (t.criado_por && criadorIds.indexOf(t.criado_por) === -1) criadorIds.push(t.criado_por);
+        });
+        var criadorMap = {};
+        if (criadorIds.length > 0) {
+            var { data: perfisCriadores } = await supabaseClient.from('profiles').select('id, full_name').in('id', criadorIds);
+            (perfisCriadores || []).forEach(function (p) { criadorMap[p.id] = p.full_name || ''; });
+        }
+
+        var statusInfo = {
+            pendente: { label: 'Sem Movimentação', cor: '#f59e0b' },
+            em_progresso: { label: 'Em Progresso', cor: '#3b82f6' },
+            concluida: { label: 'Concluída', cor: '#10b981' }
+        };
+
+        var html = '<div class="modal-overlay ativo" id="modal-tarefas-arquivadas" onclick="if(event.target===this)fecharModal(\'modal-tarefas-arquivadas\')">';
+        html += '<div class="modal-container" style="max-width:600px; max-height:80vh; display:flex; flex-direction:column;">';
+        html += '<div class="modal-header"><h2>Tarefas Arquivadas</h2>';
+        html += '<button class="modal-close" onclick="fecharModal(\'modal-tarefas-arquivadas\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+        html += '</div><div class="modal-body" style="overflow-y:auto;">';
+
+        if (minhas.length === 0) {
+            html += '<div style="text-align:center; color:#94a3b8; padding:24px;">Nenhuma tarefa arquivada.</div>';
+        } else {
+            minhas.forEach(function (t) {
+                var prazoFmt = formatarDataBRTarefa(t.prazo);
+                var st = statusInfo[t.status] || statusInfo.pendente;
+                var nomesResp = (t.tarefa_responsaveis || []).map(function (r) { return r.user_name; }).filter(Boolean).join(', ') || 'Ninguém atribuído';
+                var nomeCriador = criadorMap[t.criado_por] || '—';
+
+                html += '<div onclick="fecharModal(\'modal-tarefas-arquivadas\'); abrirDetalheTarefa(\'' + t.id + '\');" style="cursor:pointer; padding:12px 8px; border-bottom:1px solid #f1f5f9; transition:background 0.15s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'">';
+                html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:6px;">';
+                html += '<div style="font-weight:700; font-size:14px; color:#1e293b;">' + escapeHtmlTarefa(t.titulo) + '</div>';
+                html += '<span style="flex-shrink:0; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:' + st.cor + '; color:white;">' + st.label + '</span>';
+                html += '</div>';
+                if (t.descricao) {
+                    html += '<div style="font-size:13px; color:#64748b; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">' + escapeHtmlTarefa(t.descricao) + '</div>';
+                }
+                html += '<div style="font-size:12px; color:#94a3b8; line-height:1.6;">';
+                html += 'Prazo: ' + prazoFmt + ' &nbsp;·&nbsp; Criado por: ' + escapeHtmlTarefa(nomeCriador) + '<br>';
+                html += 'Responsável(is): ' + escapeHtmlTarefa(nomesResp);
+                html += '</div>';
+                html += '<button onclick="event.stopPropagation(); arquivarTarefa(\'' + t.id + '\', false)" style="margin-top:8px; background:#ecfdf5; color:#059669; border:1px solid #6ee7b7; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Desarquivar</button>';
+                html += '</div>';
+            });
+        }
+
+        html += '</div></div></div>';
+        document.body.insertAdjacentHTML('beforeend', html);
+    } catch (err) {
+        console.error('Erro ao abrir tarefas arquivadas:', err);
+    }
+};
 
 async function excluirTarefa(id) {
     var { data: tarefa } = await supabaseClient.from('tarefas').select('criado_por, titulo, created_at').eq('id', id).maybeSingle();
