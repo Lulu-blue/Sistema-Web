@@ -2690,7 +2690,7 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     }
 
                     const campos14 = {
-                        n_notificacao: numeroSeq || '',
+                        n_notificacao: numeroSeq ? ('AF ' + numeroSeq) : '',
                         descricao: campos.irregularidades || 'Expedição Automática',
                         data: dataAtual
                     };
@@ -6133,6 +6133,37 @@ async function finalizarDocumentoComAnexo(blobPdf, filenameSafe) {
         }
     }
 
+    // AUTOMÁTICO: Gerar a categoria 14 (Notificação Preliminar expedidos - id visual 13°) - 20 pts
+    // para Auto de Fiscalização/Meio Ambiente — mesma categoria 14 da Notificação Preliminar
+    // comum, mas o número gravado leva o prefixo "AF " pra identificar a origem.
+    if (rascunhoDocumento.categoria_id === '1.9') {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        const dataAtual = `${ano}-${mes}-${dia}`;
+
+        const campos14 = {
+            n_notificacao: rascunhoDocumento.numero_sequencial ? ('AF ' + rascunhoDocumento.numero_sequencial) : '',
+            descricao: rascunhoDocumento.campos?.irregularidades || 'Expedição Automática',
+            data: dataAtual
+        };
+
+        const { error: err14 } = await supabaseClient
+            .from('registros_produtividade')
+            .insert({
+                user_id: user.id,
+                categoria_id: '14',
+                categoria_nome: 'Notificação Preliminar expedidos',
+                pontuacao: 20,
+                campos: campos14
+            });
+
+        if (err14) {
+            console.error('Erro ao gerar Notificação Preliminar expedidos (14) via AF:', err14);
+        }
+    }
+
     // AUTOMÁTICO: Gerar a categoria 8 (Elaboração de Ofícios - id visual 7°) - 15 pts
     if (rascunhoDocumento.categoria_id === '1.4') {
         const hoje = new Date();
@@ -8186,6 +8217,8 @@ async function baixarDocumentoWord() {
                 alert('Registros salvos com sucesso!\n\n• Relatório (10 pontos)\n• Elaboração de Relatório Fiscal (50 pontos)\n\n 60 pontos salvos no total!');
             } else if (catId === '11') {
                 alert(`Registro salvo com sucesso!\n\nSeu número de Dívida Ativa gerado é: ${numSeqDownload}`);
+            } else if (catId === '1.9') {
+                alert('Registros salvos com sucesso!\n\n• Auto de Fiscalização (5 pontos)\n• Notificação Preliminar expedidos (20 pontos)\n\n 25 pontos salvos no total!');
             } else {
                 const pts = CATEGORIAS.find(c => c.id === catId)?.pontos || 0;
                 alert('Registro salvo com sucesso! (' + pts + ' pontos)');
