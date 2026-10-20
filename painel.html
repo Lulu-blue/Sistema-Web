@@ -2725,6 +2725,20 @@
                     </div>
                 </div>
 
+                <!-- Filtros globais (Área/Conferência): afetam KPIs, os dois gráficos de barra, a pizza,
+                     o detalhamento por fiscal E a tabela de Controle de Multas lá embaixo. O filtro de
+                     Status fica só na tabela de Controle de Multas (lá embaixo, perto da busca). -->
+                <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 20px; margin-bottom:20px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Área:</span>
+                        <div id="apuracao-filtros-area" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Conferência:</span>
+                        <div id="apuracao-filtros-conferencia" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                    </div>
+                </div>
+
                 <div id="apuracao-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:20px;">
                     <div class="apuracao-kpi-card" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;">
                         <div style="font-size:11px; font-weight:700; color:#94a3b8; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px;">Total de Processos</div>
@@ -2827,10 +2841,13 @@
                     </div>
                     <div id="apuracao-import-status" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
 
-                    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;">
                         <input type="text" id="apuracao-multas-busca" placeholder="Buscar por nº de processo ou de Auto de Infração..." oninput="if(typeof filtrarTabelaMultasFazenda==='function') filtrarTabelaMultasFazenda();" style="flex:1; min-width:240px; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
-                        <div id="apuracao-filtros-conferencia" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
-                        <div id="apuracao-filtros-status" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Status:</span>
+                            <div id="apuracao-filtros-status" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                        </div>
+                        <div style="font-size:11px; color:#94a3b8;">Filtros de Área/Conferência ficam no topo da página e já valem pra essa tabela.</div>
                     </div>
 
                     <div style="overflow:auto; max-height:65vh; border:1px solid #e2e8f0; border-radius:8px;">

@@ -319,6 +319,12 @@
             var d = m.data_envio_fazenda;
             if (dataInicio && (!d || d < dataInicio)) return false;
             if (dataFim && (!d || d > dataFim)) return false;
+            // Filtros globais (Área / Conferência) — os mesmos da tabela de baixo, mas aplicados
+            // aqui também pra afetarem KPIs e gráficos igualmente. Status fica só na tabela de
+            // baixo (não faz sentido pros gráficos por fiscal).
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return false;
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
             return true;
         });
 
@@ -737,6 +743,21 @@
         } catch (e) { /* ignora, mantém as cores padrão */ }
     })();
 
+    // Os filtros globais (Área/Conferência/Status) ficam no topo da página e afetam tudo:
+    // KPIs, os dois gráficos de barra, a pizza, a tabela de detalhamento por fiscal E a
+    // tabela de baixo. Essa função reaplica tudo sem reconsultar o Fluxograma (só reusa o
+    // que já está carregado em _apuracaoTodasMultas).
+    function atualizarApuracaoAposFiltro() {
+        var inputInicio = document.getElementById('apuracao-data-inicio');
+        var inputFim = document.getElementById('apuracao-data-fim');
+        var dataInicio = inputInicio ? inputInicio.value : '';
+        var dataFim = inputFim ? inputFim.value : '';
+        if (typeof renderizarApuracaoDados === 'function' && typeof calcularAgregadosApuracao === 'function') {
+            renderizarApuracaoDados(calcularAgregadosApuracao(dataInicio, dataFim));
+        }
+        renderizarTabelaMultasFazenda();
+    }
+
     window.alterarCorStatusMulta = function alterarCorStatusMulta(valor, novaCor) {
         var item = STATUS_MULTA_FAZENDA.find(function (s) { return s.valor === valor; });
         if (!item) return;
@@ -799,7 +820,41 @@
     window.toggleFiltroConferenciaMulta = function toggleFiltroConferenciaMulta(valor) {
         _apuracaoFiltroConferencia = valor;
         renderizarFiltroConferenciaMultas();
-        renderizarTabelaMultasFazenda();
+        atualizarApuracaoAposFiltro();
+    };
+
+    // Filtro de Área: Posturas x Meio Ambiente, baseado na coluna tipo_fiscalizacao. O valor
+    // chega escrito de formas diferentes dependendo da origem — o modal manual grava
+    // "Fiscalização de Posturas"/"Meio Ambiente", mas a importação da planilha grava literalmente
+    // "POSTURAS"/"MEIO AMBIENTE" (às vezes com espaço sobrando). Por isso a comparação é feita de
+    // forma normalizada (normalizarAreaMulta), não por igualdade exata de texto.
+    function normalizarAreaMulta(valor) {
+        var v = (valor || '').toUpperCase().trim();
+        if (v.indexOf('AMBIENTE') !== -1) return 'MEIO AMBIENTE';
+        if (v.indexOf('POSTURA') !== -1) return 'POSTURAS';
+        return '';
+    }
+    var FILTROS_AREA = [
+        { valor: 'todos', label: 'Todos' },
+        { valor: 'POSTURAS', label: 'Posturas' },
+        { valor: 'MEIO AMBIENTE', label: 'Meio Ambiente' }
+    ];
+    var _apuracaoFiltroArea = 'todos';
+
+    function renderizarFiltroAreaMultas() {
+        var container = document.getElementById('apuracao-filtros-area');
+        if (!container) return;
+        var html = '';
+        FILTROS_AREA.forEach(function (f) {
+            var ativo = _apuracaoFiltroArea === f.valor;
+            html += '<button type="button" onclick="toggleFiltroAreaMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #0369a1; background:' + (ativo ? '#0369a1' : 'white') + '; color:' + (ativo ? '#fff' : '#0369a1') + '; transition:0.15s;">' + f.label + '</button>';
+        });
+        container.innerHTML = html;
+    }
+    window.toggleFiltroAreaMulta = function toggleFiltroAreaMulta(valor) {
+        _apuracaoFiltroArea = valor;
+        renderizarFiltroAreaMultas();
+        atualizarApuracaoAposFiltro();
     };
 
     // Ordenação por coluna: clique no cabeçalho ordena "de maior pra menor" (datas/valores)
@@ -909,14 +964,16 @@
         if (!tbody) return;
         renderizarFiltrosStatusMultas();
         renderizarFiltroConferenciaMultas();
+        renderizarFiltroAreaMultas();
         atualizarIconesOrdenacaoMultas();
 
         var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
         var linhasFiltradas = _apuracaoTodasMultas.filter(function (m) {
-            var statusAtual = (m.status || 'vencido_sem_divida_ativa');
+            var statusAtual = infoStatusMulta(m.status).valor;
             if (!_apuracaoStatusAtivos.has(statusAtual)) return false;
             if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
             if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return false;
             if (!termoBusca) return true;
             var pa = (m.numero_processo || '').toLowerCase();
             var auto = (m.numero_auto_infracao || '').toLowerCase();

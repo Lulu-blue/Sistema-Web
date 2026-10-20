@@ -61,33 +61,120 @@ function normalizarNumeroSequencial(numero) {
 
 /**
  * Número do AR e data de recebimento pelo proprietário: o Administrativo preenche isso na
- * Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo em dados.campos.etapa16.
+ * Etapa 16/30 do Fluxograma, e fica dentro do JSON do processo em dados.campos.
  * Confirmado com um JSON real: o campo certo da data é `data_recebimento_proprietario` (não
  * `data_recebimento`, que é um espelho que nem sempre bate).
- * - Notificação Preliminar: UM AR cobre o processo inteiro -> dados.campos.etapa16.
- * - Auto de Infração normal (de uma notificação): ciclo próprio ->
+ *
+ * Cada AR tem um DONO, porque a Notificação Preliminar e o Auto de Infração são dois envios
+ * diferentes, com número de AR e data de recebimento diferentes:
+ * - Notificação Preliminar: UM AR cobre o processo inteiro (todas as notificações saem no
+ *   mesmo envio) -> dados.campos.etapa16, marcado com dono_ar 'np'.
+ * - Auto de Infração de uma notificação: ciclo próprio ->
  *   dados.campos.ciclos_ar_auto[<notificacao_id>].etapa16.
- * - Auto de Infração "por decreto" (nasce sem Notificação Preliminar, não tem notificacao_id
- *   nem ciclos_ar_auto): o AR fica direto em dados.campos.etapa16, no mesmo lugar que a NP
- *   usaria — por isso o fallback abaixo.
+ * - Processo por decreto ou reincidência: nasce sem Notificação Preliminar e tem um Auto só,
+ *   logo um AR só, em dados.campos.etapa16 (marcado com dono_ar 'auto').
+ * A linha da Notificação Preliminar nunca pega o AR de um Auto, e vice-versa. Processos
+ * antigos não têm a marca dono_ar: aí vale a origem do processo (nasceuNoAuto).
  */
-function extrairInfoAR(dadosProc) {
-    const etapa16 = (dadosProc && dadosProc.campos && dadosProc.campos.etapa16) || {};
+const DONO_AR_NP = 'np';
+const DONO_AR_AUTO = 'auto';
+
+function arDoNivelDoProcesso(dadosProc) {
+    return (dadosProc && dadosProc.campos && dadosProc.campos.etapa16) || {};
+}
+
+function processoNasceuNoAuto(dadosProc, possuiDecreto) {
+    if (possuiDecreto === true) return true;
+    const campos = (dadosProc && dadosProc.campos) || {};
+    const fiscal = (dadosProc && dadosProc.fiscal) || {};
+    const infracoes = (dadosProc && dadosProc.infracoes) || {};
+    return fiscal.decreto === 'sim' || infracoes.reincidente === 'sim' || !!campos.reincidencia;
+}
+
+// O AR gravado no nível do processo é da Notificação Preliminar?
+function nivelDoProcessoEhDaNP(dadosProc, possuiDecreto) {
+    const dono = (dadosProc && dadosProc.campos && dadosProc.campos.dono_ar) || '';
+    if (dono) return dono === DONO_AR_NP;
+    return !processoNasceuNoAuto(dadosProc, possuiDecreto);
+}
+
+function montarInfoAR(etapa16) {
     return {
         numero_ar: etapa16.numero_ar || '',
         data_recebimento_ar: etapa16.data_recebimento_proprietario || etapa16.data_recebimento || ''
     };
 }
-function extrairInfoARAuto(dadosProc, notificacaoId) {
+
+// AR da Notificação Preliminar
+function extrairInfoAR(dadosProc, possuiDecreto) {
+    if (!nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
+    return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+}
+
+// AR do Auto de Infração daquela notificação
+function extrairInfoARAuto(dadosProc, notificacaoId, possuiDecreto) {
     const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
     const cicloEspecifico = (notificacaoId && ciclos[notificacaoId] && ciclos[notificacaoId].etapa16) || {};
     if (cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento) {
-        return {
-            numero_ar: cicloEspecifico.numero_ar || '',
-            data_recebimento_ar: cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento || ''
-        };
+        return montarInfoAR(cicloEspecifico);
     }
-    return extrairInfoAR(dadosProc); // processo por decreto — cai pro etapa16 da raiz
+    // Sem ciclo próprio, o AR do nível do processo só serve ao Auto quando não é o da NP
+    // (processo por decreto ou reincidência).
+    if (nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
+    return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+}
+
+// Ids dos anexos de AR que já pertencem ao AR de algum Auto, para não entrarem na
+// linha da Notificação Preliminar.
+function idsAnexosARDeAutos(dadosProc) {
+    const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
+    const ids = new Set();
+    Object.keys(ciclos).forEach(function (chave) {
+        const anexos = (ciclos[chave] && ciclos[chave].etapa16 && ciclos[chave].etapa16.anexos_ar) || [];
+        anexos.forEach(function (a) { if (a && a.documento_id) ids.add(a.documento_id); });
+    });
+    return ids;
+}
+
+/**
+ * Anexo do AR (comprovante dos Correios) do dono certo. O anexo do AR de um Auto fica ligado
+ * à notificação dele (documentos.notificacao_id) ou referenciado no ciclo dele; o da
+ * Notificação Preliminar fica solto no processo, sem notificacao_id.
+ */
+function anexoARDoDono(docsARdoProcesso, dadosProc, notificacaoId, ehAuto, possuiDecreto) {
+    const docs = docsARdoProcesso || [];
+    const idsDeAutos = idsAnexosARDeAutos(dadosProc);
+
+    if (ehAuto) {
+        const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
+        const anexosDoCiclo = (notificacaoId && ciclos[notificacaoId] && ciclos[notificacaoId].etapa16
+            && ciclos[notificacaoId].etapa16.anexos_ar) || [];
+        const idsDoCiclo = new Set(anexosDoCiclo.map(function (a) { return a && a.documento_id; }).filter(Boolean));
+
+        const porReferencia = docs.find(function (d) { return idsDoCiclo.has(d.id); });
+        if (porReferencia) return porReferencia.url;
+
+        const daNotificacao = notificacaoId
+            ? docs.find(function (d) { return String(d.notificacao_id || '') === String(notificacaoId); })
+            : null;
+        if (daNotificacao) return daNotificacao.url;
+
+        // Decreto/reincidência: o AR único está no nível do processo
+        if (!nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) {
+            const doProcesso = docs.find(function (d) { return !d.notificacao_id; });
+            if (doProcesso) return doProcesso.url;
+        }
+        return '';
+    }
+
+    // Notificação Preliminar: só anexo do nível do processo
+    const daNP = docs.find(function (d) { return !d.notificacao_id && !idsDeAutos.has(d.id); });
+    if (daNP) return daNP.url;
+    // Processo antigo em que nenhum Auto reivindicou anexo de AR: o que existe é o da NP
+    if (idsDeAutos.size === 0 && docs.length > 0 && !docs.some(function (d) { return !!d.notificacao_id; })) {
+        return docs[0].url;
+    }
+    return '';
 }
 
 /**
@@ -207,7 +294,7 @@ async function rodarCronSincronizacao() {
                 created_at,
                 gerado_automaticamente,
                 profiles:usuario_id (id, nome, cpf),
-                processos:processo_id (numero_processo, dados)
+                processos:processo_id (numero_processo, dados, possui_decreto)
             `)
             .gte('created_at', startOfDay)
             .lte('created_at', endOfDay);
@@ -232,18 +319,20 @@ async function rodarCronSincronizacao() {
         const processoIdsDoLote = [...new Set(documentos.map(d => d.processo_id).filter(Boolean))];
         const notificacaoIdsDoLote = [...new Set(documentos.map(d => d.notificacao_id).filter(Boolean))];
 
-        const docArUrlPorNotifId = {};
-        const docArUrlPorProcessoId = {};
+        // Todos os anexos de AR de cada processo, na ordem em que entraram. Quem escolhe o
+        // de cada linha é anexoARDoDono(), pelo dono do AR (Notificação Preliminar x Auto).
+        const docsARPorProcessoId = {};
         if (processoIdsDoLote.length > 0) {
             const { data: docsAR } = await masterClient
                 .from('documentos')
-                .select('processo_id, notificacao_id, url, tipo')
+                .select('id, processo_id, notificacao_id, url, tipo, created_at')
                 .eq('tipo', 'Anexo AR')
-                .in('processo_id', processoIdsDoLote);
+                .in('processo_id', processoIdsDoLote)
+                .order('created_at', { ascending: true });
             (docsAR || []).forEach(d => {
-                if (!d.url) return;
-                if (d.notificacao_id && !docArUrlPorNotifId[d.notificacao_id]) docArUrlPorNotifId[d.notificacao_id] = d.url;
-                if (d.processo_id && !docArUrlPorProcessoId[d.processo_id]) docArUrlPorProcessoId[d.processo_id] = d.url;
+                if (!d.url || !d.processo_id) return;
+                if (!docsARPorProcessoId[d.processo_id]) docsARPorProcessoId[d.processo_id] = [];
+                docsARPorProcessoId[d.processo_id].push(d);
             });
         }
 
@@ -296,6 +385,7 @@ async function rodarCronSincronizacao() {
             const createdAt = doc.created_at;
 
             const dadosProc = doc.processos?.dados || {};
+            const possuiDecreto = doc.processos?.possui_decreto === true;
             const nomeContribuinte = dadosProc.contribuinte?.nome || '';
             const bairroImovel = dadosProc.imovel?.bairro || '';
             const inscricaoImovel = dadosProc.contribuinte?.cpf_cnpj || dadosProc.imovel?.inscricao_imovel || '';
@@ -331,7 +421,7 @@ async function rodarCronSincronizacao() {
             if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao')) {
                 catControle = { id: '1.2', nome: 'Controle Processual: Auto de Infração', pontuacao: 5 };
                 catProdutividade = { id: '16', nome: 'Autos de Infração expedidos', pontuacao: 30, campoChave: 'n_auto' };
-                const infoAR = extrairInfoARAuto(dadosProc, doc.notificacao_id);
+                const infoAR = extrairInfoARAuto(dadosProc, doc.notificacao_id, possuiDecreto);
                 camposCP = {
                     n_auto: numSeq,
                     nome: nomeContribuinte,
@@ -341,7 +431,7 @@ async function rodarCronSincronizacao() {
                     anexo_pdf: docUrl,
                     ar: infoAR.numero_ar,
                     data_entrada: infoAR.data_recebimento_ar,
-                    anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                    anexo_ar: anexoARDoDono(docsARPorProcessoId[doc.processo_id], dadosProc, doc.notificacao_id, true, possuiDecreto),
                     data_vencimento: calcularVencimentoAR(infoAR.data_recebimento_ar, PRAZO_DIAS_CORRIDOS_AUTO_INFRACAO)
                 };
                 camposRP = {
@@ -352,7 +442,7 @@ async function rodarCronSincronizacao() {
             } else if (tipoLower.includes('notificação preliminar') || tipoLower.includes('notificacao preliminar')) {
                 catControle = { id: '1.1', nome: 'Controle Processual: Notificação Preliminar', pontuacao: 5 };
                 catProdutividade = { id: '14', nome: 'Notificação Preliminar expedidos', pontuacao: 20, campoChave: 'n_notificacao' };
-                const infoAR = extrairInfoAR(dadosProc);
+                const infoAR = extrairInfoAR(dadosProc, possuiDecreto);
                 camposCP = {
                     n_notificacao: numSeq,
                     nome: nomeContribuinte,
@@ -362,7 +452,7 @@ async function rodarCronSincronizacao() {
                     anexo_pdf: docUrl,
                     ar: infoAR.numero_ar,
                     data_entrada: infoAR.data_recebimento_ar,
-                    anexo_ar: docArUrlPorNotifId[doc.notificacao_id] || docArUrlPorProcessoId[doc.processo_id] || '',
+                    anexo_ar: anexoARDoDono(docsARPorProcessoId[doc.processo_id], dadosProc, doc.notificacao_id, false, possuiDecreto),
                     data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || ''
                 };
                 camposRP = {
