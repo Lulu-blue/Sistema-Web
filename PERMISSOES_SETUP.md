@@ -4240,4 +4240,61 @@ Adiciona a opção de arquivar/desarquivar uma tarefa (sem excluí-la) — só o
 ALTER TABLE public.tarefas ADD COLUMN IF NOT EXISTS arquivada BOOLEAN DEFAULT false;
 ```
 
+## 🆕 MIGRAÇÃO: Sincronização de Meio Ambiente — Relatório Fiscal com assinatura dupla (Outubro/2026)
+
+O Relatório Fiscal de Meio Ambiente pode ter duas assinaturas (o criador do processo e um segundo fiscal, gravado em `processos.dados.fiscal_contribuidor` no Fluxograma) e os **dois** devem receber a pontuação de **16.5° - Controle Processual: Relatório / Meio Ambiente** (`1.5.MA`) e **6° - Elaboração de Certidão de Arquivamento e Relatório Fiscal** (`7`).
+
+A sincronização (`sincronizacao-cron.js`) só roda logada como o fiscal que acabou de entrar no sistema — ela não tem permissão de RLS para inserir pontuação em nome de **outra** pessoa (o colega co-assinante). As duas funções abaixo resolvem isso: rodam como `SECURITY DEFINER` (ignoram RLS) e fazem o mesmo `UPSERT ... ON CONFLICT (user_id, categoria_id, origem_unica) DO NOTHING` que o restante da sincronização já usa — rodar a sincronização de novo não duplica a pontuação do colega. É o mesmo padrão da função `inserir_registro_equipe` já usada em "Fiscais Adicionais" (Ofício/Relatório manual), só que com a proteção contra duplicidade que aquela não tinha (ali o lançamento é único/manual; aqui a sincronização reprocessa o mesmo processo todo dia).
+
+```sql
+CREATE OR REPLACE FUNCTION public.sincronizar_cp_equipe(
+    p_user_id uuid,
+    p_fiscal_nome text,
+    p_categoria_id text,
+    p_categoria_nome text,
+    p_numero_sequencial text,
+    p_pontuacao integer,
+    p_campos jsonb,
+    p_origem_unica text,
+    p_created_at timestamptz DEFAULT now()
+) RETURNS uuid
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    INSERT INTO public.controle_processual
+        (user_id, fiscal_nome, categoria_id, categoria_nome, numero_sequencial, pontuacao, campos, origem_unica, created_at)
+    VALUES
+        (p_user_id, p_fiscal_nome, p_categoria_id, p_categoria_nome, COALESCE(p_numero_sequencial, 'S/N'), p_pontuacao, p_campos, p_origem_unica, COALESCE(p_created_at, now()))
+    ON CONFLICT (user_id, categoria_id, origem_unica) DO NOTHING
+    RETURNING id;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sincronizar_rp_equipe(
+    p_user_id uuid,
+    p_categoria_id text,
+    p_categoria_nome text,
+    p_pontuacao integer,
+    p_campos jsonb,
+    p_origem_unica text,
+    p_created_at timestamptz DEFAULT now()
+) RETURNS uuid
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    INSERT INTO public.registros_produtividade
+        (user_id, categoria_id, categoria_nome, pontuacao, campos, origem_unica, created_at)
+    VALUES
+        (p_user_id, p_categoria_id, p_categoria_nome, p_pontuacao, p_campos, p_origem_unica, COALESCE(p_created_at, now()))
+    ON CONFLICT (user_id, categoria_id, origem_unica) DO NOTHING
+    RETURNING id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.sincronizar_cp_equipe(uuid, text, text, text, text, integer, jsonb, text, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sincronizar_rp_equipe(uuid, text, text, integer, jsonb, text, timestamptz) TO authenticated;
+```
+
+> Depende da constraint `UNIQUE (user_id, categoria_id, origem_unica)` já criada no Passo 5 da migração de "Prevenção de registros duplicados" (`ux_controle_processual_origem` / `ux_registros_produtividade_origem`), mais acima neste arquivo. Aplique esta migração depois daquela.
+
 Não foi preciso criar nenhuma policy RLS nova: a tabela `tarefas` já tem uma policy permissiva de UPDATE que cobre qualquer usuário autenticado (a mesma usada hoje por `alterarStatusTarefa`, que também faz um `UPDATE` direto do cliente sem RPC) — a regra de "só criador/responsável" é garantida no `assets/js/tarefas.js` (`window.arquivarTarefa`), buscando `criado_por` e `tarefa_responsaveis` antes de permitir a ação, do mesmo jeito que `alterarStatusTarefa` já faz pra mudança de status.

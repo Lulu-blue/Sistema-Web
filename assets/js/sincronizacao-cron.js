@@ -56,6 +56,58 @@
     }
 
     /**
+     * Resolve o user_id do SEMAC a partir de um id de perfil do FLUXOGRAMA (ex:
+     * `dados.fiscal_contribuidor.id`, o co-assinante do Relatório Fiscal de Meio Ambiente).
+     *
+     * `fiscal_contribuidor.id` é um id interno do Fluxograma — NUNCA o user_id do SEMAC (são
+     * dois projetos Supabase diferentes, sem nenhuma relação entre os UUIDs). Sem esse passo,
+     * a pontuação de equipe era gravada com `user_id = fiscal_contribuidor.id`, um id que não
+     * existe no SEMAC: a linha ficava "órfã" e o colega nunca via a pontuação. A ponte correta
+     * é a mesma usada pro fiscal principal lá em cima: achar o CPF no Fluxograma e procurar
+     * esse CPF no profiles do SEMAC.
+     */
+    const cacheSemacIdPorFluxogramaId = new Map();
+    async function resolverSemacUserIdPorFluxograma(masterClient, semacClient, fluxogramaId) {
+        if (!fluxogramaId) return null;
+        if (cacheSemacIdPorFluxogramaId.has(fluxogramaId)) return cacheSemacIdPorFluxogramaId.get(fluxogramaId);
+
+        let semacId = null;
+        try {
+            const { data: perfilFluxo } = await masterClient
+                .from('profiles')
+                .select('id, auth_id, cpf, email')
+                .or(`id.eq.${fluxogramaId},auth_id.eq.${fluxogramaId}`)
+                .maybeSingle();
+
+            const cpfLimpo = perfilFluxo?.cpf ? String(perfilFluxo.cpf).replace(/\D/g, '') : null;
+            const cpfFormatado = cpfLimpo && cpfLimpo.length >= 11 ? formatarCpf(cpfLimpo) : null;
+
+            const orConditions = [];
+            if (cpfFormatado) orConditions.push(`cpf.eq.${cpfFormatado}`);
+            if (cpfLimpo) orConditions.push(`cpf.eq.${cpfLimpo}`);
+            if (perfilFluxo?.email) orConditions.push(`email_real.eq.${perfilFluxo.email}`);
+
+            if (orConditions.length > 0) {
+                const { data: perfilSemac } = await semacClient
+                    .from('profiles')
+                    .select('id')
+                    .or(orConditions.join(','))
+                    .maybeSingle();
+                semacId = perfilSemac?.id || null;
+            }
+
+            if (!semacId) {
+                console.warn(`[Sincronização SEMAC] ⚠️ Não encontrei o cadastro no SEMAC do co-assinante do Fluxograma (id ${fluxogramaId}, CPF ${cpfFormatado || cpfLimpo || 'N/A'}). A pontuação de equipe dele não pôde ser gravada — verifique/corrija o cadastro desse fiscal.`);
+            }
+        } catch (e) {
+            console.warn('[Sincronização SEMAC] Erro ao resolver SEMAC user_id do co-assinante do Fluxograma:', e);
+        }
+
+        cacheSemacIdPorFluxogramaId.set(fluxogramaId, semacId);
+        return semacId;
+    }
+
+    /**
      * Verifica se o cargo (profiles.role no SEMAC) é elegível para a sincronização automática
      * de produtividade (somente Fiscais de Posturas e de Meio Ambiente possuem contrapartida
      * de documentos no banco Fluxograma).
@@ -341,9 +393,18 @@
         return statusDoProcesso(proc).includes('cancelad');
     }
 
-    /** Processo ainda em Notificação Preliminar: não chegou a virar Auto de Infração. */
+    /**
+     * Processo ainda em Notificação Preliminar (ou, em Meio Ambiente, em Auto de
+     * Fiscalização — o equivalente de lá): não chegou a virar Auto de Infração.
+     */
     function processoAindaEmNotificacao(proc) {
-        return statusDoProcesso(proc) === 'notificacao_preliminar';
+        const status = statusDoProcesso(proc);
+        return status === 'notificacao_preliminar' || status === 'auto_fiscalizacao';
+    }
+
+    /** Processo de Meio Ambiente: gravado em `processos.dados.setor`. */
+    function processoMeioAmbiente(proc) {
+        return (proc?.dados?.setor || '').toLowerCase().trim() === 'meio_ambiente';
     }
 
     function dividirEmLotes(lista, tamanho) {
@@ -758,6 +819,65 @@
         return !!(linhaInserida && linhaInserida.length > 0);
     }
 
+    /**
+     * Relatório Fiscal de Meio Ambiente tem assinatura dupla (o criador do processo e o
+     * "fiscal_contribuidor") e AMBOS devem receber a pontuação. O criador é gravado pelo
+     * caminho normal (inserirControleProcessual/inserirRegistroProdutividade, que respeita
+     * RLS porque o próprio dono está logado). O co-assinante é outra pessoa — a sessão logada
+     * não tem permissão de INSERT na linha dele — então passa pelas RPCs
+     * sincronizar_cp_equipe/sincronizar_rp_equipe (SECURITY DEFINER, ver PERMISSOES_SETUP.md),
+     * que fazem o mesmo upsert com ON CONFLICT (user_id, categoria_id, origem_unica) usado
+     * acima, garantindo que rodar a sincronização de novo não duplique a pontuação do colega.
+     */
+    async function inserirControleProcessualEquipe(semacClient, userId, fiscalNome, catId, catNome, numSeq, pontuacao, campos) {
+        campos.sincronizado = true;
+        campos.origem = 'sincronizacao_fluxograma';
+        campos.data_sincronizacao = new Date().toISOString();
+        if (anteriorALimpeza(campos._created_at || campos.data)) pontuacao = 0;
+
+        const origemUnica = normalizarNumeroSequencial(numSeq) || `proc_id:${campos.proc_id}:${catId}:cp-equipe`;
+        const { data, error } = await semacClient.rpc('sincronizar_cp_equipe', {
+            p_user_id: userId,
+            p_fiscal_nome: fiscalNome,
+            p_categoria_id: catId,
+            p_categoria_nome: catNome,
+            p_numero_sequencial: numSeq || 'S/N',
+            p_pontuacao: pontuacao,
+            p_campos: campos,
+            p_origem_unica: origemUnica,
+            p_created_at: campos._created_at || new Date().toISOString()
+        });
+        if (error) {
+            console.warn(`[Sincronização] Erro ao inserir CP de equipe (${catId}) para ${fiscalNome}:`, error.message);
+            return false;
+        }
+        return !!data;
+    }
+
+    async function inserirRegistroProdutividadeEquipe(semacClient, userId, catId, catNome, pontuacao, campos) {
+        campos.sincronizado = true;
+        campos.origem = 'sincronizacao_fluxograma';
+        campos.data_sincronizacao = new Date().toISOString();
+        if (anteriorALimpeza(campos._created_at || campos.data)) return false;
+
+        const numSeqRP = campos.n_auto || campos.n_notificacao || campos.n_relatorio || campos.numero_sequencial;
+        const origemUnica = normalizarNumeroSequencial(numSeqRP) || `proc_id:${campos.proc_id}:${catId}:rp-equipe`;
+        const { data, error } = await semacClient.rpc('sincronizar_rp_equipe', {
+            p_user_id: userId,
+            p_categoria_id: catId,
+            p_categoria_nome: catNome,
+            p_pontuacao: pontuacao,
+            p_campos: campos,
+            p_origem_unica: origemUnica,
+            p_created_at: campos._created_at || new Date().toISOString()
+        });
+        if (error) {
+            console.warn(`[Sincronização] Erro ao inserir RP de equipe (${catId}):`, error.message);
+            return false;
+        }
+        return !!data;
+    }
+
     // =============================================
     // FUNÇÃO PRINCIPAL
     // =============================================
@@ -1033,6 +1153,13 @@
             // Mapear URLs de documentos por processo
             const docAutoUrlPorProcesso = {};
             const docQualquerUrlPorProcesso = {};
+            // Anexo específico da Notificação Preliminar/Auto de Fiscalização (tipo literal
+            // "Notificação Preliminar" na tabela `documentos`, inclusive em processos de Meio
+            // Ambiente). Separado de docQualquerUrlPorProcesso porque esse pega "qualquer
+            // documento do processo" — e um processo de Meio Ambiente tem também o Relatório de
+            // Vistoria (com fotos) anexado; sem essa distinção, o anexo errado (a foto da
+            // vistoria) era puxado no lugar do Auto de Fiscalização assinado.
+            const docNotificacaoUrlPorProcesso = {};
 
             // Anexo do AR (comprovante/scan do Aviso de Recebimento dos Correios) — a mesma
             // tabela `documentos`, tipo fixo 'Anexo AR', gravado pelo Administrativo na Etapa
@@ -1046,6 +1173,9 @@
                     const tLower = (d.tipo || '').toLowerCase();
                     if (tLower.includes('auto') || tLower.includes('infra')) {
                         if (!docAutoUrlPorProcesso[d.processo_id]) docAutoUrlPorProcesso[d.processo_id] = u;
+                    }
+                    if (tLower.includes('notific')) {
+                        if (!docNotificacaoUrlPorProcesso[d.processo_id]) docNotificacaoUrlPorProcesso[d.processo_id] = u;
                     }
                     if (tLower === 'anexo ar') {
                         if (!docsARPorProcessoId[d.processo_id]) docsARPorProcessoId[d.processo_id] = [];
@@ -1065,6 +1195,19 @@
             Object.values(docsARPorProcessoId).forEach(lista => {
                 lista.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
             });
+
+            // Processos de Meio Ambiente guardam a referência do anexo assinado (Auto de
+            // Fiscalização, Relatório Fiscal) como um `documento_id` solto dentro de
+            // `processos.dados` (ex: dados.notificacao_preliminar.documento_id,
+            // dados.relatorio_fiscal.documento_id), não como uma URL pronta. O id aponta pra
+            // uma linha da própria tabela `documentos` — resolve pelo mapa abaixo.
+            const documentosPorId = {};
+            (documentos || []).forEach(d => { if (d && d.id) documentosPorId[d.id] = d; });
+            function anexoPorDocumentoId(documentoId) {
+                if (!documentoId) return '';
+                const d = documentosPorId[documentoId];
+                return d ? extrairUrlCloudinary(d.url) : '';
+            }
 
             // Data de vencimento da Notificação Preliminar: coluna `notificacoes.data_vencimento`,
             // já calculada e gravada pelo próprio Fluxograma (confirmado no código de lá).
@@ -1289,14 +1432,16 @@
                     }
                 }
 
-                // --- Notificação Preliminar ---
+                // --- Notificação Preliminar (ou, em Meio Ambiente, Auto de Fiscalização —
+                // chega com o MESMO tipo literal "Notificação Preliminar" na tabela documentos) ---
                 else if (tipoLower.includes('notific')) {
-                    // Processo por decreto nasce como Auto de Infração: a NP nunca foi expedida.
+                    // Processo por decreto nasce como Auto de Infração: a NP/AF nunca foi expedida.
                     if (processoPorDecreto(procDoDoc)) {
                         console.log(`[Sincronização SEMAC] 🚫 NP do documento ${doc.id} ignorada: processo ${procDoDoc.numero_processo || doc.processo_id} é por decreto.`);
                         continue;
                     }
 
+                    const ehAF = processoMeioAmbiente(procDoDoc);
                     const ptsCP = elegivel.pontuar ? 5 : 0;
                     const possuiDecretoDoc = procDoDoc?.possui_decreto === true;
                     const infoAR = extrairInfoAR(dadosProc, possuiDecretoDoc);
@@ -1315,7 +1460,9 @@
                         data_vencimento: vencimentoPorNotifId[doc.notificacao_id] || '',
                         _created_at: createdAt
                     };
-                    if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.1', 'Controle Processual: Notificação Preliminar', numSeq, ptsCP, camposCP)) {
+                    const catIdCP = ehAF ? '1.9' : '1.1';
+                    const catNomeCP = ehAF ? 'Controle Processual: Auto de Fiscalização/Meio Ambiente' : 'Controle Processual: Notificação Preliminar';
+                    if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, catIdCP, catNomeCP, numSeq, ptsCP, camposCP)) {
                         inseridosControle++;
                     }
 
@@ -1323,7 +1470,7 @@
                         const camposRP = {
                             doc_id: doc.id,
                             proc_id: doc.processo_id,
-                            n_notificacao: numSeq,
+                            n_notificacao: ehAF ? ('AF ' + numSeq) : numSeq,
                             descricao: doc.nome_arquivo || dadosProc.motivo || dadosProc.descricao || nomeContribuinte || 'Notificação Preliminar',
                             data: dataFormatadaBR,
                             anexo_pdf: docUrl,
@@ -1336,7 +1483,10 @@
                 }
 
                 // --- Relatório Fiscal ---
-                else if (tipoLower.includes('relatório') || tipoLower.includes('relatorio')) {
+                // Meio Ambiente é tratado à parte (Passo 2.7, mais abaixo), direto de
+                // `processos.dados.relatorio_fiscal` — tem assinatura dupla e categoria própria
+                // (1.5.MA). Pular aqui evita contar o mesmo relatório duas vezes.
+                else if ((tipoLower.includes('relatório') || tipoLower.includes('relatorio')) && !processoMeioAmbiente(procDoDoc)) {
                     const ptsCP = elegivel.pontuar ? 10 : 0;
                     const camposCP = {
                         doc_id: doc.id,
@@ -1485,6 +1635,12 @@
 
                 if (isAutoInfracao) continue;
 
+                // Meio Ambiente: a Notificação Preliminar se chama "Auto de Fiscalização" e
+                // chega na tabela notificacoes com status 'auto_fiscalizacao'. Pontua só pro
+                // criador do processo (sem assinatura dupla aqui — isso é só no Relatório
+                // Fiscal, Passo 2.7), em categorias próprias (1.9 / 14-com-prefixo-AF).
+                const isAutoFiscalizacao = statusLower.includes('auto_fiscalizacao');
+
                 const procDoNotif = processosPorId[notif.processo_id] || {};
 
                 if (processoCancelado(procDoNotif)) {
@@ -1492,7 +1648,7 @@
                     continue;
                 }
 
-                // Processo por decreto: a NP nunca foi expedida, só o Auto de Infração.
+                // Processo por decreto: a NP (ou o Auto de Fiscalização) nunca foi expedida, só o Auto de Infração.
                 if (processoPorDecreto(procDoNotif)) {
                     console.log(`[Sincronização SEMAC] 🚫 notificação ${notif.id} ignorada: processo ${procDoNotif.numero_processo || notif.processo_id} é por decreto.`);
                     continue;
@@ -1501,20 +1657,23 @@
                 const createdAt = notif.created_at;
                 const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
                 const dadosProcNotif = procDoNotif.dados || {};
-                const notifUrl = extrairUrlCloudinary(
-                    docQualquerUrlPorProcesso[notif.processo_id],
-                    dadosProcNotif
-                );
+                // O anexo certo (NP ou, em Meio Ambiente, Auto de Fiscalização) é o documento
+                // tipo "Notificação Preliminar" DESSE processo — nunca "qualquer documento do
+                // processo" (docQualquerUrlPorProcesso), que em Meio Ambiente pode pegar as fotos
+                // do Relatório de Vistoria no lugar do documento certo.
+                const notifUrl = docNotificacaoUrlPorProcesso[notif.processo_id]
+                    || extrairUrlCloudinary(docQualquerUrlPorProcesso[notif.processo_id], dadosProcNotif);
 
                 const elegivel = verificarElegibilidadePontuacao(createdAt, limpezaMesAnteriorFeita);
                 const ptsCP = elegivel.pontuar ? 5 : 0;
                 const possuiDecretoNotif = procDoNotif?.possui_decreto === true;
                 const infoAR = extrairInfoAR(dadosProcNotif, possuiDecretoNotif);
+                const numSeqNotif = notif.numero || 'S/N';
 
                 const camposCP = {
                     notif_id: notif.id,
                     proc_id: notif.processo_id,
-                    n_notificacao: notif.numero || 'S/N',
+                    n_notificacao: numSeqNotif,
                     nome: dadosProcNotif.contribuinte?.nome || '',
                     n_inscricao: dadosProcNotif.contribuinte?.cpf_cnpj || dadosProcNotif.imovel?.inscricao_imovel || '',
                     bairro: dadosProcNotif.imovel?.bairro || '',
@@ -1526,7 +1685,10 @@
                     data_vencimento: notif.data_vencimento || '',
                     _created_at: createdAt
                 };
-                if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.1', 'Controle Processual: Notificação Preliminar', notif.numero || 'S/N', ptsCP, camposCP)) {
+
+                const catIdCP = isAutoFiscalizacao ? '1.9' : '1.1';
+                const catNomeCP = isAutoFiscalizacao ? 'Controle Processual: Auto de Fiscalização/Meio Ambiente' : 'Controle Processual: Notificação Preliminar';
+                if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, catIdCP, catNomeCP, numSeqNotif, ptsCP, camposCP)) {
                     inseridosControle++;
                 }
 
@@ -1534,7 +1696,7 @@
                     const camposRP = {
                         notif_id: notif.id,
                         proc_id: notif.processo_id,
-                        n_notificacao: notif.numero || 'S/N',
+                        n_notificacao: isAutoFiscalizacao ? ('AF ' + numSeqNotif) : numSeqNotif,
                         descricao: notif.descricao || '',
                         data: dataFormatadaBR,
                         anexo_pdf: notifUrl,
@@ -1542,6 +1704,86 @@
                     };
                     if (await inserirRegistroProdutividade(semacClient, semacUserId, '14', 'Notificação Preliminar expedidos', 20, camposRP)) {
                         inseridosProdutividade++;
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------
+            // PASSO 2.7: RELATÓRIO FISCAL DE MEIO AMBIENTE (assinatura dupla)
+            // ------------------------------------------------------------------
+            // Não existe linha em `documentos` pra esse relatório (por isso não passa pelo
+            // Passo 2) — o Fluxograma guarda tudo embutido em `processos.dados.relatorio_fiscal`.
+            // Tem duas assinaturas (o criador do processo e `dados.fiscal_contribuidor`) e as
+            // DUAS pontuam igual em 16.5° (Controle Processual: Relatório / Meio Ambiente,
+            // categoria 1.5.MA) e 6° (Elaboração de Certidão de Arquivamento e Relatório
+            // Fiscal, categoria 7) — diferente da Notificação/Auto de Fiscalização (Passo 2.6),
+            // que pontua só pro criador.
+            for (const proc of (todosProcessosDoFiscal || [])) {
+                if (!processoMeioAmbiente(proc)) continue;
+                if (processoCancelado(proc)) continue;
+
+                const dadosProc = proc.dados || {};
+                const rf = dadosProc.relatorio_fiscal;
+                if (!rf || !rf.assinado) continue;
+
+                const numSeqRF = rf.numero_relatorio || 'S/N';
+                const createdAtRF = rf.data_upload || proc.created_at;
+                const dataFormatadaBR = createdAtRF ? new Date(createdAtRF).toISOString().split('T')[0] : '';
+                const documentoIdRF = rf.documento_id || dadosProc.campos?.anexo_rf_assinado?.documento_id;
+                const anexoRF = anexoPorDocumentoId(documentoIdRF) || extrairUrlCloudinary(docQualquerUrlPorProcesso[proc.id], dadosProc);
+                const nomeContribuinte = dadosProc.contribuinte?.nome || '';
+                const bairroImovel = dadosProc.imovel?.bairro || '';
+
+                const elegivel = verificarElegibilidadePontuacao(createdAtRF, limpezaMesAnteriorFeita);
+                const ptsCP = elegivel.pontuar ? 10 : 0;
+
+                const camposCP = {
+                    proc_id: proc.id,
+                    n_relatorio: numSeqRF,
+                    atendimento: rf.nome || nomeContribuinte || numSeqRF,
+                    bairro: bairroImovel,
+                    data: dataFormatadaBR,
+                    anexo_pdf: anexoRF,
+                    _created_at: createdAtRF
+                };
+                if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, '1.5.MA', 'Controle Processual: Relatório / Meio Ambiente', numSeqRF, ptsCP, camposCP)) {
+                    inseridosControle++;
+                }
+
+                let camposRPCriador = null;
+                if (elegivel.pontuar) {
+                    camposRPCriador = {
+                        proc_id: proc.id,
+                        n_relatorio: numSeqRF,
+                        tipo: 'Relatório Fiscal',
+                        descricao: numSeqRF,
+                        data: dataFormatadaBR,
+                        anexo_pdf: anexoRF,
+                        _created_at: createdAtRF
+                    };
+                    if (await inserirRegistroProdutividade(semacClient, semacUserId, '7', 'Elaboração de Certidão de Arquivamento e Relatório Fiscal', 50, camposRPCriador)) {
+                        inseridosProdutividade++;
+                    }
+                }
+
+                // Co-assinante (fiscal_contribuidor): mesma pontuação, via RPC (bypassa RLS —
+                // ver inserirControleProcessualEquipe/inserirRegistroProdutividadeEquipe acima).
+                // `coAssinante.id` é um id do FLUXOGRAMA, não o user_id do SEMAC — precisa
+                // resolver pelo CPF antes de gravar (ver resolverSemacUserIdPorFluxograma).
+                const coAssinante = dadosProc.fiscal_contribuidor;
+                if (coAssinante && coAssinante.id) {
+                    const semacIdCoAssinante = await resolverSemacUserIdPorFluxograma(masterClient, semacClient, coAssinante.id);
+                    if (semacIdCoAssinante) {
+                        const camposCPCoAssinante = { ...camposCP, fiscal_nome_original: coAssinante.nome || '' };
+                        if (await inserirControleProcessualEquipe(semacClient, semacIdCoAssinante, coAssinante.nome || fiscalNome, '1.5.MA', 'Controle Processual: Relatório / Meio Ambiente', numSeqRF, ptsCP, camposCPCoAssinante)) {
+                            inseridosControle++;
+                        }
+                        if (elegivel.pontuar) {
+                            const camposRPCoAssinante = { ...camposRPCriador, fiscal_nome_original: coAssinante.nome || '' };
+                            if (await inserirRegistroProdutividadeEquipe(semacClient, semacIdCoAssinante, '7', 'Elaboração de Certidão de Arquivamento e Relatório Fiscal', 50, camposRPCoAssinante)) {
+                                inseridosProdutividade++;
+                            }
+                        }
                     }
                 }
             }
@@ -1646,7 +1888,14 @@
                         || 'S/A';
                     const bairroDA = dadosProc.imovel?.bairro
                         || '';
-                    const anexoPdf = autoDoc.url
+                    // O "processo unificado" (botão do Fluxograma) é montado na hora, no
+                    // navegador, e nunca é salvo em lugar nenhum — não dá pra sincronizar algo
+                    // que não existe persistido. Em vez disso, puxa o BIC (Boletim de
+                    // Informações Cadastrais) do imóvel, que fica em
+                    // `dados.documento_bic.documento_id` apontando pra uma linha real da tabela
+                    // `documentos` — o anexo mais específico e estável que existe pro processo.
+                    const anexoPdf = anexoPorDocumentoId(dadosProc.documento_bic?.documento_id)
+                        || autoDoc.url
                         || dadosProc.anexo_pdf
                         || dadosProc.url_capa
                         || dadosProc.capa_pdf

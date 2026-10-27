@@ -359,28 +359,50 @@
     // controle_multas_fazenda (SEMAC) — registro manual/importado (camada de correção
     // + tabela de baixo da tela, sempre carregada por completo, sem filtro de período)
     // ---------------------------------------------------------------------------
+    // O Supabase/PostgREST limita cada consulta a 1000 linhas por padrão — com a tabela já
+    // passando disso, uma busca só vinha cortada (as mais antigas, como as importadas da
+    // planilha de Dívida Ativa, ficavam de fora). Por isso busca em páginas de 1000 até não
+    // vir mais nada. Ordena por "id" como critério de desempate (além da data), pra cada
+    // página pegar um pedaço bem definido e não arriscar repetir/pular linha com data igual.
     async function carregarTodasMultasFazenda() {
-        var { data, error } = await supabaseClient
-            .from('controle_multas_fazenda')
-            .select('*')
-            .order('data_envio_fazenda', { ascending: false });
-        if (error) {
-            console.error('[Apuração de Dados] Erro ao carregar controle completo:', error.message);
-            _apuracaoTodasMultas = [];
-            return;
+        var TAMANHO_PAGINA = 1000;
+        var todos = [];
+        var pagina = 0;
+        while (true) {
+            var inicio = pagina * TAMANHO_PAGINA;
+            var fim = inicio + TAMANHO_PAGINA - 1;
+            var { data, error } = await supabaseClient
+                .from('controle_multas_fazenda')
+                .select('*')
+                .order('data_envio_fazenda', { ascending: false })
+                .order('id', { ascending: true })
+                .range(inicio, fim);
+            if (error) {
+                console.error('[Apuração de Dados] Erro ao carregar controle completo:', error.message);
+                _apuracaoTodasMultas = todos;
+                return;
+            }
+            todos = todos.concat(data || []);
+            if (!data || data.length < TAMANHO_PAGINA) break;
+            pagina++;
         }
-        _apuracaoTodasMultas = data || [];
+        _apuracaoTodasMultas = todos;
     }
 
     // ---------------------------------------------------------------------------
     // CARREGAMENTO PRINCIPAL
     // ---------------------------------------------------------------------------
-    // Preenche o select de ano (ano atual + 4 anteriores) e, se o usuário editar as datas
-    // na mão, volta o select pra "Personalizado" — evita mostrar um ano selecionado que já
-    // não corresponde mais ao período de fato filtrado.
+    // Preenche o select de ano (ano atual + 4 anteriores, mais a opção "Todos os períodos")
+    // e, se o usuário editar as datas na mão, volta o select pra "Personalizado" — evita
+    // mostrar um ano selecionado que já não corresponde mais ao período de fato filtrado.
+    var _apuracaoPeriodoTodos = false;
     function prepararFiltroAnoApuracao() {
         var select = document.getElementById('apuracao-filtro-ano');
         if (!select || select.options.length > 1) return; // já preparado
+        var optTodos = document.createElement('option');
+        optTodos.value = 'todos';
+        optTodos.textContent = 'Todos os períodos';
+        select.appendChild(optTodos);
         var anoAtual = new Date().getFullYear();
         for (var ano = anoAtual; ano >= anoAtual - 4; ano--) {
             var opt = document.createElement('option');
@@ -392,6 +414,7 @@
             var input = document.getElementById(id);
             if (input) input.addEventListener('change', function () {
                 select.value = '';
+                _apuracaoPeriodoTodos = false;
                 carregarApuracaoDados();
             });
         });
@@ -401,6 +424,14 @@
         if (!ano) return; // "Personalizado" — não mexe nas datas já escolhidas
         var inputInicio = document.getElementById('apuracao-data-inicio');
         var inputFim = document.getElementById('apuracao-data-fim');
+        if (ano === 'todos') {
+            _apuracaoPeriodoTodos = true;
+            if (inputInicio) inputInicio.value = '';
+            if (inputFim) inputFim.value = '';
+            carregarApuracaoDados();
+            return;
+        }
+        _apuracaoPeriodoTodos = false;
         if (inputInicio) inputInicio.value = ano + '-01-01';
         if (inputFim) inputFim.value = ano + '-12-31';
         carregarApuracaoDados();
@@ -410,13 +441,15 @@
         prepararFiltroAnoApuracao();
         var inputInicio = document.getElementById('apuracao-data-inicio');
         var inputFim = document.getElementById('apuracao-data-fim');
-        if (inputInicio && !inputInicio.value) {
-            var hoje = new Date();
-            var inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            inputInicio.value = inicioMes.toISOString().slice(0, 10);
-        }
-        if (inputFim && !inputFim.value) {
-            inputFim.value = new Date().toISOString().slice(0, 10);
+        if (!_apuracaoPeriodoTodos) {
+            if (inputInicio && !inputInicio.value) {
+                var hoje = new Date();
+                var inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                inputInicio.value = inicioMes.toISOString().slice(0, 10);
+            }
+            if (inputFim && !inputFim.value) {
+                inputFim.value = new Date().toISOString().slice(0, 10);
+            }
         }
         var dataInicio = inputInicio ? inputInicio.value : '';
         var dataFim = inputFim ? inputFim.value : '';
@@ -791,6 +824,68 @@
         return ehSecretario || ehDiretorMA;
     }
 
+    // Expande o card inteiro (busca + filtros + tabela) pra tela cheia de verdade — cobrindo
+    // menu lateral e qualquer outra coisa da página. position:fixed sozinho não bastava porque
+    // o card ficava preso dentro do container da aba (que tem seu próprio overflow/scroll);
+    // por isso o card é literalmente MOVIDO pra ser filho direto do <body> enquanto ativo, e
+    // devolvido pro lugar exato de onde saiu (marcado por um comentário-placeholder) ao sair.
+    var _apuracaoTelaCheiaAtiva = false;
+    var _apuracaoTelaCheiaPlaceholder = null;
+    window.toggleTelaCheiaMultas = function toggleTelaCheiaMultas() {
+        var card = document.getElementById('apuracao-card-multas');
+        var scroll = document.getElementById('apuracao-multas-scroll');
+        var label = document.getElementById('apuracao-btn-tela-cheia-label');
+        if (!card || !scroll) return;
+
+        _apuracaoTelaCheiaAtiva = !_apuracaoTelaCheiaAtiva;
+        if (_apuracaoTelaCheiaAtiva) {
+            _apuracaoTelaCheiaPlaceholder = document.createComment('apuracao-tela-cheia-placeholder');
+            card.parentNode.insertBefore(_apuracaoTelaCheiaPlaceholder, card);
+            document.body.appendChild(card);
+
+            card.style.position = 'fixed';
+            card.style.top = '0';
+            card.style.left = '0';
+            card.style.right = '0';
+            card.style.bottom = '0';
+            card.style.width = '100vw';
+            card.style.height = '100vh';
+            card.style.zIndex = '99999';
+            card.style.borderRadius = '0';
+            card.style.overflow = 'auto';
+            card.style.margin = '0';
+            card.style.boxSizing = 'border-box';
+            scroll.style.maxHeight = 'calc(100vh - 230px)';
+            document.body.style.overflow = 'hidden';
+            if (label) label.textContent = 'Sair da Tela Cheia';
+        } else {
+            if (_apuracaoTelaCheiaPlaceholder && _apuracaoTelaCheiaPlaceholder.parentNode) {
+                _apuracaoTelaCheiaPlaceholder.parentNode.insertBefore(card, _apuracaoTelaCheiaPlaceholder);
+                _apuracaoTelaCheiaPlaceholder.parentNode.removeChild(_apuracaoTelaCheiaPlaceholder);
+            }
+            _apuracaoTelaCheiaPlaceholder = null;
+
+            card.style.position = '';
+            card.style.top = '';
+            card.style.left = '';
+            card.style.right = '';
+            card.style.bottom = '';
+            card.style.width = '';
+            card.style.height = '';
+            card.style.zIndex = '';
+            card.style.borderRadius = '';
+            card.style.overflow = '';
+            card.style.margin = '';
+            card.style.boxSizing = '';
+            scroll.style.maxHeight = '65vh';
+            document.body.style.overflow = '';
+            if (label) label.textContent = 'Tela Cheia';
+        }
+    };
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && _apuracaoTelaCheiaAtiva) window.toggleTelaCheiaMultas();
+    });
+
     var _apuracaoStatusAtivos = new Set(STATUS_MULTA_FAZENDA.map(function (s) { return s.valor; }));
 
     // Filtro de Conferência: separa as linhas criadas automaticamente pela sincronização
@@ -934,15 +1029,40 @@
         document.head.appendChild(style);
     })();
 
+    // Quantos processos cada status teria se fosse selecionado — respeita os filtros
+    // globais de Área/Conferência (já que esses também valem pra essa tabela), mas
+    // ignora a seleção de Status em si (senão um status desmarcado sempre mostraria 0).
+    function contagemPorStatusMultas() {
+        var contagem = {};
+        STATUS_MULTA_FAZENDA.forEach(function (s) { contagem[s.valor] = 0; });
+        var inputInicioContagem = document.getElementById('apuracao-data-inicio');
+        var inputFimContagem = document.getElementById('apuracao-data-fim');
+        var dataInicioContagem = inputInicioContagem ? inputInicioContagem.value : '';
+        var dataFimContagem = inputFimContagem ? inputFimContagem.value : '';
+        _apuracaoTodasMultas.forEach(function (m) {
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return;
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return;
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return;
+            var dEnvio = m.data_envio_fazenda;
+            if (dataInicioContagem && (!dEnvio || dEnvio < dataInicioContagem)) return;
+            if (dataFimContagem && (!dEnvio || dEnvio > dataFimContagem)) return;
+            var statusAtual = infoStatusMulta(m.status).valor;
+            contagem[statusAtual] = (contagem[statusAtual] || 0) + 1;
+        });
+        return contagem;
+    }
+
     function renderizarFiltrosStatusMultas() {
         var container = document.getElementById('apuracao-filtros-status');
         if (!container) return;
+        var contagem = contagemPorStatusMultas();
         var html = '';
         STATUS_MULTA_FAZENDA.forEach(function (s) {
             var ativo = _apuracaoStatusAtivos.has(s.valor);
             html += '<span style="position:relative; display:inline-flex; align-items:center; margin-right:6px;">';
-            html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; align-items:center; gap:5px; padding:5px 14px 5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
-            html += '<span style="width:8px; height:8px; border-radius:50%; background:' + (ativo ? '#fff' : s.cor) + '; flex-shrink:0;"></span>' + s.label;
+            html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:5px 14px 4px 10px; border-radius:12px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
+            html += '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:50%; background:' + (ativo ? '#fff' : s.cor) + '; flex-shrink:0;"></span>' + s.label + '</span>';
+            html += '<span style="font-size:10px; font-weight:700; opacity:0.8;">' + (contagem[s.valor] || 0) + '</span>';
             html += '</button>';
             html += '<input type="color" class="apuracao-cor-status-input" value="' + s.cor + '" title="Personalizar a cor de \'' + s.label + '\'" onclick="event.stopPropagation();" onchange="alterarCorStatusMulta(\'' + s.valor + '\', this.value)" style="position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px white, 0 0 0 3px ' + s.cor + '; cursor:pointer;">';
             html += '</span>';
@@ -967,18 +1087,34 @@
         renderizarFiltroAreaMultas();
         atualizarIconesOrdenacaoMultas();
 
+        var inputInicioTabela = document.getElementById('apuracao-data-inicio');
+        var inputFimTabela = document.getElementById('apuracao-data-fim');
+        var dataInicioTabela = inputInicioTabela ? inputInicioTabela.value : '';
+        var dataFimTabela = inputFimTabela ? inputFimTabela.value : '';
+
         var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
+        var _diag = { status: 0, conferencia: 0, area: 0, data: 0, busca: 0 };
         var linhasFiltradas = _apuracaoTodasMultas.filter(function (m) {
             var statusAtual = infoStatusMulta(m.status).valor;
-            if (!_apuracaoStatusAtivos.has(statusAtual)) return false;
-            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
-            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
-            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return false;
+            if (!_apuracaoStatusAtivos.has(statusAtual)) { _diag.status++; return false; }
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) { _diag.conferencia++; return false; }
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) { _diag.conferencia++; return false; }
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) { _diag.area++; return false; }
+            // Mesmo período (Data de Envio para a Fazenda) usado nos KPIs/gráficos lá de cima —
+            // senão a planilha importada traz registros de vários anos misturados e o filtro de
+            // data não tem efeito nenhum na busca da tabela de baixo.
+            var dEnvio = m.data_envio_fazenda;
+            if (dataInicioTabela && (!dEnvio || dEnvio < dataInicioTabela)) { _diag.data++; return false; }
+            if (dataFimTabela && (!dEnvio || dEnvio > dataFimTabela)) { _diag.data++; return false; }
             if (!termoBusca) return true;
             var pa = (m.numero_processo || '').toLowerCase();
             var auto = (m.numero_auto_infracao || '').toLowerCase();
-            return pa.indexOf(termoBusca) !== -1 || auto.indexOf(termoBusca) !== -1;
+            var passouBusca = pa.indexOf(termoBusca) !== -1 || auto.indexOf(termoBusca) !== -1;
+            if (!passouBusca) _diag.busca++;
+            return passouBusca;
         });
+
+        console.log('[Apuração de Dados] Tabela de baixo: ' + _apuracaoTodasMultas.length + ' carregado(s) no total, ' + linhasFiltradas.length + ' após filtros. Excluídos por -> status:' + _diag.status + ' conferência:' + _diag.conferencia + ' área:' + _diag.area + ' data:' + _diag.data + ' busca:' + _diag.busca + '.');
 
         if (_apuracaoSortColuna) {
             var colunaAtiva = COLUNAS_TABELA_MULTAS.find(function (c) { return c.chave === _apuracaoSortColuna; });
@@ -1000,7 +1136,7 @@
 
         var podeExcluir = usuarioPodeExcluirMultaFazenda();
         var html = '';
-        var estiloTextoLongo = 'padding:7px 10px; max-width:160px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal;';
+        var estiloTextoLongo = 'padding:7px 10px; width:260px; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-left:1px solid rgba(100,116,139,0.25);';
         linhasFiltradas.forEach(function (m) {
             var naoConferido = m.origem === 'fluxograma';
             var status = infoStatusMulta(m.status || 'vencido_sem_divida_ativa');
@@ -1472,12 +1608,183 @@
         });
     }
 
+    // ---------------------------------------------------------------------------
+    // STATUS A PARTIR DA COR DA LINHA (.ods) — a planilha real pinta o fundo de cada
+    // linha pra indicar a situação (pago, enviado pra dívida ativa, etc) e tem uma
+    // legenda embutida (uma célula "Legenda" seguida de um rótulo por linha, cada um
+    // com a cor de fundo correspondente). Em vez de fixar qual célula/linha é a
+    // legenda, ela é localizada dinamicamente a cada importação — sobrevive a edições
+    // futuras na planilha (adicionar linha, mudar de posição etc).
+    // ---------------------------------------------------------------------------
+    function hexParaRgbApuracao(hex) {
+        var h = (hex || '').replace('#', '');
+        if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        if (h.length !== 6) return null;
+        return {
+            r: parseInt(h.substring(0, 2), 16),
+            g: parseInt(h.substring(2, 4), 16),
+            b: parseInt(h.substring(4, 6), 16)
+        };
+    }
+
+    function distanciaCorApuracao(hexA, hexB) {
+        var a = hexParaRgbApuracao(hexA), b = hexParaRgbApuracao(hexB);
+        if (!a || !b) return Infinity;
+        return Math.sqrt(Math.pow(a.r - b.r, 2) + Math.pow(a.g - b.g, 2) + Math.pow(a.b - b.b, 2));
+    }
+
+    // Rótulos reais vistos na planilha (coluna da legenda) -> valor de STATUS_MULTA_FAZENDA.
+    function mapearLabelLegendaParaStatus(label) {
+        var l = (label || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+        if (!l) return null;
+        if (l.indexOf('pago') !== -1 && l.indexOf('nao') === -1) return 'pago';
+        if (l.indexOf('divida ativa') !== -1 && (l.indexOf('enviou') !== -1 || l.indexOf('enviad') !== -1)) return 'enviou_divida_ativa';
+        if (l.indexOf('50%') !== -1 || l.indexOf('reduc') !== -1) return 'reducao_50';
+        if (l.indexOf('cancelad') !== -1) return 'cancelado';
+        if (l.indexOf('esperando') !== -1 || l.indexOf('aguardando') !== -1 || (l.indexOf('sem') !== -1 && l.indexOf('movimenta') !== -1)) return 'sem_movimentacao';
+        if (l.indexOf('vencido') !== -1) return 'vencido_sem_divida_ativa';
+        return null;
+    }
+
+    // Acha, na cor da linha de uma multa, qual status da legenda é o mais próximo
+    // (distância euclidiana em RGB) — cobre pequenas diferenças de tom entre a cor
+    // "oficial" da legenda e a cor realmente aplicada em alguma linha específica.
+    function resolverStatusPorCorApuracao(corLinha, legendas) {
+        if (!corLinha || !legendas || legendas.length === 0) return null;
+        var melhor = null, menorDistancia = Infinity;
+        legendas.forEach(function (leg) {
+            if (!leg.cor || !leg.status) return;
+            var d = distanciaCorApuracao(corLinha, leg.cor);
+            if (d < menorDistancia) { menorDistancia = d; melhor = leg.status; }
+        });
+        // Tolerância: cores muito diferentes da legenda inteira não "forçam" um status
+        // (ex: uma linha sem nenhuma cor aplicada cai aqui com branco puro, o que já é
+        // coberto por uma das legendas reais — mas por segurança, corta em ~60 de distância).
+        return menorDistancia <= 60 ? melhor : null;
+    }
+
+    // Lê o content.xml de dentro do .ods (é um .zip) e devolve:
+    //  - legendas: [{label, status, cor}] a partir do bloco "Legenda" da planilha
+    //  - coresPorChave: { chave_pa_auto_ou_valor: corHexDaLinha }, pra casar 1:1 com a
+    //    MESMA chave usada em processarLinhasMultasFazenda (PA+Auto ou PA+Valor) — evita
+    //    depender de alinhamento de índice de linha entre dois parsers diferentes.
+    async function extrairCoresLegendaODS(arrayBuffer, mapaColunas) {
+        var vazio = { legendas: [], coresPorChave: {} };
+        if (typeof JSZip === 'undefined') {
+            console.warn('[Apuração de Dados] JSZip não carregado — importação seguirá sem detectar status pela cor.');
+            return vazio;
+        }
+        try {
+            var zip = await JSZip.loadAsync(arrayBuffer);
+            var arquivoContent = zip.file('content.xml');
+            if (!arquivoContent) return vazio;
+            var textoXml = await arquivoContent.async('text');
+            var xmlDoc = new DOMParser().parseFromString(textoXml, 'application/xml');
+            if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                console.warn('[Apuração de Dados] content.xml do .ods não pôde ser interpretado como XML (parsererror) — status não será detectado pela cor.');
+                return vazio;
+            }
+
+            var NS_STYLE = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
+            var NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+
+            var corPorEstilo = {};
+            var estilos = xmlDoc.getElementsByTagNameNS(NS_STYLE, 'style');
+            for (var i = 0; i < estilos.length; i++) {
+                var nomeEstilo = estilos[i].getAttributeNS(NS_STYLE, 'name') || estilos[i].getAttribute('style:name');
+                if (!nomeEstilo) continue;
+                var props = estilos[i].getElementsByTagNameNS(NS_STYLE, 'table-cell-properties');
+                if (props.length === 0) continue;
+                var fo = 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
+                var bg = props[0].getAttributeNS(fo, 'background-color') || props[0].getAttribute('fo:background-color');
+                if (bg && bg.toLowerCase() !== 'transparent') corPorEstilo[nomeEstilo] = bg.toLowerCase();
+            }
+
+            var tabelas = xmlDoc.getElementsByTagNameNS(NS_TABLE, 'table');
+            if (tabelas.length === 0) {
+                console.warn('[Apuração de Dados] .ods: nenhuma <table:table> encontrada no content.xml (estilos lidos: ' + estilos.length + ', com cor de fundo: ' + Object.keys(corPorEstilo).length + ').');
+                return vazio;
+            }
+            var linhasXml = tabelas[0].getElementsByTagNameNS(NS_TABLE, 'table-row');
+            console.log('[Apuração de Dados] .ods: ' + tabelas.length + ' tabela(s), ' + linhasXml.length + ' linha(s) na 1ª, ' + estilos.length + ' estilo(s) (' + Object.keys(corPorEstilo).length + ' com cor de fundo).');
+
+            function celulasDaLinha(linhaEl) {
+                var celulas = [];
+                for (var c = 0; c < linhaEl.childNodes.length; c++) {
+                    var node = linhaEl.childNodes[c];
+                    if (node.nodeType !== 1) continue;
+                    if (node.localName !== 'table-cell' && node.localName !== 'covered-table-cell') continue;
+                    var repetir = parseInt(node.getAttributeNS(NS_TABLE, 'number-columns-repeated') || node.getAttribute('table:number-columns-repeated') || '1', 10) || 1;
+                    for (var r = 0; r < repetir; r++) celulas.push(node);
+                }
+                return celulas;
+            }
+            function corDaCelula(cel) {
+                var nomeEstilo = cel.getAttributeNS(NS_TABLE, 'style-name') || cel.getAttribute('table:style-name');
+                return nomeEstilo ? (corPorEstilo[nomeEstilo] || null) : null;
+            }
+
+            var idxPA = mapaColunas.indexOf('numero_processo');
+            var idxAuto = mapaColunas.indexOf('numero_auto_infracao');
+            var idxValor = mapaColunas.indexOf('valor_multa');
+            var idxDataEnvio = mapaColunas.indexOf('data_envio_fazenda');
+            var idxCorReferencia = idxDataEnvio !== -1 ? idxDataEnvio : 0;
+
+            var legendas = [];
+            var coresPorChave = {};
+            var dentroDaLegenda = false;
+            var colLegenda = -1;
+
+            for (var li = 0; li < linhasXml.length; li++) {
+                var celulas = celulasDaLinha(linhasXml[li]);
+
+                if (!dentroDaLegenda) {
+                    for (var ci = 0; ci < celulas.length; ci++) {
+                        if ((celulas[ci].textContent || '').trim().toLowerCase() === 'legenda') {
+                            colLegenda = ci;
+                            dentroDaLegenda = true;
+                            break;
+                        }
+                    }
+                } else if (colLegenda !== -1 && colLegenda < celulas.length) {
+                    var textoLegenda = (celulas[colLegenda].textContent || '').trim();
+                    if (textoLegenda) {
+                        var statusDoLabel = mapearLabelLegendaParaStatus(textoLegenda);
+                        var corDoLabel = corDaCelula(celulas[colLegenda]);
+                        if (statusDoLabel && corDoLabel) legendas.push({ label: textoLegenda, status: statusDoLabel, cor: corDoLabel });
+                    } else {
+                        dentroDaLegenda = false;
+                        colLegenda = -1;
+                    }
+                }
+
+                if (idxPA === -1 || idxPA >= celulas.length) continue;
+                var paTxt = (celulas[idxPA].textContent || '').trim();
+                if (!paTxt) continue;
+                var autoTxt = (idxAuto !== -1 && idxAuto < celulas.length) ? (celulas[idxAuto].textContent || '').trim() : '';
+                var valorTxt = (idxValor !== -1 && idxValor < celulas.length) ? (celulas[idxValor].textContent || '').trim() : '';
+                var paNorm = normalizarPA(paTxt);
+                var valorNum = parseValorBR(valorTxt);
+                var chave = autoTxt ? (paNorm + '||auto:' + autoTxt.toLowerCase()) : (paNorm + '||valor:' + valorNum);
+                var corLinha = (idxCorReferencia < celulas.length) ? corDaCelula(celulas[idxCorReferencia]) : null;
+                if (corLinha) coresPorChave[chave] = corLinha;
+            }
+
+            console.log('[Apuração de Dados] .ods: legenda = ' + legendas.length + ' rótulo(s) reconhecido(s), ' + Object.keys(coresPorChave).length + ' linha(s) de dado com cor casada.');
+            return { legendas: legendas, coresPorChave: coresPorChave };
+        } catch (e) {
+            console.warn('[Apuração de Dados] Erro ao ler cores do .ods — importação seguirá sem detectar status pela cor:', e);
+            return vazio;
+        }
+    }
+
     window.importarPlanilhaMultasFazenda = function importarPlanilhaMultasFazenda(inputEl) {
         var arquivo = inputEl.files && inputEl.files[0];
         if (!arquivo) return;
 
         var nomeArquivo = (arquivo.name || '').toLowerCase();
         var ehBinaria = /\.(ods|xlsx|xls)$/.test(nomeArquivo);
+        var ehOds = /\.ods$/.test(nomeArquivo);
 
         var reader = new FileReader();
         reader.onload = async function (e) {
@@ -1494,7 +1801,7 @@
                     if (linhasPlanilha.length < 2) {
                         mostrarStatusImportacao('Planilha vazia ou sem linhas de dados.', 'alerta');
                     } else {
-                        await processarLinhasMultasFazenda(linhasPlanilha);
+                        await processarLinhasMultasFazenda(linhasPlanilha, ehOds ? e.target.result : null);
                     }
                 } else {
                     var texto = String(e.target.result).replace(/^﻿/, '');
@@ -1523,9 +1830,20 @@
         else reader.readAsText(arquivo, 'UTF-8');
     };
 
+    // Campos que a planilha pode atualizar num registro já existente (tudo que não faz
+    // parte da chave de identificação do registro — PA/Auto/Valor nunca mudam aqui).
+    var CAMPOS_ATUALIZAVEIS_IMPORT_PLANILHA = [
+        'data_envio_fazenda', 'tipo_fiscalizacao', 'nome_razao_social', 'cpf_cnpj', 'valor_multa',
+        'data_vencimento', 'numero_ar', 'numero_processo_betha', 'responsavel',
+        'defesa', 'observacoes', 'origem'
+    ];
+    function valorVazioParaComparar(v) { return (v === null || v === undefined) ? '' : v; }
+
     // Processamento genérico: recebe o cabeçalho e as linhas já quebradas em colunas —
     // usado tanto para .csv (quebrado por parseLinhaCsv) quanto para .ods/.xlsx (via SheetJS).
-    async function processarLinhasMultasFazenda(todasAsLinhas) {
+    // `arrayBufferOds` só vem preenchido pra arquivos .ods — é o que permite detectar o
+    // status pela cor de fundo da linha (ver extrairCoresLegendaODS).
+    async function processarLinhasMultasFazenda(todasAsLinhas, arrayBufferOds) {
         var indiceCabecalho = localizarIndiceCabecalho(todasAsLinhas);
         if (indiceCabecalho === -1) {
             mostrarStatusImportacao('Não encontrei a coluna do Processo Administrativo/Auto de Infração (PA) nas primeiras linhas da planilha. Confira se os nomes das colunas batem com os da planilha de controle.', 'erro');
@@ -1535,6 +1853,21 @@
         var linhasDeDados = todasAsLinhas.slice(indiceCabecalho + 1);
         var mapaColunas = linhaCabecalho.map(function (c) { return mapearColuna(normalizarCabecalho(String(c || ''))); });
         var CAMPOS_DATA_OU_VALOR = { valor_multa: true, data_envio_fazenda: true, data_vencimento: true };
+
+        // Planilhas de "Dívida Ativa" (ex: "PROCESSOS ENVIADOS PARA DÍVIDA ATIVA ... - AMBIENTAL",
+        // no título antes do cabeçalho) não têm legenda de cores — mas, pelo próprio nome, toda
+        // linha nova já foi enviada para a dívida ativa. Só vale pra linha NOVA (nunca sobrescreve
+        // o status de uma linha já existente, que pode ter sido corrigida manualmente depois).
+        var tituloAntesCabecalho = normalizarTexto(todasAsLinhas.slice(0, indiceCabecalho).map(function (l) { return (l || []).join(' '); }).join(' '));
+        var statusPadraoSemLegenda = tituloAntesCabecalho.indexOf('divida ativa') !== -1 ? 'enviou_divida_ativa' : null;
+
+        var corInfoOds = { legendas: [], coresPorChave: {} };
+        if (arrayBufferOds) {
+            corInfoOds = await extrairCoresLegendaODS(arrayBufferOds, mapaColunas);
+            if (corInfoOds.legendas.length === 0) {
+                console.warn('[Apuração de Dados] Não encontrei a legenda de cores na planilha — status não será detectado automaticamente nesta importação.');
+            }
+        }
 
         var registrosBrutos = linhasDeDados.map(function (valores) {
             var registro = {};
@@ -1561,23 +1894,22 @@
         mostrarStatusImportacao('Importando, aguarde...', 'alerta');
 
         // Busca os registros já cadastrados pra cada PA (pode ter mais de um — vários Autos).
-        // Três desfechos possíveis por linha da planilha:
-        // 1) já existe um registro duplicado (mesmo PA+Auto quando a planilha traz Nº do Auto,
-        //    senão mesmo PA+valor) -> duplicata, ignora.
-        // 2) existe um registro desse PA com origem='fluxograma' (criado pela sincronização,
-        //    ainda não conferido) -> a planilha ATUALIZA essa linha com o dado real.
-        // 3) nenhum dos dois -> é um Auto novo mesmo, insere linha nova.
-        var { data: existentesData } = await supabaseClient.from('controle_multas_fazenda').select('id, numero_processo, numero_auto_infracao, valor_multa, origem');
+        // Dois desfechos possíveis por linha da planilha:
+        // 1) já existe um registro com o mesmo PA+Auto (ou PA+Valor, se a planilha não trouxer
+        //    Nº do Auto) -> ATUALIZA os campos que mudaram (ex: defesa/observações que foram
+        //    complementadas, status, vencimento, nº do AR...), sem duplicar a linha.
+        // 2) nenhum dos dois -> é um Auto novo mesmo, insere linha nova.
+        var { data: existentesData } = await supabaseClient.from('controle_multas_fazenda').select('*');
         var existentesPorPA = {};
         (existentesData || []).forEach(function (r) {
             var pa = normalizarPA(r.numero_processo);
             if (!existentesPorPA[pa]) existentesPorPA[pa] = [];
-            existentesPorPA[pa].push({ id: r.id, valor: Number(r.valor_multa) || 0, auto: (r.numero_auto_infracao || '').trim().toLowerCase(), origem: r.origem, consumido: false });
+            existentesPorPA[pa].push({ registro: r, valor: Number(r.valor_multa) || 0, auto: (r.numero_auto_infracao || '').trim().toLowerCase(), consumido: false });
         });
 
         var linhasParaInserir = [];
         var linhasParaAtualizar = [];
-        var ignoradas = 0;
+        var semMudanca = 0;
         var invalidas = 0;
         var chavesNestaImportacao = new Set();
 
@@ -1591,10 +1923,12 @@
             var chave = autoFinal ? (paNorm + '||auto:' + autoFinal.toLowerCase()) : (paNorm + '||valor:' + valorFinal);
             var existentesDoPA = existentesPorPA[paNorm] || [];
 
-            var jaExisteExato = autoFinal
-                ? existentesDoPA.some(function (e) { return e.auto === autoFinal.toLowerCase(); })
-                : existentesDoPA.some(function (e) { return e.valor === valorFinal; });
-            if (jaExisteExato || chavesNestaImportacao.has(chave)) { ignoradas++; return; }
+            var existenteEncontrado = autoFinal
+                ? existentesDoPA.find(function (e) { return !e.consumido && e.auto === autoFinal.toLowerCase(); })
+                : existentesDoPA.find(function (e) { return !e.consumido && e.valor === valorFinal; });
+            if (existenteEncontrado) existenteEncontrado.consumido = true;
+
+            if (chavesNestaImportacao.has(chave) && !existenteEncontrado) { invalidas++; return; } // duplicata dentro da própria planilha
             chavesNestaImportacao.add(chave);
 
             var respOriginal = (registro.responsavel || '').trim();
@@ -1606,6 +1940,9 @@
                 var fiscalAuto = encontrarFiscalPorResponsavel(respOriginal, listaFiscaisSemac);
                 respFinal = fiscalAuto ? fiscalAuto.full_name : respOriginal;
             }
+
+            var corDaLinha = corInfoOds.coresPorChave[chave];
+            var statusResolvido = corDaLinha ? resolverStatusPorCorApuracao(corDaLinha, corInfoOds.legendas) : null;
 
             var payload = {
                 data_envio_fazenda: parseDataBR(registro.data_envio_fazenda) || new Date().toISOString().slice(0, 10),
@@ -1623,12 +1960,29 @@
                 observacoes: registro.observacoes || '',
                 origem: 'planilha'
             };
+            if (statusResolvido) payload.status = statusResolvido;
 
-            var placeholder = existentesDoPA.find(function (e) { return !e.consumido && e.origem === 'fluxograma'; });
-            if (placeholder) {
-                placeholder.consumido = true;
-                linhasParaAtualizar.push({ id: placeholder.id, payload: payload });
+            if (existenteEncontrado) {
+                var atual = existenteEncontrado.registro;
+                var camposMudados = {};
+                CAMPOS_ATUALIZAVEIS_IMPORT_PLANILHA.forEach(function (campo) {
+                    // valor_multa: o Postgres devolve "numeric" como string (ex: "1110.70") — compara
+                    // como número pra não marcar mudança todo re-import por causa só do formato.
+                    var novo = payload[campo], velho = atual[campo];
+                    var mudou = campo === 'valor_multa'
+                        ? (Number(novo) || 0) !== (Number(velho) || 0)
+                        : valorVazioParaComparar(novo) !== valorVazioParaComparar(velho);
+                    if (mudou) camposMudados[campo] = payload[campo];
+                });
+                if (statusResolvido && statusResolvido !== atual.status) camposMudados.status = statusResolvido;
+
+                if (Object.keys(camposMudados).length > 0) {
+                    linhasParaAtualizar.push({ id: atual.id, payload: camposMudados });
+                } else {
+                    semMudanca++;
+                }
             } else {
+                if (!payload.status && statusPadraoSemLegenda) payload.status = statusPadraoSemLegenda;
                 payload.created_by = window.userIdGlobal || null;
                 linhasParaInserir.push(payload);
             }
@@ -1650,19 +2004,29 @@
             }
         }
 
+        // Cada linha tem campos diferentes mudando, então não dá pra fazer um UPDATE só pra
+        // todas — mas também não dá pra esperar uma de cada vez (centenas de idas-e-voltas
+        // sequenciais ao banco travavam a tela por minutos). Em lotes de 25 em paralelo.
         var atualizadas = 0;
-        for (var i = 0; i < linhasParaAtualizar.length; i++) {
-            var item = linhasParaAtualizar[i];
-            var { error: errUpd } = await supabaseClient.from('controle_multas_fazenda').update(item.payload).eq('id', item.id);
-            if (errUpd) { console.error('[Apuração de Dados] Erro ao atualizar PA sincronizado automaticamente:', errUpd.message); continue; }
-            atualizadas++;
+        for (var offsetUpd = 0; offsetUpd < linhasParaAtualizar.length; offsetUpd += 25) {
+            var loteUpd = linhasParaAtualizar.slice(offsetUpd, offsetUpd + 25);
+            var resultadosLote = await Promise.all(loteUpd.map(function (item) {
+                return supabaseClient.from('controle_multas_fazenda').update(item.payload).eq('id', item.id);
+            }));
+            resultadosLote.forEach(function (res) {
+                if (res.error) { console.error('[Apuração de Dados] Erro ao atualizar registro existente na importação:', res.error.message); return; }
+                atualizadas++;
+            });
+            if (linhasParaAtualizar.length > 25) {
+                mostrarStatusImportacao('Importando, aguarde... (' + Math.min(offsetUpd + 25, linhasParaAtualizar.length) + '/' + linhasParaAtualizar.length + ' atualizadas)', 'alerta');
+            }
         }
 
         var resumo = inseridos + ' linha(s) importada(s).';
-        if (atualizadas > 0) resumo += ' ' + atualizadas + ' linha(s) que tinham sido criadas pela sincronização foram atualizadas com o dado real da planilha.';
-        if (ignoradas > 0) resumo += ' ' + ignoradas + ' ignorada(s) por já existir o mesmo PA com o mesmo valor de multa.';
-        if (invalidas > 0) resumo += ' ' + invalidas + ' linha(s) sem PA preenchido foram ignoradas.';
-        mostrarStatusImportacao(resumo, (ignoradas > 0 || invalidas > 0) ? 'alerta' : 'ok');
+        if (atualizadas > 0) resumo += ' ' + atualizadas + ' linha(s) já existentes foram atualizadas com informação nova da planilha.';
+        if (semMudanca > 0) resumo += ' ' + semMudanca + ' já estavam iguais (nada novo).';
+        if (invalidas > 0) resumo += ' ' + invalidas + ' linha(s) inválida(s)/duplicada(s) na própria planilha foram ignoradas.';
+        mostrarStatusImportacao(resumo, invalidas > 0 ? 'alerta' : 'ok');
 
         await carregarApuracaoDados();
     }

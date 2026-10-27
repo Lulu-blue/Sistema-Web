@@ -2813,7 +2813,7 @@
                     </div>
                 </div>
 
-                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px;">
+                <div id="apuracao-card-multas" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:18px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
                         <div>
                             <h3 style="margin:0; font-size:1rem;">🧾 Controle de Multas Enviadas para a Fazenda (Dívida Ativa)</h3>
@@ -2837,6 +2837,10 @@
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                 Nova Linha
                             </button>
+                            <button id="apuracao-btn-tela-cheia" onclick="if(typeof toggleTelaCheiaMultas==='function') toggleTelaCheiaMultas();" title="Expandir a tabela pra tela inteira" style="padding:9px 14px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                                <span id="apuracao-btn-tela-cheia-label">Tela Cheia</span>
+                            </button>
                         </div>
                     </div>
                     <div id="apuracao-import-status" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
@@ -2850,7 +2854,7 @@
                         <div style="font-size:11px; color:#94a3b8;">Filtros de Área/Conferência ficam no topo da página e já valem pra essa tabela.</div>
                     </div>
 
-                    <div style="overflow:auto; max-height:65vh; border:1px solid #e2e8f0; border-radius:8px;">
+                    <div id="apuracao-multas-scroll" style="overflow:auto; max-height:65vh; border:1px solid #e2e8f0; border-radius:8px;">
                         <table style="width:100%; border-collapse:collapse; font-size:12.5px; white-space:nowrap;">
                             <thead>
                                 <tr style="text-align:left; border-bottom:2px solid #e2e8f0; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.03em;">
@@ -2868,7 +2872,7 @@
                                     <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('responsavel');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Responsável<span id="apuracao-sort-icon-responsavel"></span></th>
                                     <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('defesa');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Defesa<span id="apuracao-sort-icon-defesa"></span></th>
                                     <th onclick="if(typeof ordenarTabelaMultasFazenda==='function') ordenarTabelaMultasFazenda('observacoes');" style="padding:8px 10px; cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; z-index:5;" title="Clique para ordenar">Obs.<span id="apuracao-sort-icon-observacoes"></span></th>
-                                    <th style="padding:8px 10px; position:sticky; top:0; background:#fff; z-index:5;"></th>
+                                    <th style="padding:8px 10px; position:sticky; top:0; background:#fff; z-index:5;">Edição</th>
                                 </tr>
                             </thead>
                             <tbody id="apuracao-tabela-multas-body">
