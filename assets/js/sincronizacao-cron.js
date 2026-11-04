@@ -266,6 +266,21 @@
         return dt < marcaLimpeza;
     }
 
+    // NP/AI expedida há mais de 2 meses não precisa mais ser revista pela sincronização —
+    // a essa altura o ciclo do AR (enviado -> recebido pelo proprietário) já deveria estar
+    // fechado. Sem esse corte, TODO o histórico do fiscal era revarrido (e as 3 consultas de
+    // "já existe?" de inserirControleProcessual/inserirRegistroProdutividade refeitas) em
+    // toda sincronização, pra sempre — cada vez mais lento conforme o histórico crescia.
+    const MESES_LIMITE_REVISAO_NP_AI = 2;
+    function foraDoPrazoDeRevisaoNpAi(dataCriacao) {
+        if (!dataCriacao) return false; // sem data não dá pra saber a idade — não arrisca pular
+        const dt = new Date(dataCriacao);
+        if (isNaN(dt.getTime())) return false;
+        const limite = new Date();
+        limite.setMonth(limite.getMonth() - MESES_LIMITE_REVISAO_NP_AI);
+        return dt < limite;
+    }
+
     async function limpezaGeralJaFeitaMesAnterior(semacClient, userId) {
         if (!userId) return false;
         const hoje = new Date();
@@ -510,14 +525,17 @@
     // outra pessoa no Fluxograma (ex: o Administrativo cadastra o AR dias depois do fiscal ter
     // expedido a Notificação). Quando o fiscal loga de novo e a sincronização revarre o
     // histórico, isso reconfere e atualiza retroativamente um registro que já existe no SEMAC.
-    // Ligados ao MESMO evento (chegada do AR): uma vez que o SEMAC já tem um valor (seja pela
-    // própria sincronização ou por correção manual do fiscal no Histórico), a sincronização
-    // NUNCA mais sobrescreve — só preenche enquanto o campo ainda estiver vazio. Isso evita que
-    // uma rodada futura desfaça uma correção manual ou troque um AR já certo por outro.
-    const CAMPOS_AR_PREENCHER_UMA_VEZ = ['ar', 'data_entrada', 'anexo_ar', 'data_vencimento'];
-    // O anexo principal pode legitimamente trocar (ex: documento reemitido no Fluxograma) —
-    // esse continua sendo atualizado sempre que um valor novo e diferente chegar.
-    const CAMPOS_ATUALIZAVEIS_SEMPRE = ['anexo_pdf'];
+    // Só o Nº do AR fica "preencher uma vez": ele é lançado de uma vez antes do envio e não
+    // deveria mudar depois — preservar isso evita que uma rodada futura troque um AR já certo.
+    const CAMPOS_AR_PREENCHER_UMA_VEZ = ['ar'];
+    // data_entrada/data_vencimento são do ciclo "AR voltou": o número do AR é lançado ANTES de
+    // enviar (então já chega preenchido na 1ª sincronização), e só depois — quando o AR retorna
+    // assinado — entra a data de recebimento do proprietário. Tratar isso como "preencher uma
+    // vez" fazia a sincronização nunca mais pegar essa volta do AR, porque a data já não estava
+    // mais vazia desde o envio. Por isso ficam junto do anexo_pdf: atualiza sempre que o
+    // Fluxograma tiver um valor novo e diferente do que já está salvo.
+    // anexo_ar NÃO entra aqui — é uma LISTA (ver fusão dedicada abaixo), não um valor único.
+    const CAMPOS_ATUALIZAVEIS_SEMPRE = ['anexo_pdf', 'data_entrada', 'data_vencimento'];
     // Nomes antigos usados antes de alinhar com os campos que produtividade.js já lê
     // (numero_ar -> ar, data_recebimento_ar -> data_entrada) — limpa registros sincronizados
     // com os nomes errados em vez de deixar as duas versões penduradas em `campos`.
@@ -537,6 +555,27 @@
                 houveMudanca = true;
             }
         });
+        // anexo_ar pode ter mais de um AR pro mesmo NP/AI (ex: o 1º voltou com endereço errado
+        // e foi reenviado). Nunca substitui a lista inteira — isso apagaria anexos que o
+        // Administrativo tenha subido manualmente pela tela de Histórico (que não vêm do
+        // Fluxograma). Só ACRESCENTA os que vieram novos e ainda não estão na lista (por URL).
+        if (Array.isArray(camposNovos.anexo_ar) && camposNovos.anexo_ar.length > 0) {
+            const listaAtual = Array.isArray(resultado.anexo_ar) ? resultado.anexo_ar.slice()
+                : (resultado.anexo_ar ? [{ url: resultado.anexo_ar, data: null }] : []);
+            const urlsJaPresentes = new Set(listaAtual.map(a => (typeof a === 'string' ? a : a.url)));
+            let acrescentou = false;
+            camposNovos.anexo_ar.forEach(novoAr => {
+                if (novoAr && novoAr.url && !urlsJaPresentes.has(novoAr.url)) {
+                    listaAtual.push(novoAr);
+                    urlsJaPresentes.add(novoAr.url);
+                    acrescentou = true;
+                }
+            });
+            if (acrescentou) {
+                resultado.anexo_ar = listaAtual;
+                houveMudanca = true;
+            }
+        }
         CAMPOS_LEGADOS_PARA_REMOVER.forEach(chave => {
             if (chave in resultado) {
                 delete resultado[chave];
@@ -1209,11 +1248,21 @@
                 return d ? extrairUrlCloudinary(d.url) : '';
             }
 
+            // `notificacoes.data_vencimento` vem do Fluxograma como timestamptz completo
+            // ("2026-11-07T12:07:20.089+00:00"), não como data pura — salvar isso direto em
+            // `campos.data_vencimento` quebra a exibição em todo o Histórico (que assume
+            // "YYYY-MM-DD" e faz um split('-').reverse().join('/') pra virar DD/MM/YYYY; com
+            // timestamp completo isso vira algo como "07T12:07:20.089+00:00/11/2026"). Guarda só
+            // a parte da data.
+            function apenasData(valor) {
+                return valor ? String(valor).slice(0, 10) : '';
+            }
+
             // Data de vencimento da Notificação Preliminar: coluna `notificacoes.data_vencimento`,
             // já calculada e gravada pelo próprio Fluxograma (confirmado no código de lá).
             const vencimentoPorNotifId = {};
             (notificacoes || []).forEach(n => {
-                if (n && n.id && n.data_vencimento) vencimentoPorNotifId[n.id] = n.data_vencimento;
+                if (n && n.id && n.data_vencimento) vencimentoPorNotifId[n.id] = apenasData(n.data_vencimento);
             });
 
             // Data de vencimento do Auto de Infração: NÃO existe pronta em lugar nenhum — só os
@@ -1308,38 +1357,46 @@
             // Anexo do AR (comprovante dos Correios) do dono certo: o do Auto fica ligado à
             // notificação dele (documentos.notificacao_id) ou referenciado no ciclo dele; o da
             // Notificação Preliminar fica solto no processo, sem notificacao_id.
+            // Devolve TODOS os anexos de AR do dono (NP ou Auto), não só o primeiro — um mesmo
+            // NP/AI pode ter mais de um AR (ex: o 1º voltou com endereço errado e foi reenviado).
+            // Formato: lista de {url, data}, no mesmo molde que produtividade.js já espera em
+            // campos.anexo_ar (usado também pros anexos que o Administrativo sobe manualmente
+            // pela tela de Histórico).
             function anexoARDoDono(docsARdoProcesso, dadosProc, notificacaoId, ehAuto, possuiDecreto) {
                 const docs = docsARdoProcesso || [];
+                const paraLista = (lista) => lista
+                    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+                    .map(d => ({ url: d.url, data: d.created_at ? String(d.created_at).slice(0, 10) : null }));
 
                 if (ehAuto) {
                     const anexosDoCiclo = (notificacaoId
                         && dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]?.etapa16?.anexos_ar) || [];
                     const idsDoCiclo = new Set(anexosDoCiclo.map(a => a?.documento_id).filter(Boolean));
 
-                    const porReferencia = docs.find(d => idsDoCiclo.has(d.id));
-                    if (porReferencia) return porReferencia.url;
+                    const porReferencia = docs.filter(d => idsDoCiclo.has(d.id));
+                    if (porReferencia.length > 0) return paraLista(porReferencia);
 
                     const daNotificacao = notificacaoId
-                        ? docs.find(d => String(d.notificacao_id || '') === String(notificacaoId))
-                        : null;
-                    if (daNotificacao) return daNotificacao.url;
+                        ? docs.filter(d => String(d.notificacao_id || '') === String(notificacaoId))
+                        : [];
+                    if (daNotificacao.length > 0) return paraLista(daNotificacao);
 
                     // Decreto/reincidência: o AR único está no nível do processo
                     if (!nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) {
-                        const doProcesso = docs.find(d => !d.notificacao_id);
-                        if (doProcesso) return doProcesso.url;
+                        const doProcesso = docs.filter(d => !d.notificacao_id);
+                        if (doProcesso.length > 0) return paraLista(doProcesso);
                     }
-                    return '';
+                    return [];
                 }
 
                 const idsDeAutos = idsAnexosARDeAutos(dadosProc);
-                const daNP = docs.find(d => !d.notificacao_id && !idsDeAutos.has(d.id));
-                if (daNP) return daNP.url;
+                const daNP = docs.filter(d => !d.notificacao_id && !idsDeAutos.has(d.id));
+                if (daNP.length > 0) return paraLista(daNP);
                 // Processo antigo em que nenhum Auto reivindicou anexo de AR
                 if (idsDeAutos.size === 0 && docs.length > 0 && !docs.some(d => !!d.notificacao_id)) {
-                    return docs[0].url;
+                    return paraLista(docs);
                 }
-                return '';
+                return [];
             }
 
             // Número da notificação por processo: serve de segunda fonte quando o documento
@@ -1394,6 +1451,7 @@
 
                 // --- Auto de Infração ---
                 if (tipoLower.includes('auto de infração') || tipoLower.includes('auto de infracao') || (tipoLower.includes('auto') && tipoLower.includes('infra'))) {
+                    if (foraDoPrazoDeRevisaoNpAi(createdAt)) continue;
                     const ptsCP = elegivel.pontuar ? 5 : 0;
                     const possuiDecretoDoc = procDoDoc?.possui_decreto === true;
                     const infoAR = extrairInfoARAuto(dadosProc, doc.notificacao_id, possuiDecretoDoc);
@@ -1435,6 +1493,7 @@
                 // --- Notificação Preliminar (ou, em Meio Ambiente, Auto de Fiscalização —
                 // chega com o MESMO tipo literal "Notificação Preliminar" na tabela documentos) ---
                 else if (tipoLower.includes('notific')) {
+                    if (foraDoPrazoDeRevisaoNpAi(createdAt)) continue;
                     // Processo por decreto nasce como Auto de Infração: a NP/AF nunca foi expedida.
                     if (processoPorDecreto(procDoDoc)) {
                         console.log(`[Sincronização SEMAC] 🚫 NP do documento ${doc.id} ignorada: processo ${procDoDoc.numero_processo || doc.processo_id} é por decreto.`);
@@ -1567,6 +1626,7 @@
 
                 const numSeq = auto.numero || 'S/N';
                 const createdAt = auto.created_at;
+                if (foraDoPrazoDeRevisaoNpAi(createdAt)) continue;
                 const dadosProcAuto = procDoAuto.dados || {};
                 const nomeContribuinte = auto.dados?.contribuinte?.nome || dadosProcAuto.contribuinte?.nome || '';
                 const bairroImovel = auto.dados?.imovel?.bairro || dadosProcAuto.imovel?.bairro || '';
@@ -1655,6 +1715,7 @@
                 }
 
                 const createdAt = notif.created_at;
+                if (foraDoPrazoDeRevisaoNpAi(createdAt)) continue;
                 const dataFormatadaBR = createdAt ? new Date(createdAt).toISOString().split('T')[0] : '';
                 const dadosProcNotif = procDoNotif.dados || {};
                 // O anexo certo (NP ou, em Meio Ambiente, Auto de Fiscalização) é o documento
@@ -1682,7 +1743,7 @@
                     ar: infoAR.numero_ar,
                     data_entrada: infoAR.data_recebimento_ar,
                     anexo_ar: anexoARDoDono(docsARPorProcessoId[notif.processo_id], dadosProcNotif, notif.id, false, possuiDecretoNotif),
-                    data_vencimento: notif.data_vencimento || '',
+                    data_vencimento: apenasData(notif.data_vencimento),
                     _created_at: createdAt
                 };
 
