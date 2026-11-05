@@ -174,11 +174,7 @@
         var masterClient = window.supabaseMaster;
         if (!masterClient) return;
 
-        var { data: existentesData, error: errExistentes } = await supabaseClient.from('controle_multas_fazenda').select('id, numero_processo, numero_ar');
-        if (errExistentes) {
-            console.error('[Apuração de Dados] Erro ao conferir PAs já cadastrados:', errExistentes.message);
-            return;
-        }
+        var existentesData = await buscarTodosRegistrosControleMultas('id, numero_processo, numero_ar');
         var existentesPorPA = {};
         (existentesData || []).forEach(function (r) {
             var pa = normalizarPA(r.numero_processo);
@@ -1079,6 +1075,39 @@
         renderizarTabelaMultasFazenda();
     };
 
+    // Mesmo filtro (Status/Conferência/Área/Data/Busca) usado tanto pra desenhar a tabela de
+    // baixo quanto pra exportar o CSV — assim o que sai no arquivo é sempre exatamente o que
+    // está sendo mostrado na tela (ex: só "Pago" selecionado -> exporta só os pagos).
+    function calcularLinhasFiltradasMultas() {
+        var inputInicioTabela = document.getElementById('apuracao-data-inicio');
+        var inputFimTabela = document.getElementById('apuracao-data-fim');
+        var dataInicioTabela = inputInicioTabela ? inputInicioTabela.value : '';
+        var dataFimTabela = inputFimTabela ? inputFimTabela.value : '';
+
+        var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
+        var diag = { status: 0, conferencia: 0, area: 0, data: 0, busca: 0 };
+        var linhas = _apuracaoTodasMultas.filter(function (m) {
+            var statusAtual = infoStatusMulta(m.status).valor;
+            if (!_apuracaoStatusAtivos.has(statusAtual)) { diag.status++; return false; }
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) { diag.conferencia++; return false; }
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) { diag.conferencia++; return false; }
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) { diag.area++; return false; }
+            // Mesmo período (Data de Envio para a Fazenda) usado nos KPIs/gráficos lá de cima —
+            // senão a planilha importada traz registros de vários anos misturados e o filtro de
+            // data não tem efeito nenhum na busca da tabela de baixo.
+            var dEnvio = m.data_envio_fazenda;
+            if (dataInicioTabela && (!dEnvio || dEnvio < dataInicioTabela)) { diag.data++; return false; }
+            if (dataFimTabela && (!dEnvio || dEnvio > dataFimTabela)) { diag.data++; return false; }
+            if (!termoBusca) return true;
+            var pa = (m.numero_processo || '').toLowerCase();
+            var auto = (m.numero_auto_infracao || '').toLowerCase();
+            var passouBusca = pa.indexOf(termoBusca) !== -1 || auto.indexOf(termoBusca) !== -1;
+            if (!passouBusca) diag.busca++;
+            return passouBusca;
+        });
+        return { linhas: linhas, diag: diag };
+    }
+
     function renderizarTabelaMultasFazenda() {
         var tbody = document.getElementById('apuracao-tabela-multas-body');
         if (!tbody) return;
@@ -1087,32 +1116,9 @@
         renderizarFiltroAreaMultas();
         atualizarIconesOrdenacaoMultas();
 
-        var inputInicioTabela = document.getElementById('apuracao-data-inicio');
-        var inputFimTabela = document.getElementById('apuracao-data-fim');
-        var dataInicioTabela = inputInicioTabela ? inputInicioTabela.value : '';
-        var dataFimTabela = inputFimTabela ? inputFimTabela.value : '';
-
-        var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
-        var _diag = { status: 0, conferencia: 0, area: 0, data: 0, busca: 0 };
-        var linhasFiltradas = _apuracaoTodasMultas.filter(function (m) {
-            var statusAtual = infoStatusMulta(m.status).valor;
-            if (!_apuracaoStatusAtivos.has(statusAtual)) { _diag.status++; return false; }
-            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) { _diag.conferencia++; return false; }
-            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) { _diag.conferencia++; return false; }
-            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) { _diag.area++; return false; }
-            // Mesmo período (Data de Envio para a Fazenda) usado nos KPIs/gráficos lá de cima —
-            // senão a planilha importada traz registros de vários anos misturados e o filtro de
-            // data não tem efeito nenhum na busca da tabela de baixo.
-            var dEnvio = m.data_envio_fazenda;
-            if (dataInicioTabela && (!dEnvio || dEnvio < dataInicioTabela)) { _diag.data++; return false; }
-            if (dataFimTabela && (!dEnvio || dEnvio > dataFimTabela)) { _diag.data++; return false; }
-            if (!termoBusca) return true;
-            var pa = (m.numero_processo || '').toLowerCase();
-            var auto = (m.numero_auto_infracao || '').toLowerCase();
-            var passouBusca = pa.indexOf(termoBusca) !== -1 || auto.indexOf(termoBusca) !== -1;
-            if (!passouBusca) _diag.busca++;
-            return passouBusca;
-        });
+        var resultadoFiltro = calcularLinhasFiltradasMultas();
+        var linhasFiltradas = resultadoFiltro.linhas;
+        var _diag = resultadoFiltro.diag;
 
         console.log('[Apuração de Dados] Tabela de baixo: ' + _apuracaoTodasMultas.length + ' carregado(s) no total, ' + linhasFiltradas.length + ' após filtros. Excluídos por -> status:' + _diag.status + ' conferência:' + _diag.conferencia + ' área:' + _diag.area + ' data:' + _diag.data + ' busca:' + _diag.busca + '.');
 
@@ -1435,14 +1441,17 @@
     };
 
     window.baixarCSVMultasFazenda = function baixarCSVMultasFazenda() {
-        if (_apuracaoTodasMultas.length === 0) {
-            alert('Não há registros para exportar.');
+        // Exporta exatamente o que está filtrado/visível na tabela de baixo nesse momento
+        // (Status/Conferência/Área/Data/Busca) — ex: só "Pago" selecionado exporta só os pagos.
+        var registrosParaExportar = calcularLinhasFiltradasMultas().linhas;
+        if (registrosParaExportar.length === 0) {
+            alert(_apuracaoTodasMultas.length === 0 ? 'Não há registros para exportar.' : 'Nenhum registro bate com os filtros atuais — ajuste os filtros pra exportar algo.');
             return;
         }
         var linhas = [];
         linhas.push(CAMPOS_MULTA_FAZENDA.map(function (c) { return '"' + c.label + '"'; }).join(';'));
 
-        _apuracaoTodasMultas.forEach(function (reg) {
+        registrosParaExportar.forEach(function (reg) {
             var linha = CAMPOS_MULTA_FAZENDA.map(function (c) {
                 var val = reg[c.chave];
                 if (c.tipo === 'data') val = val ? formatarDataExibicao(val) : '';
@@ -1839,6 +1848,33 @@
     ];
     function valorVazioParaComparar(v) { return (v === null || v === undefined) ? '' : v; }
 
+    // Busca TODOS os registros de controle_multas_fazenda, paginando em lotes de 1000 — o
+    // Supabase corta silenciosamente em 1000 linhas por padrão. Sem isso, com a tabela já
+    // passando de 1000 registros, processos que já existem ficavam fora da busca, o código
+    // achava que eram novos e tentava inserir de novo -> erro de duplicata, e a atualização
+    // (observações etc.) nunca rodava pra eles.
+    async function buscarTodosRegistrosControleMultas(colunas) {
+        var TAMANHO_PAGINA = 1000;
+        var todos = [];
+        var pagina = 0;
+        while (true) {
+            var inicio = pagina * TAMANHO_PAGINA;
+            var fim = inicio + TAMANHO_PAGINA - 1;
+            var { data, error } = await supabaseClient
+                .from('controle_multas_fazenda')
+                .select(colunas || '*')
+                .range(inicio, fim);
+            if (error) {
+                console.error('[Apuração de Dados] Erro ao carregar controle_multas_fazenda:', error.message);
+                return todos;
+            }
+            todos = todos.concat(data || []);
+            if (!data || data.length < TAMANHO_PAGINA) break;
+            pagina++;
+        }
+        return todos;
+    }
+
     // Processamento genérico: recebe o cabeçalho e as linhas já quebradas em colunas —
     // usado tanto para .csv (quebrado por parseLinhaCsv) quanto para .ods/.xlsx (via SheetJS).
     // `arrayBufferOds` só vem preenchido pra arquivos .ods — é o que permite detectar o
@@ -1899,7 +1935,7 @@
         //    Nº do Auto) -> ATUALIZA os campos que mudaram (ex: defesa/observações que foram
         //    complementadas, status, vencimento, nº do AR...), sem duplicar a linha.
         // 2) nenhum dos dois -> é um Auto novo mesmo, insere linha nova.
-        var { data: existentesData } = await supabaseClient.from('controle_multas_fazenda').select('*');
+        var existentesData = await buscarTodosRegistrosControleMultas('*');
         var existentesPorPA = {};
         (existentesData || []).forEach(function (r) {
             var pa = normalizarPA(r.numero_processo);
