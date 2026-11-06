@@ -312,15 +312,14 @@
     // PA, e cada PA conta como 1 processo só (não 1 por Auto).
     function calcularAgregadosApuracao(dataInicio, dataFim) {
         var linhasNoPeriodo = _apuracaoTodasMultas.filter(function (m) {
-            var d = m.data_envio_fazenda;
-            if (dataInicio && (!d || d < dataInicio)) return false;
-            if (dataFim && (!d || d > dataFim)) return false;
+            if (!passaFiltroPeriodoApuracao(m, dataInicio, dataFim)) return false;
             // Filtros globais (Área / Conferência) — os mesmos da tabela de baixo, mas aplicados
             // aqui também pra afetarem KPIs e gráficos igualmente. Status fica só na tabela de
             // baixo (não faz sentido pros gráficos por fiscal).
             if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return false;
             if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return false;
             if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return false;
+            if (!passaFiltroTipoProcesso(m)) return false;
             return true;
         });
 
@@ -932,6 +931,76 @@
     ];
     var _apuracaoFiltroArea = 'todos';
 
+    // Qual data os filtros de período (topo e tabela de baixo) usam: a data em que a multa
+    // foi de fato enviada/emitida pra Fazenda (data_envio_fazenda, filtro exato por dia) ou o
+    // ANO do processo (ano_processo) — não existe uma data completa do processo guardada na
+    // tabela, mas o ano já vem embutido no próprio número do PA ("150/2021", "2026/000150"),
+    // então dá pra filtrar por ele sem precisar de coluna nova no banco.
+    var _apuracaoCampoDataFiltro = 'data_envio_fazenda';
+    window.alterarCampoDataFiltroApuracao = function alterarCampoDataFiltroApuracao(campo) {
+        _apuracaoCampoDataFiltro = campo === 'ano_processo' ? 'ano_processo' : 'data_envio_fazenda';
+        atualizarApuracaoAposFiltro();
+    };
+
+    // Extrai só o ano embutido no número do PA, reaproveitando a mesma lógica de detecção de
+    // normalizarPA (reconhece tanto "150/2021" quanto "2026/000150").
+    function anoDoProcesso(numero) {
+        var pa = normalizarPA(numero);
+        var partes = pa.split('/');
+        return partes.length === 2 ? partes[1] : '';
+    }
+
+    // Filtro Tipo: separa Notificação Preliminar (processo que ainda não virou Auto de
+    // Infração) de Auto de Infração — o critério é o VALOR DA MULTA: enquanto é só NP a multa
+    // ainda não foi lavrada, então o valor vem zerado; quando virou AI o valor é > 0.
+    function processoEhAutoInfracao(m) {
+        return (Number(m.valor_multa) || 0) > 0;
+    }
+    var FILTROS_TIPO_PROCESSO = [
+        { valor: 'todos', label: 'Todos' },
+        { valor: 'notificacao_preliminar', label: 'Notificação Preliminar' },
+        { valor: 'auto_infracao', label: 'Auto de Infração' }
+    ];
+    var _apuracaoFiltroTipoProcesso = 'todos';
+
+    function passaFiltroTipoProcesso(m) {
+        if (_apuracaoFiltroTipoProcesso === 'notificacao_preliminar') return !processoEhAutoInfracao(m);
+        if (_apuracaoFiltroTipoProcesso === 'auto_infracao') return processoEhAutoInfracao(m);
+        return true;
+    }
+
+    function renderizarFiltroTipoProcessoMultas() {
+        var container = document.getElementById('apuracao-filtros-tipo-processo');
+        if (!container) return;
+        var html = '';
+        FILTROS_TIPO_PROCESSO.forEach(function (f) {
+            var ativo = _apuracaoFiltroTipoProcesso === f.valor;
+            html += '<button type="button" onclick="toggleFiltroTipoProcessoMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #7c3aed; background:' + (ativo ? '#7c3aed' : 'white') + '; color:' + (ativo ? '#fff' : '#7c3aed') + '; transition:0.15s;">' + f.label + '</button>';
+        });
+        container.innerHTML = html;
+    }
+    window.toggleFiltroTipoProcessoMulta = function toggleFiltroTipoProcessoMulta(valor) {
+        _apuracaoFiltroTipoProcesso = valor;
+        renderizarFiltroTipoProcessoMultas();
+        atualizarApuracaoAposFiltro();
+    };
+
+    // Filtro de período único, usado pelos KPIs/gráficos, pela contagem de status e pela
+    // tabela de baixo — respeita o campo escolhido no seletor "Filtrar por" do topo.
+    function passaFiltroPeriodoApuracao(m, dataInicio, dataFim) {
+        if (_apuracaoCampoDataFiltro === 'ano_processo') {
+            var ano = anoDoProcesso(m.numero_processo);
+            if (!ano) return false;
+            if (dataInicio && ano < dataInicio.slice(0, 4)) return false;
+            if (dataFim && ano > dataFim.slice(0, 4)) return false;
+            return true;
+        }
+        var d = m.data_envio_fazenda;
+        if (dataInicio && (!d || d < dataInicio)) return false;
+        if (dataFim && (!d || d > dataFim)) return false;
+        return true;
+    }
+
     function renderizarFiltroAreaMultas() {
         var container = document.getElementById('apuracao-filtros-area');
         if (!container) return;
@@ -1039,9 +1108,8 @@
             if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return;
             if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return;
             if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return;
-            var dEnvio = m.data_envio_fazenda;
-            if (dataInicioContagem && (!dEnvio || dEnvio < dataInicioContagem)) return;
-            if (dataFimContagem && (!dEnvio || dEnvio > dataFimContagem)) return;
+            if (!passaFiltroTipoProcesso(m)) return;
+            if (!passaFiltroPeriodoApuracao(m, dataInicioContagem, dataFimContagem)) return;
             var statusAtual = infoStatusMulta(m.status).valor;
             contagem[statusAtual] = (contagem[statusAtual] || 0) + 1;
         });
@@ -1085,19 +1153,19 @@
         var dataFimTabela = inputFimTabela ? inputFimTabela.value : '';
 
         var termoBusca = (document.getElementById('apuracao-multas-busca')?.value || '').trim().toLowerCase();
-        var diag = { status: 0, conferencia: 0, area: 0, data: 0, busca: 0 };
+        var diag = { status: 0, conferencia: 0, area: 0, tipo: 0, data: 0, busca: 0 };
         var linhas = _apuracaoTodasMultas.filter(function (m) {
             var statusAtual = infoStatusMulta(m.status).valor;
             if (!_apuracaoStatusAtivos.has(statusAtual)) { diag.status++; return false; }
             if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) { diag.conferencia++; return false; }
             if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) { diag.conferencia++; return false; }
             if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) { diag.area++; return false; }
-            // Mesmo período (Data de Envio para a Fazenda) usado nos KPIs/gráficos lá de cima —
-            // senão a planilha importada traz registros de vários anos misturados e o filtro de
-            // data não tem efeito nenhum na busca da tabela de baixo.
-            var dEnvio = m.data_envio_fazenda;
-            if (dataInicioTabela && (!dEnvio || dEnvio < dataInicioTabela)) { diag.data++; return false; }
-            if (dataFimTabela && (!dEnvio || dEnvio > dataFimTabela)) { diag.data++; return false; }
+            if (!passaFiltroTipoProcesso(m)) { diag.tipo++; return false; }
+            // Mesmo período e mesmo campo de data (Envio pra Fazenda ou Ano do Processo,
+            // conforme escolhido no seletor do topo) usado nos KPIs/gráficos lá de cima — senão
+            // a planilha importada traz registros de vários anos misturados e o filtro de data
+            // não tem efeito nenhum na busca da tabela de baixo.
+            if (!passaFiltroPeriodoApuracao(m, dataInicioTabela, dataFimTabela)) { diag.data++; return false; }
             if (!termoBusca) return true;
             var pa = (m.numero_processo || '').toLowerCase();
             var auto = (m.numero_auto_infracao || '').toLowerCase();
@@ -1114,13 +1182,14 @@
         renderizarFiltrosStatusMultas();
         renderizarFiltroConferenciaMultas();
         renderizarFiltroAreaMultas();
+        renderizarFiltroTipoProcessoMultas();
         atualizarIconesOrdenacaoMultas();
 
         var resultadoFiltro = calcularLinhasFiltradasMultas();
         var linhasFiltradas = resultadoFiltro.linhas;
         var _diag = resultadoFiltro.diag;
 
-        console.log('[Apuração de Dados] Tabela de baixo: ' + _apuracaoTodasMultas.length + ' carregado(s) no total, ' + linhasFiltradas.length + ' após filtros. Excluídos por -> status:' + _diag.status + ' conferência:' + _diag.conferencia + ' área:' + _diag.area + ' data:' + _diag.data + ' busca:' + _diag.busca + '.');
+        console.log('[Apuração de Dados] Tabela de baixo: ' + _apuracaoTodasMultas.length + ' carregado(s) no total, ' + linhasFiltradas.length + ' após filtros. Excluídos por -> status:' + _diag.status + ' conferência:' + _diag.conferencia + ' área:' + _diag.area + ' tipo:' + _diag.tipo + ' data:' + _diag.data + ' busca:' + _diag.busca + '.');
 
         if (_apuracaoSortColuna) {
             var colunaAtiva = COLUNAS_TABELA_MULTAS.find(function (c) { return c.chave === _apuracaoSortColuna; });

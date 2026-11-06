@@ -98,10 +98,22 @@ function nivelDoProcessoEhDaNP(dadosProc, possuiDecreto) {
     return !processoNasceuNoAuto(dadosProc, possuiDecreto);
 }
 
+// No Fluxograma (etapa.js/salvarEtapa16/avancarEtapa16), `etapa16.data_recebimento` é
+// gravado em TODA tentativa — sucesso ou não — porque é o mesmo campo do formulário que o
+// fiscal preenche nos dois casos. Só `data_recebimento_proprietario` é confirmada de
+// verdade: ela só é escrita por registrarDataRecebimentoAR, chamada exclusivamente quando
+// `notificacao_efetivada === 'sim'`. Então, se a última tentativa registrada foi SEM
+// sucesso (retorno_sem_sucesso === 'sim' ou notificacao_efetivada === 'nao') e ainda não
+// existe data_recebimento_proprietario, NÃO cai pro fallback de data_recebimento — senão a
+// data de uma tentativa que nem chegou ao proprietário dispararia a contagem do prazo por
+// engano.
 function montarInfoAR(etapa16) {
+    const retornouSemSucesso = etapa16.retorno_sem_sucesso === 'sim' || etapa16.notificacao_efetivada === 'nao';
+    const dataConfirmada = etapa16.data_recebimento_proprietario
+        || (!retornouSemSucesso ? etapa16.data_recebimento : '');
     return {
         numero_ar: etapa16.numero_ar || '',
-        data_recebimento_ar: etapa16.data_recebimento_proprietario || etapa16.data_recebimento || ''
+        data_recebimento_ar: dataConfirmada || ''
     };
 }
 

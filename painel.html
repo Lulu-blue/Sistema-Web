@@ -2709,6 +2709,13 @@
                     </div>
                     <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
                         <div>
+                            <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Filtrar por:</label>
+                            <select id="apuracao-filtro-campo-data" onchange="if(typeof alterarCampoDataFiltroApuracao==='function') alterarCampoDataFiltroApuracao(this.value);" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#f8fafc;">
+                                <option value="data_envio_fazenda">Data de Emissão da Multa</option>
+                                <option value="ano_processo">Ano do Processo (pelo nº do PA)</option>
+                            </select>
+                        </div>
+                        <div>
                             <label style="display:block; font-size:12px; color:#64748b; margin-bottom:3px;">Ano:</label>
                             <select id="apuracao-filtro-ano" onchange="if(typeof aplicarFiltroAnoApuracao==='function') aplicarFiltroAnoApuracao(this.value);" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#f8fafc;">
                                 <option value="">Personalizado</option>
@@ -2725,9 +2732,11 @@
                     </div>
                 </div>
 
-                <!-- Filtros globais (Área/Conferência): afetam KPIs, os dois gráficos de barra, a pizza,
-                     o detalhamento por fiscal E a tabela de Controle de Multas lá embaixo. O filtro de
-                     Status fica só na tabela de Controle de Multas (lá embaixo, perto da busca). -->
+                <!-- Filtros globais (Área/Conferência/Tipo): afetam KPIs, os dois gráficos de barra, a
+                     pizza, o detalhamento por fiscal E a tabela de Controle de Multas lá embaixo. O
+                     filtro de Status fica só na tabela de Controle de Multas (lá embaixo, perto da
+                     busca). Tipo separa Notificação Preliminar (sem Nº de Auto ainda) de Auto de
+                     Infração (já tem Nº de Auto). -->
                 <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 20px; margin-bottom:20px;">
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Área:</span>
@@ -2736,6 +2745,10 @@
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Conferência:</span>
                         <div id="apuracao-filtros-conferencia" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.03em;">Tipo:</span>
+                        <div id="apuracao-filtros-tipo-processo" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
                     </div>
                 </div>
 
