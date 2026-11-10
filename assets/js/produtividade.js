@@ -6858,6 +6858,11 @@ async function abrirEditorAutoInfracaoAmbiental() {
         const editor = document.getElementById('editor-texto');
         if (editor) editor.innerHTML = htmlPreview;
 
+        // Esconde o formulário antes de abrir o editor — faltava aqui (as outras categorias já
+        // faziam isso), por isso o editor ficava sobreposto pelo formulário.
+        const overlayForm = document.getElementById('modal-produtividade');
+        if (overlayForm) overlayForm.classList.remove('ativo');
+
         // Abre o modal do editor
         const modal = document.getElementById('modal-editor-documento');
         if (modal) modal.style.display = 'flex';
@@ -8080,6 +8085,18 @@ async function fecharEditorDocumento() {
     document.getElementById('modal-produtividade').classList.add('ativo');
 }
 
+// Corrida contra um limite de tempo: nem html2pdf nem o cliente do Supabase têm timeout
+// próprio, então uma trava de rede (ou travamento silencioso do próprio html2pdf) fazia o
+// "Baixar Word/PDF" ficar preso em "Carregando..." pra sempre — sem erro, sem alerta, e a
+// pontuação/anexo nunca eram salvos. Isso não cancela a operação original (ela continua
+// rodando em segundo plano), só garante que a tela sempre dê um retorno claro ao usuário.
+function comLimiteDeTempo(promessa, ms, mensagem) {
+    return Promise.race([
+        promessa,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(mensagem)), ms))
+    ]);
+}
+
 async function baixarDocumentoWord() {
     const btnDown = document.querySelector('#modal-editor-documento .btn-salvar');
     const oldText = btnDown ? btnDown.textContent : 'Baixar Word / PDF';
@@ -8193,16 +8210,28 @@ async function baixarDocumentoWord() {
             html2canvas: { scale: 2 },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-        const blobPdf = await html2pdf().set(opt).from(editor).output('blob');
+        const blobPdf = await comLimiteDeTempo(
+            html2pdf().set(opt).from(editor).output('blob'),
+            90000,
+            'A geração do PDF demorou demais (mais de 90s) e foi interrompida. Tente novamente — se persistir, o documento pode estar grande demais ou o navegador travou nessa etapa.'
+        );
         const filenameSafe = `${nomeArquivo}.pdf`;
 
         // Se há rascunho ativo, finaliza-o (anexo + pontuação). Senão, usa fluxo antigo.
         let usouRascunho = false;
         if (rascunhoDocumento && rascunhoDocumento.categoria_id === catId) {
-            await finalizarDocumentoComAnexo(blobPdf, filenameSafe);
+            await comLimiteDeTempo(
+                finalizarDocumentoComAnexo(blobPdf, filenameSafe),
+                90000,
+                'O salvamento do anexo e da pontuação demorou demais (mais de 90s) e foi interrompido. A operação pode ter continuado em segundo plano — confira o Histórico antes de tentar de novo, pra não duplicar.'
+            );
             usouRascunho = true;
         } else {
-            await salvarRegistro(blobPdf, filenameSafe);
+            await comLimiteDeTempo(
+                salvarRegistro(blobPdf, filenameSafe),
+                90000,
+                'O salvamento demorou demais (mais de 90s) e foi interrompido. A operação pode ter continuado em segundo plano — confira o Histórico antes de tentar de novo, pra não duplicar.'
+            );
         }
         fecharEditorDocumento(); // fecha o frame do documento
         fecharModalProdutividade(); // fecha o formulário pai imediatamente
@@ -8226,7 +8255,11 @@ async function baixarDocumentoWord() {
         }
     } catch (err) {
         console.error(err);
-        alert('O DOCX/PDF foi gerado, mas ocorreu um erro ao salvar o Histórico e Storage.');
+        // Mostra o motivo real (ex: erro do Cloudinary por tamanho/formato do PDF) em vez de
+        // um aviso genérico — sem isso, a pontuação e o anexo ficam travados em 0/vazio (o
+        // registro já tinha sido criado como rascunho antes deste passo) e ninguém descobre
+        // o motivo.
+        alert('O DOCX/PDF foi gerado, mas ocorreu um erro ao salvar o Histórico e Storage — a pontuação e o anexo NÃO foram salvos.\n\nMotivo: ' + (err && err.message ? err.message : 'desconhecido') + '\n\nTente gerar o documento de novo. Se o erro persistir, avise o suporte com essa mensagem.');
     } finally {
         if (btnDown) {
             btnDown.textContent = oldText;

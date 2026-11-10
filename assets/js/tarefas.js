@@ -6,6 +6,7 @@ var calendarioAnoAtual = new Date().getFullYear();
 var eventosMesCache = [];
 var tarefasCache = [];
 var subtarefasCache = {};
+var _tarefasTermoBusca = '';
 var userRoleGlobal = '';
 var userIdGlobal = '';
 var ehGerenteKanban = false;
@@ -391,7 +392,7 @@ async function carregarEventos() {
                 htmlCard += '</div>';
                 htmlCard += '<div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.85rem;">';
                 htmlCard += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-                htmlCard += 'Prazo: ' + (dataFimObj ? dataFimObj.toLocaleDateString('pt-BR') : dataObj.toLocaleDateString('pt-BR'));
+                htmlCard += 'Prazo: ' + (dataFimObj ? formatarDataBRComAno4Digitos(dataFimObj) : formatarDataBRComAno4Digitos(dataObj));
                 htmlCard += statusObj.badge;
                 htmlCard += '</div>';
                 htmlCard += '<div style="color: #94a3b8; font-size: 0.8rem; font-style: italic;">Resp: ' + resp + '</div>';
@@ -914,14 +915,6 @@ async function carregarTarefas() {
             }
         });
 
-        var hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-
-        var atrasadas = [];
-        var pendentes = [];
-        var emProgresso = [];
-        var concluidas = [];
-
         // Garantir que temos o role atualizado
         if (!userRoleGlobal || !userIdGlobal) {
             try {
@@ -972,30 +965,10 @@ async function carregarTarefas() {
             t._ehMinhaViaSub = !!ehMinhaViaSubMap[t.id];
             t._minhasSubIds = minhasSubIds;
             t._nomeCriador = criadorMap[t.criado_por] || '';
-
-            if (!tarefaVisivelParaUsuario(t)) return;
-
-            if (t.status === 'concluida') {
-                var dataConclusao = new Date(lastRespDateMap[t.id] || t.created_at);
-                var diffTempo = hoje - dataConclusao;
-                var diasPassados = Math.floor(diffTempo / (1000 * 60 * 60 * 24));
-
-                if (diasPassados <= 30) {
-                    concluidas.push(t);
-                }
-            } else if (t.prazo && new Date(t.prazo) < hoje) {
-                atrasadas.push(t);
-            } else if (t.status === 'em_progresso') {
-                emProgresso.push(t);
-            } else {
-                pendentes.push(t);
-            }
+            t._dataConclusaoRef = lastRespDateMap[t.id] || t.created_at;
         });
 
-        renderizarColunaTarefas('coluna-atrasadas', atrasadas, '#ef4444', 'Atrasadas');
-        renderizarColunaTarefas('coluna-pendentes', pendentes, '#f59e0b', 'Sem Movimentação');
-        renderizarColunaTarefas('coluna-em-progresso', emProgresso, '#3b82f6', 'Em Progresso');
-        renderizarColunaTarefas('coluna-concluidas', concluidas, '#10b981', 'Concluídas');
+        renderizarKanbanTarefas();
 
         // Atualiza calendário de tarefas
         renderizarCalendarioTarefas();
@@ -1210,12 +1183,26 @@ function renderizarTarefasDoDia(dataStr) {
     secao.style.display = 'block';
 }
 
+// toLocaleDateString('pt-BR') encurta ano < 1000 pra 2 dígitos (ex: ano 26 digitado por
+// engano em vez de 2026 vira "26" em vez de "0026") — usada em todo lugar que mostra o
+// prazo de uma tarefa a partir de um Date já pronto, pra erro de digitação no ano ficar
+// visível em vez de se disfarçar de prazo normal de 2 dígitos.
+function formatarDataBRComAno4Digitos(d) {
+    if (!d || isNaN(d.getTime())) return '-';
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getFullYear()).padStart(4, '0');
+}
+
 function formatarDataBRTarefa(dataStr) {
     if (!dataStr) return '-';
     // Garante que só usamos a parte da data (YYYY-MM-DD) para evitar Invalid Date
     var dataLimpa = dataStr.substring(0, 10);
     var d = new Date(dataLimpa + 'T00:00:00');
-    return d.toLocaleDateString('pt-BR');
+    if (isNaN(d.getTime())) return '-';
+    // toLocaleDateString encurta ano < 1000 pra 2 dígitos (ex: ano 26 -> "26" em vez de
+    // "0026") — formata manualmente pra manter sempre 4 dígitos, mesmo com erro de
+    // digitação no ano (ex: alguém digitou "26" em vez de "2026"), pra isso ficar visível
+    // em vez de passar por um prazo normal qualquer.
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getFullYear()).padStart(4, '0');
 }
 
 function escapeHtmlTarefa(text) {
@@ -1238,6 +1225,67 @@ function sanitizarNomeArquivo(nome) {
     var limpo = semEspacos.replace(/[^a-zA-Z0-9_\-.]/g, '');
     // Evita nome vazio
     return limpo || 'arquivo';
+}
+
+// ==========================================
+// BUSCA (Tarefas Atribuídas)
+// ==========================================
+function normalizarTextoTarefaBusca(s) {
+    return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function tarefaBateBusca(t, termoNormalizado) {
+    if (!termoNormalizado) return true;
+    var partes = [t.titulo, t.descricao, t._nomeCriador]
+        .concat((t._responsaveis || []).map(function (r) { return r.name; }));
+    var alvo = normalizarTextoTarefaBusca(partes.join(' '));
+    return alvo.indexOf(termoNormalizado) !== -1;
+}
+
+window.filtrarTarefasBusca = function filtrarTarefasBusca(valor) {
+    _tarefasTermoBusca = valor || '';
+    renderizarKanbanTarefas();
+};
+
+// Reclassifica as tarefas já carregadas (tarefasCache, já enriquecidas com responsáveis/
+// subtarefas/etc. em carregarTarefas) nas 4 colunas do Kanban, aplicando visibilidade e o
+// termo de busca — sem precisar ir ao banco de novo, pra responder rápido a cada letra
+// digitada.
+function renderizarKanbanTarefas() {
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    var termo = normalizarTextoTarefaBusca((_tarefasTermoBusca || '').trim());
+
+    var atrasadas = [];
+    var pendentes = [];
+    var emProgresso = [];
+    var concluidas = [];
+
+    tarefasCache.forEach(function (t) {
+        if (!tarefaVisivelParaUsuario(t)) return;
+        if (!tarefaBateBusca(t, termo)) return;
+
+        if (t.status === 'concluida') {
+            var dataConclusao = new Date(t._dataConclusaoRef);
+            var diffTempo = hoje - dataConclusao;
+            var diasPassados = Math.floor(diffTempo / (1000 * 60 * 60 * 24));
+
+            if (diasPassados <= 30) {
+                concluidas.push(t);
+            }
+        } else if (t.prazo && new Date(t.prazo) < hoje) {
+            atrasadas.push(t);
+        } else if (t.status === 'em_progresso') {
+            emProgresso.push(t);
+        } else {
+            pendentes.push(t);
+        }
+    });
+
+    renderizarColunaTarefas('coluna-atrasadas', atrasadas, '#ef4444', 'Atrasadas');
+    renderizarColunaTarefas('coluna-pendentes', pendentes, '#f59e0b', 'Sem Movimentação');
+    renderizarColunaTarefas('coluna-em-progresso', emProgresso, '#3b82f6', 'Em Progresso');
+    renderizarColunaTarefas('coluna-concluidas', concluidas, '#10b981', 'Concluídas');
 }
 
 function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
@@ -1298,7 +1346,7 @@ function renderizarColunaTarefas(containerId, tarefas, cor, titulo) {
 
         // Prazo
         if (prazoDt) {
-            var prazoStr = String(prazoDt.getDate()).padStart(2, '0') + '/' + String(prazoDt.getMonth() + 1).padStart(2, '0') + '/' + prazoDt.getFullYear();
+            var prazoStr = String(prazoDt.getDate()).padStart(2, '0') + '/' + String(prazoDt.getMonth() + 1).padStart(2, '0') + '/' + String(prazoDt.getFullYear()).padStart(4, '0');
             var diasRestantes = Math.ceil((prazoDt - hoje) / (1000 * 60 * 60 * 24));
             var prazoColor = atrasada ? '#ef4444' : (diasRestantes <= 2 ? '#f59e0b' : '#64748b');
             var prazoLabel = atrasada ? 'ATRASADA (' + Math.abs(diasRestantes) + 'd)' : (diasRestantes === 0 ? 'Hoje' : prazoStr);
@@ -2164,12 +2212,12 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
                 var arrAntSub = [];
                 try { arrAntSub = typeof sub.prazo_anterior === 'string' && sub.prazo_anterior.startsWith('[') ? JSON.parse(sub.prazo_anterior) : (Array.isArray(sub.prazo_anterior) ? sub.prazo_anterior : [sub.prazo_anterior]); } catch (e) { arrAntSub = [sub.prazo_anterior]; }
                 if (arrAntSub && arrAntSub.length > 0) {
-                    var strAntigosSub = arrAntSub.map(function (d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    var strAntigosSub = arrAntSub.map(function (d) { return '<s>' + formatarDataBRComAno4Digitos(new Date(d)) + '</s>'; }).join(', ');
                     h += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigosSub + '</div>';
                 }
             }
             if (pDtSub) {
-                h += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasadaSub ? '#ef4444' : '#1e293b') + ';">' + pDtSub.toLocaleDateString('pt-BR') + (pAtrasadaSub ? ' ⚠ Atrasada' : '') + '</div>';
+                h += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasadaSub ? '#ef4444' : '#1e293b') + ';">' + formatarDataBRComAno4Digitos(pDtSub) + (pAtrasadaSub ? ' ⚠ Atrasada' : '') + '</div>';
             }
             h += '</div>';
             h += '</div>';
@@ -2178,7 +2226,7 @@ async function abrirDetalheSubtarefa(subId, tarefaPaiId) {
                 var pSolSub = new Date(sub.prazo_solicitado + 'T12:00:00');
                 h += '<div style="margin-top:10px; padding:10px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px;">';
                 h += '<div style="font-size:13px; font-weight:600; color:#92400e; margin-bottom:4px;">⏳ Solicitação de extensão pendente</div>';
-                h += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + pSolSub.toLocaleDateString('pt-BR') + '</strong>';
+                h += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + formatarDataBRComAno4Digitos(pSolSub) + '</strong>';
                 if (sub.prazo_solicitado_nome) h += ' por ' + escapeHtmlTarefa(sub.prazo_solicitado_nome);
                 h += '</div>';
                 if (sub.prazo_solicitado_motivo) h += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(sub.prazo_solicitado_motivo) + '</div>';
@@ -2403,7 +2451,7 @@ async function solicitarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
         }
 
         // Formatar data solicitada para exibição
-        var dataExibicao = new Date(novaData.data + 'T12:00:00').toLocaleDateString('pt-BR');
+        var dataExibicao = formatarDataBRComAno4Digitos(new Date(novaData.data + 'T12:00:00'));
         var tituloTarefa = tarefa ? tarefa.titulo : 'tarefa';
 
         // Enviar notificações
@@ -2464,7 +2512,7 @@ async function aprovarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
             arrayAntigos.push(tarefa.prazo);
         }
 
-        var dataExibicao = new Date(tarefa.prazo_solicitado + 'T12:00:00').toLocaleDateString('pt-BR');
+        var dataExibicao = formatarDataBRComAno4Digitos(new Date(tarefa.prazo_solicitado + 'T12:00:00'));
         var { isConfirmed } = await Swal.fire({
             title: 'Aprovar extensão de prazo?',
             html: '<p style="color:#475569;">O prazo será alterado para <strong>' + dataExibicao + '</strong>.</p><p style="color:#94a3b8; font-size:13px;">O prazo anterior ficará registrado no histórico.</p>',
@@ -2590,7 +2638,7 @@ async function negarExtensaoPrazo(tarefaId, tarefaPaiId, ehSubtarefa) {
             tarefa_id: tId,
             user_id: userIdGlobal,
             user_name: 'Sistema',
-            texto: '❌ Solicitação de alteração de prazo da ' + (ehSubtarefa ? 'subtarefa "' + (tarefa ? tarefa.titulo : '') + '"' : 'tarefa') + ' para ' + (tarefa && tarefa.prazo_solicitado ? new Date(tarefa.prazo_solicitado + 'T12:00:00').toLocaleDateString('pt-BR') : '') + ' foi recusada por ' + nomeRecusador + '.'
+            texto: '❌ Solicitação de alteração de prazo da ' + (ehSubtarefa ? 'subtarefa "' + (tarefa ? tarefa.titulo : '') + '"' : 'tarefa') + ' para ' + (tarefa && tarefa.prazo_solicitado ? formatarDataBRComAno4Digitos(new Date(tarefa.prazo_solicitado + 'T12:00:00')) : '') + ' foi recusada por ' + nomeRecusador + '.'
         });
 
         Swal.fire({ icon: 'info', title: 'Solicitação recusada.', timer: 1500, showConfirmButton: false });
@@ -3001,12 +3049,12 @@ async function abrirDetalheTarefa(id) {
                 var arrAnt = [];
                 try { arrAnt = typeof tarefa.prazo_anterior === 'string' && tarefa.prazo_anterior.startsWith('[') ? JSON.parse(tarefa.prazo_anterior) : (Array.isArray(tarefa.prazo_anterior) ? tarefa.prazo_anterior : [tarefa.prazo_anterior]); } catch (e) { arrAnt = [tarefa.prazo_anterior]; }
                 if (arrAnt && arrAnt.length > 0) {
-                    var strAntigos = arrAnt.map(function (d) { return '<s>' + new Date(d).toLocaleDateString('pt-BR') + '</s>'; }).join(', ');
+                    var strAntigos = arrAnt.map(function (d) { return '<s>' + formatarDataBRComAno4Digitos(new Date(d)) + '</s>'; }).join(', ');
                     html += '<div style="font-size:11px; color:#94a3b8; margin-bottom:2px;" title="Prazos anteriores">' + strAntigos + '</div>';
                 }
             }
             if (pDt) {
-                html += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasada ? '#ef4444' : '#1e293b') + ';">' + pDt.toLocaleDateString('pt-BR') + (pAtrasada ? ' ⚠ Atrasada' : '') + '</div>';
+                html += '<div style="font-size:16px; font-weight:700; color:' + (pAtrasada ? '#ef4444' : '#1e293b') + ';">' + formatarDataBRComAno4Digitos(pDt) + (pAtrasada ? ' ⚠ Atrasada' : '') + '</div>';
             }
             html += '</div>'; // info prazo
             html += '</div>'; // flex
@@ -3015,7 +3063,7 @@ async function abrirDetalheTarefa(id) {
                 var pSol = new Date(tarefa.prazo_solicitado + 'T12:00:00');
                 html += '<div style="margin-top:10px; padding:10px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px;">';
                 html += '<div style="font-size:13px; font-weight:600; color:#92400e; margin-bottom:4px;">⏳ Solicitação de extensão pendente</div>';
-                html += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + pSol.toLocaleDateString('pt-BR') + '</strong>';
+                html += '<div style="font-size:13px; color:#78350f;">Novo prazo solicitado: <strong>' + formatarDataBRComAno4Digitos(pSol) + '</strong>';
                 if (tarefa.prazo_solicitado_nome) html += ' por ' + escapeHtmlTarefa(tarefa.prazo_solicitado_nome);
                 html += '</div>';
                 if (tarefa.prazo_solicitado_motivo) html += '<div style="font-size:12px; color:#92400e; margin-top:4px;">Motivo: ' + escapeHtmlTarefa(tarefa.prazo_solicitado_motivo) + '</div>';
@@ -4795,7 +4843,7 @@ async function carregarMinhasTarefasModulo() {
             html += '<tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" onclick="abrirDetalheTarefa(\'' + t.id + '\')">';
             html += '<td style="padding:12px; font-weight:600; color:#0c3e2b;">' + (t.evento ? t.evento.titulo : 'Sem Nome') + '</td>';
             html += '<td style="padding:12px; color:#1e293b;">' + t.titulo + '</td>';
-            html += '<td style="text-align:center; padding:12px; color:' + (atrasada ? '#ef4444' : '#64748b') + '; font-weight:' + (atrasada ? '700' : '400') + ';">' + (prazoDt ? prazoDt.toLocaleDateString('pt-BR') : '—') + '</td>';
+            html += '<td style="text-align:center; padding:12px; color:' + (atrasada ? '#ef4444' : '#64748b') + '; font-weight:' + (atrasada ? '700' : '400') + ';">' + (prazoDt ? formatarDataBRComAno4Digitos(prazoDt) : '—') + '</td>';
             html += '<td style="text-align:center; padding:12px;"><span style="background:' + corStatus + '15; color:' + corStatus + '; padding:4px 10px; border-radius:12px; font-weight:600; font-size:13px;">' + labelStatus + '</span></td>';
             html += '</tr>';
         });

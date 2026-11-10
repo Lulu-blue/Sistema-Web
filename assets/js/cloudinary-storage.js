@@ -22,10 +22,30 @@ async function cloudinaryUpload(file, folder, publicId) {
     if (folder) formData.append('folder', folder);
     if (publicId) formData.append('public_id', publicId);
 
-    const response = await fetch(
-        'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload',
-        { method: 'POST', body: formData }
-    );
+    // fetch() não tem timeout por padrão — se a rede engasgar (comum com PDFs maiores, como o
+    // do Auto de Infração Ambiental, que embute uma imagem de cabeçalho), a requisição ficava
+    // pendurada pra sempre: nunca lançava erro, nunca mostrava alerta, e quem chamou (ex:
+    // finalizarDocumentoComAnexo) nunca terminava de rodar — a pontuação/anexo ficavam parados
+    // sem nenhum aviso. 60s é generoso pra um PDF de poucos MB numa conexão ruim; depois disso,
+    // melhor falhar com um erro claro do que travar a tela silenciosamente.
+    const TIMEOUT_MS = 60000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    let response;
+    try {
+        response = await fetch(
+            'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload',
+            { method: 'POST', body: formData, signal: controller.signal }
+        );
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error('O upload do anexo demorou demais e foi cancelado (mais de ' + (TIMEOUT_MS / 1000) + 's) — confira sua conexão e tente novamente.');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
