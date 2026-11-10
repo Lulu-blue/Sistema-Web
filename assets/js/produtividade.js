@@ -69,8 +69,12 @@ function isSecretario(role) {
 // Cargo de desenvolvimento/teste: pode excluir QUALQUER registro do Histórico Geral (não só
 // os próprios), pra limpar dados de teste sem deixar número sequencial "preso" — a devolução
 // pra numeros_disponiveis já acontece normalmente em excluirRegistroHistGeral.
+// Usa window.userRoleOriginal (cargo bruto, gravado ANTES do alias em painel.js/tarefas.js) em
+// vez de userRoleGlobal, porque esse já foi trocado por 'Secretário(a)' pro resto do painel
+// enxergar as mesmas telas/permissões — sem o original, "dev" nunca bateria aqui.
 function isDev(role) {
-    return (role || '').toLowerCase().includes('dev');
+    var alvo = role || window.userRoleOriginal || '';
+    return (alvo || '').toLowerCase().includes('dev');
 }
 // --- FUNÇÕES AUXILIARES GERAIS ---
 function debounce(func, wait) {
@@ -4725,7 +4729,7 @@ async function abrirDetalhesAdminHist(id) {
         roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura');
     const isDono = reg.user_id === userIdAtual;
-    const isDevRole = isDev(window.userRoleGlobal);
+    const isDevRole = isDev(window.userRoleOriginal);
 
     const vEntrada = campos.data_entrada || '';
     const vVencimento = campos.data_vencimento || '';
@@ -5317,7 +5321,7 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         }
 
         const { data: { user } } = await getAuthUser();
-        if (reg.user_id !== user.id && !isDev(window.userRoleGlobal)) {
+        if (reg.user_id !== user.id && !isDev(window.userRoleOriginal)) {
             alert('Você só pode excluir registros criados por você.');
             return;
         }
@@ -7415,6 +7419,9 @@ async function abrirEditorOficio() {
         const editor = document.getElementById('editor-texto');
         editor.innerHTML = htmlTemplate;
 
+        // Esconde o formulário antes de abrir o editor — faltava aqui (mesmo bug já corrigido
+        // no Auto de Infração Ambiental), por isso o editor ficava sobreposto pelo formulário.
+        document.getElementById('modal-produtividade').classList.remove('ativo');
         document.getElementById('modal-editor-documento').style.display = 'flex';
 
     } catch (error) {

@@ -467,7 +467,8 @@
         var ehDiretorMA = r.indexOf('diretor') !== -1 && r.indexOf('meio') !== -1 && r.indexOf('ambiente') !== -1;
         var ehGerentePosturas = r.indexOf('gerente') !== -1 && r.indexOf('postura') !== -1;
         var ehAdminPosturas = (r.indexOf('administrativ') !== -1 || r.indexOf('administrador') !== -1) && r.indexOf('postura') !== -1;
-        return ehSecretario || ehDiretorMA || ehGerentePosturas || ehAdminPosturas;
+        var ehDev = r.indexOf('dev') !== -1; // cargo de teste/desenvolvimento enxerga como Secretário(a)
+        return ehSecretario || ehDiretorMA || ehGerentePosturas || ehAdminPosturas || ehDev;
     }
 
     var _apuracaoSincronizacaoLoginEmAndamento = false;

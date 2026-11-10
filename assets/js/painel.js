@@ -260,6 +260,14 @@ async function carregarDadosIniciais() {
             if (inputCargo) inputCargo.value = (perfil.role || '').toUpperCase();
 
             var userRole = perfil ? perfil.role : '';
+            // Guarda o cargo de verdade ANTES do alias abaixo — quem precisa saber se é
+            // realmente "dev" (ex: permissão de excluir registro de qualquer fiscal) não pode
+            // depender de userRoleGlobal, que a partir daqui vira 'Secretário(a)'.
+            window.userRoleOriginal = userRole;
+            // Cargo "dev" (teste/desenvolvimento) enxerga o painel inteiro como Secretário(a) —
+            // alias só na variável usada pras permissões; os campos de exibição (nome do cargo
+            // na tela, no perfil) continuam mostrando "dev" de verdade.
+            if ((userRole || '').toLowerCase().includes('dev')) userRole = 'Secretário(a)';
             window.userRoleGlobal = userRole;
             window.userIdGlobal = user.id;
             window.userNameGlobal = perfil ? perfil.full_name || '' : '';

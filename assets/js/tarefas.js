@@ -51,6 +51,9 @@ async function carregarModuloTarefas() {
                 userIdGlobal = user.id;
                 var { data: perfil } = await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
                 userRoleGlobal = perfil ? perfil.role : '';
+                window.userRoleOriginal = userRoleGlobal;
+                // Cargo "dev" enxerga tudo como Secretário(a) — ver mesmo alias em painel.js.
+                if ((userRoleGlobal || '').toLowerCase().includes('dev')) userRoleGlobal = 'Secretário(a)';
             }
 
             // Ocultar sub-abas para Fiscais e equipe do Gerente de Regularização Ambiental
@@ -924,6 +927,9 @@ async function carregarTarefas() {
                     userIdGlobal = uCheck.id;
                     var { data: pCheck } = await supabaseClient.from('profiles').select('role').eq('id', uCheck.id).maybeSingle();
                     userRoleGlobal = pCheck ? pCheck.role : '';
+                    window.userRoleOriginal = userRoleGlobal;
+                    // Cargo "dev" enxerga tudo como Secretário(a) — ver mesmo alias em painel.js.
+                    if ((userRoleGlobal || '').toLowerCase().includes('dev')) userRoleGlobal = 'Secretário(a)';
                 }
             } catch (e) { console.error(e); }
         }
