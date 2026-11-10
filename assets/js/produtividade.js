@@ -65,6 +65,13 @@ function isDiretorOuSuperior(role) {
 function isSecretario(role) {
     return getNivelHierarquico(role) >= 3;
 }
+
+// Cargo de desenvolvimento/teste: pode excluir QUALQUER registro do Histórico Geral (não só
+// os próprios), pra limpar dados de teste sem deixar número sequencial "preso" — a devolução
+// pra numeros_disponiveis já acontece normalmente em excluirRegistroHistGeral.
+function isDev(role) {
+    return (role || '').toLowerCase().includes('dev');
+}
 // --- FUNÇÕES AUXILIARES GERAIS ---
 function debounce(func, wait) {
     let timeout;
@@ -4718,6 +4725,7 @@ async function abrirDetalhesAdminHist(id) {
         roleLowerRaw.includes('administrativo') && roleLowerRaw.includes('postura') ||
         roleLowerRaw.includes('administrador') && roleLowerRaw.includes('postura');
     const isDono = reg.user_id === userIdAtual;
+    const isDevRole = isDev(window.userRoleGlobal);
 
     const vEntrada = campos.data_entrada || '';
     const vVencimento = campos.data_vencimento || '';
@@ -4920,11 +4928,13 @@ async function abrirDetalhesAdminHist(id) {
         }
     }
 
-    // Botões extras para o dono (Excluir e Editar Dados)
+    // Botões extras para o dono (Excluir e Editar Dados) — cargo "dev" também pode excluir
+    // registros de qualquer fiscal, pra limpar dados de teste.
     let btsDono = '';
-    if (isDono) {
+    if (isDono || isDevRole) {
         btsDono += `<button onclick="excluirRegistroHistGeral('${reg.id}', '${reg.categoria_id}')" style="padding:12px 16px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; transition:0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'" title="Excluir Registro Permanente">🗑</button>`;
-
+    }
+    if (isDono) {
         // Botão editar disponível para todas as categorias (edição de campos sem gerar novo documento)
         btsDono += `<button onclick="editarRegistroHistoricoGeral('${reg.id}')" style="flex:1; padding:12px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; transition:0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">✏️ Editar Dados</button>`;
     }
@@ -5307,7 +5317,7 @@ async function excluirRegistroHistGeral(id, categoriaId) {
         }
 
         const { data: { user } } = await getAuthUser();
-        if (reg.user_id !== user.id) {
+        if (reg.user_id !== user.id && !isDev(window.userRoleGlobal)) {
             alert('Você só pode excluir registros criados por você.');
             return;
         }

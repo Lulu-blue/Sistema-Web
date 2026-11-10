@@ -81,6 +81,7 @@ body {
     z-index: 10;
     max-height: 100vh;
     overflow-y: auto;
+    position: relative;
 }
 
 /* Esconde scrollbar quando não é necessário */
@@ -245,6 +246,10 @@ h1 {
     color: var(--text-white);
     box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
     z-index: 10;
+    /* Âncora pro botão minimizar/expandir (.sidebar-toggle-desktop, position:absolute) — sem
+       isso ele escapava pro canto superior direito da PÁGINA inteira (sem ancestral com
+       position definido), ficando escondido atrás do DevTools quando aberto. */
+    position: relative;
 }
 
 /* --- BOTÕES COM EFEITO VIDRO --- */
