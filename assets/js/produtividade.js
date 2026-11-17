@@ -494,6 +494,17 @@ const CATEGORIAS = [
         ]
     },
     {
+        id: '16.10',
+        nome: 'Controle de Denúncias Online e Movimentação de Processo',
+        pontos: 8,
+        pontos_por_tipo: { 'Denúncia Online': 8, 'Movimentação de Processo': 10 },
+        campos: [
+            { nome: 'tipo', label: 'Tipo', tipo: 'select', obrigatorio: true, opcoes: ['Denúncia Online', 'Movimentação de Processo'] },
+            { nome: 'data', label: 'Data', tipo: 'date', obrigatorio: true },
+            { nome: 'n_referencia', label: 'Nº do Processo/Denúncia', tipo: 'text', obrigatorio: true }
+        ]
+    },
+    {
         id: '20',
         nome: 'Vistoria de Controle de Caçambas',
         pontos: 10,
@@ -977,6 +988,16 @@ function abrirFormulario(categoria) {
                     </div>
                 </div>
             `;
+        } else if (campo.nome === 'n_referencia' && categoria.id === '16.10') {
+            // Caso especial: Categoria 16.10 com múltiplos N° de Processo/Denúncia
+            inputHTML = `
+                <div id="container-denuncias" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div class="denuncia-item" style="display: flex; gap: 8px;">
+                        <input type="text" class="campo-denuncia-multi" placeholder="N° do Processo/Denúncia" required style="flex: 1;">
+                        <button type="button" class="btn-add-denuncia" onclick="adicionarCampoDenuncia()" style="background: #2ecc71; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">+</button>
+                    </div>
+                </div>
+            `;
         } else if (campo.tipo === 'imagens_com_legenda') {
             inputHTML = `
                 <div id="container-imagens-legenda" style="display: flex; flex-direction: column; gap: 10px;">
@@ -1242,6 +1263,24 @@ window.adicionarCampoProcesso = function () {
     div.querySelector('input').focus();
 };
 
+// --- FUNÇÃO PARA ADICIONAR CAMPO DE DENÚNCIA/PROCESSO (CATEGORIA 16.10) ---
+window.adicionarCampoDenuncia = function () {
+    const container = document.getElementById('container-denuncias');
+    if (!container) return;
+
+    const div = document.createElement('div');
+    div.className = 'denuncia-item';
+    div.style.display = 'flex';
+    div.style.gap = '8px';
+    div.style.marginTop = '8px';
+    div.innerHTML = `
+        <input type="text" class="campo-denuncia-multi" placeholder="N° do Processo/Denúncia" style="flex: 1;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 0 14px; cursor: pointer; font-weight: bold; font-size: 1.1rem; height: 42px;">×</button>
+    `;
+    container.appendChild(div);
+    div.querySelector('input').focus();
+};
+
 // =========================================================
 // SALVAR EDIÇÃO DE REGISTRO (ESPECÍFICO PARA NÃO AFETAR ANEXOS E PONTOS)
 // =========================================================
@@ -1318,6 +1357,27 @@ async function salvarEdicaoRegistro() {
                     todosPreenchidos = false;
                 } else {
                     novosCampos['_lista_processos'] = lista;
+                }
+                return;
+            }
+
+            if (categoriaAtual.id === '16.10' && campo.nome === 'n_referencia') {
+                const inputsMulti = document.querySelectorAll('.campo-denuncia-multi');
+                const lista = [];
+                inputsMulti.forEach(inp => {
+                    const val = inp.value.trim();
+                    if (val) {
+                        lista.push(val);
+                        inp.style.borderColor = '#e2e8f0';
+                    } else if (campo.obrigatorio && lista.length === 0) {
+                        inp.style.borderColor = '#ef4444';
+                    }
+                });
+
+                if (lista.length === 0 && campo.obrigatorio) {
+                    todosPreenchidos = false;
+                } else {
+                    novosCampos['_lista_denuncias'] = lista;
                 }
                 return;
             }
@@ -1549,6 +1609,28 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 todosPreenchidos = false;
             } else {
                 campos['_lista_processos'] = lista;
+            }
+            return;
+        }
+
+        // CASO ESPECIAL: Múltiplos N° de Processo/Denúncia (Categoria 16.10)
+        if (categoriaAtual.id === '16.10' && campo.nome === 'n_referencia') {
+            const inputsMulti = document.querySelectorAll('.campo-denuncia-multi');
+            const lista = [];
+            inputsMulti.forEach(inp => {
+                const val = inp.value.trim();
+                if (val) {
+                    lista.push(val);
+                    inp.style.borderColor = '#e2e8f0';
+                } else if (campo.obrigatorio && lista.length === 0) {
+                    inp.style.borderColor = '#ef4444';
+                }
+            });
+
+            if (lista.length === 0 && campo.obrigatorio) {
+                todosPreenchidos = false;
+            } else {
+                campos['_lista_denuncias'] = lista;
             }
             return;
         }
@@ -2760,6 +2842,24 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                         .from('registros_produtividade')
                         .insert(registrosMulti)
                         .select());
+                } else if (categoriaAtual.id === '16.10' && campos._lista_denuncias && campos._lista_denuncias.length > 1) {
+                    // MULTIPLOS INSERTS (Categoria 16.10)
+                    const registrosMulti = campos._lista_denuncias.map(ref => {
+                        const camposIndiv = { ...campos };
+                        delete camposIndiv._lista_denuncias;
+                        camposIndiv.n_referencia = ref;
+                        return {
+                            user_id: user.id,
+                            categoria_id: categoriaAtual.id,
+                            categoria_nome: categoriaAtual.nome,
+                            pontuacao: pontos,
+                            campos: camposIndiv
+                        };
+                    });
+                    ({ data, error } = await supabaseClient
+                        .from('registros_produtividade')
+                        .insert(registrosMulti)
+                        .select());
                 } else {
                     // INSERT NORMAL
                     const camposLimpos = { ...campos };
@@ -2770,6 +2870,10 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                     if (camposLimpos._lista_processos) {
                         camposLimpos.n_processo = camposLimpos._lista_processos[0];
                         delete camposLimpos._lista_processos;
+                    }
+                    if (camposLimpos._lista_denuncias) {
+                        camposLimpos.n_referencia = camposLimpos._lista_denuncias[0];
+                        delete camposLimpos._lista_denuncias;
                     }
                     ({ data, error } = await supabaseClient
                         .from('registros_produtividade')
@@ -2834,6 +2938,8 @@ async function salvarRegistro(blobManual = null, nomeManual = null) {
                 alert(`${campos._lista_licencas.length} registros salvos com sucesso! (${pontos * campos._lista_licencas.length} pontos no total)`);
             } else if (categoriaAtual.id === '10' && campos._lista_processos && campos._lista_processos.length > 1) {
                 alert(`${campos._lista_processos.length} registros salvos com sucesso! (${pontos * campos._lista_processos.length} pontos no total)`);
+            } else if (categoriaAtual.id === '16.10' && campos._lista_denuncias && campos._lista_denuncias.length > 1) {
+                alert(`${campos._lista_denuncias.length} registros salvos com sucesso! (${pontos * campos._lista_denuncias.length} pontos no total)`);
             } else if (categoriaAtual.id === '1.1') {
                 const startsWithAI = campos.n_notificacao && campos.n_notificacao.toUpperCase().startsWith('AI');
                 if (startsWithAI) {
@@ -7073,7 +7179,7 @@ async function abrirEditorAutoFiscalizacaoMeioAmbiente() {
 
         <table width="100%" border="0" cellspacing="0" cellpadding="7" style="border-collapse: collapse; margin-top: 20px;">
             <tr>
-                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">O não cumprimento do presente auto de fiscalização, sujeitará o infrator às penalidades previstas no <strong>${campos.penalidades}</strong>.</td>
+                <td style="border-bottom: 1px solid black; padding: 9px; text-align: justify;">N, sujeitará o infrator às penalidades previstas no <strong>${campos.penalidades}</strong>.</td>
             </tr>
         </table>
 
