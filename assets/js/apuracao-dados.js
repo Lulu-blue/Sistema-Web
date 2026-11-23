@@ -1295,7 +1295,7 @@
     // ignora a seleção de Status em si (senão um status desmarcado sempre mostraria 0).
     function contagemPorStatusMultas() {
         var contagem = {};
-        STATUS_MULTA_FAZENDA.forEach(function (s) { contagem[s.valor] = 0; });
+        STATUS_MULTA_FAZENDA.forEach(function (s) { contagem[s.valor] = { qtd: 0, valor: 0 }; });
         var inputInicioContagem = document.getElementById('apuracao-data-inicio');
         var inputFimContagem = document.getElementById('apuracao-data-fim');
         var dataInicioContagem = inputInicioContagem ? inputInicioContagem.value : '';
@@ -1307,7 +1307,9 @@
             if (!passaFiltroTipoProcesso(m)) return;
             if (!passaFiltroPeriodoApuracao(m, dataInicioContagem, dataFimContagem)) return;
             var statusAtual = infoStatusMulta(m.status).valor;
-            contagem[statusAtual] = (contagem[statusAtual] || 0) + 1;
+            if (!contagem[statusAtual]) contagem[statusAtual] = { qtd: 0, valor: 0 };
+            contagem[statusAtual].qtd++;
+            contagem[statusAtual].valor += parseValorBR(m.valor_multa);
         });
         return contagem;
     }
@@ -1322,7 +1324,8 @@
             html += '<span style="position:relative; display:inline-flex; align-items:center; margin-right:6px;">';
             html += '<button type="button" onclick="toggleFiltroStatusMulta(\'' + s.valor + '\')" style="display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:5px 14px 4px 10px; border-radius:12px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid ' + s.cor + '; background:' + (ativo ? s.cor : 'white') + '; color:' + (ativo ? '#fff' : s.cor) + '; transition:0.15s;">';
             html += '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:50%; background:' + (ativo ? '#fff' : s.cor) + '; flex-shrink:0;"></span>' + s.label + '</span>';
-            html += '<span style="font-size:10px; font-weight:700; opacity:0.8;">' + (contagem[s.valor] || 0) + '</span>';
+            var contagemStatus = contagem[s.valor] || { qtd: 0, valor: 0 };
+            html += '<span style="font-size:10px; font-weight:700; opacity:0.8;">' + contagemStatus.qtd + ' / ' + formatarMoeda(contagemStatus.valor) + '</span>';
             html += '</button>';
             html += '<input type="color" class="apuracao-cor-status-input" value="' + s.cor + '" title="Personalizar a cor de \'' + s.label + '\'" onclick="event.stopPropagation();" onchange="alterarCorStatusMulta(\'' + s.valor + '\', this.value)" style="position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px white, 0 0 0 3px ' + s.cor + '; cursor:pointer;">';
             html += '</span>';
