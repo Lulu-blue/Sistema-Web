@@ -83,6 +83,18 @@ function arDoNivelDoProcesso(dadosProc) {
     return (dadosProc && dadosProc.campos && dadosProc.campos.etapa16) || {};
 }
 
+function editalDoNivelDoProcesso(dadosProc) {
+    return (dadosProc && dadosProc.campos && dadosProc.campos.etapa17) || {};
+}
+
+// Data do Edital (Etapa 17) para contagem do prazo, quando o AR não encontrou o
+// proprietário: vale a data de PUBLICAÇÃO informada lá; editais antigos sem esse
+// campo contam pela data em que foram anexados.
+function dataEditalParaPrazo(etapa17) {
+    const valor = (etapa17 && (etapa17.data_publicacao_edital || etapa17.data_anexo_edital)) || '';
+    return valor ? String(valor).slice(0, 10) : '';
+}
+
 function processoNasceuNoAuto(dadosProc, possuiDecreto) {
     if (possuiDecreto === true) return true;
     const campos = (dadosProc && dadosProc.campos) || {};
@@ -107,10 +119,14 @@ function nivelDoProcessoEhDaNP(dadosProc, possuiDecreto) {
 // existe data_recebimento_proprietario, NÃO cai pro fallback de data_recebimento — senão a
 // data de uma tentativa que nem chegou ao proprietário dispararia a contagem do prazo por
 // engano.
-function montarInfoAR(etapa16) {
+function montarInfoAR(etapa16, etapa17) {
     const retornouSemSucesso = etapa16.retorno_sem_sucesso === 'sim' || etapa16.notificacao_efetivada === 'nao';
     const dataConfirmada = etapa16.data_recebimento_proprietario
-        || (!retornouSemSucesso ? etapa16.data_recebimento : '');
+        || (!retornouSemSucesso ? etapa16.data_recebimento : '')
+        // AR não encontrou o proprietário e nunca foi recebido de fato: só a
+        // publicação do Edital (Etapa 17) inicia o prazo. NUNCA a data da
+        // tentativa sem sucesso (etapa16.data_recebimento acima, já descartada).
+        || dataEditalParaPrazo(etapa17);
     return {
         numero_ar: etapa16.numero_ar || '',
         data_recebimento_ar: dataConfirmada || ''
@@ -120,20 +136,25 @@ function montarInfoAR(etapa16) {
 // AR da Notificação Preliminar
 function extrairInfoAR(dadosProc, possuiDecreto) {
     if (!nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
-    return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+    return montarInfoAR(arDoNivelDoProcesso(dadosProc), editalDoNivelDoProcesso(dadosProc));
 }
 
 // AR do Auto de Infração daquela notificação
 function extrairInfoARAuto(dadosProc, notificacaoId, possuiDecreto) {
     const ciclos = (dadosProc && dadosProc.campos && dadosProc.campos.ciclos_ar_auto) || {};
-    const cicloEspecifico = (notificacaoId && ciclos[notificacaoId] && ciclos[notificacaoId].etapa16) || {};
-    if (cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento) {
-        return montarInfoAR(cicloEspecifico);
+    const cicloAuto = (notificacaoId && ciclos[notificacaoId]) || {};
+    const cicloEspecifico = cicloAuto.etapa16 || {};
+    const editalEspecifico = cicloAuto.etapa17 || {};
+    const temDadosProprios = cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario
+        || cicloEspecifico.data_recebimento || editalEspecifico.data_publicacao_edital
+        || editalEspecifico.data_anexo_edital;
+    if (temDadosProprios) {
+        return montarInfoAR(cicloEspecifico, editalEspecifico);
     }
     // Sem ciclo próprio, o AR do nível do processo só serve ao Auto quando não é o da NP
     // (processo por decreto ou reincidência).
     if (nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
-    return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+    return montarInfoAR(arDoNivelDoProcesso(dadosProc), editalDoNivelDoProcesso(dadosProc));
 }
 
 // Ids dos anexos de AR que já pertencem ao AR de algum Auto, para não entrarem na

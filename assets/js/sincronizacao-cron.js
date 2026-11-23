@@ -945,7 +945,14 @@
             // ------------------------------------------------------------------
             // PASSO 1: Identificar o usuário no Fluxograma via Auth ID / CPF / Email (nunca por nome)
             // ------------------------------------------------------------------
-            const { data: { user: authUser } } = await semacClient.auth.getUser();
+            // Usa o helper global de painel.js (dedupe de getUser() via window.authUserPromise)
+            // em vez de chamar semacClient.auth.getUser() direto — isso dispara no mesmo
+            // instante em que executarSincronizacaoApuracaoDados (apuracao-dados.js) e
+            // carregarDadosIniciais (painel.js) também chamam getUser() no login, e chamadas
+            // concorrentes pro mesmo lock do Supabase Auth faziam uma "roubar" a trava da
+            // outra, derrubando o carregamento inicial com AbortError.
+            const authResult = window.getAuthUser ? await window.getAuthUser() : await semacClient.auth.getUser();
+            const authUser = authResult && authResult.data && authResult.data.user;
             if (!authUser) {
                 console.warn('[Sincronização SEMAC] Usuário não autenticado.');
                 return { sucesso: false, erro: 'Não autenticado' };
@@ -1305,6 +1312,17 @@
                 return dadosProc?.campos?.etapa16 || {};
             }
 
+            function editalDoNivelDoProcesso(dadosProc) {
+                return dadosProc?.campos?.etapa17 || {};
+            }
+
+            // Data do Edital (Etapa 17) para contagem do prazo, quando o AR não encontrou
+            // o proprietário: vale a data de PUBLICAÇÃO informada lá; editais antigos sem
+            // esse campo contam pela data em que foram anexados.
+            function dataEditalParaPrazo(etapa17) {
+                return apenasData((etapa17 || {}).data_publicacao_edital || (etapa17 || {}).data_anexo_edital || '');
+            }
+
             function processoNasceuNoAuto(dadosProc, possuiDecreto) {
                 if (possuiDecreto === true) return true;
                 return dadosProc?.fiscal?.decreto === 'sim'
@@ -1328,10 +1346,14 @@
             // notificacao_efetivada === 'nao') e ainda não existe data_recebimento_proprietario,
             // NÃO cai pro fallback de data_recebimento — senão a data de uma tentativa que nem
             // chegou ao proprietário dispararia a contagem do prazo por engano.
-            function montarInfoAR(etapa16) {
+            function montarInfoAR(etapa16, etapa17) {
                 const retornouSemSucesso = etapa16.retorno_sem_sucesso === 'sim' || etapa16.notificacao_efetivada === 'nao';
                 const dataConfirmada = etapa16.data_recebimento_proprietario
-                    || (!retornouSemSucesso ? etapa16.data_recebimento : '');
+                    || (!retornouSemSucesso ? etapa16.data_recebimento : '')
+                    // AR não encontrou o proprietário e nunca foi recebido de fato: só a
+                    // publicação do Edital (Etapa 17) inicia o prazo. NUNCA a data da
+                    // tentativa sem sucesso (etapa16.data_recebimento acima, já descartada).
+                    || dataEditalParaPrazo(etapa17);
                 return {
                     numero_ar: etapa16.numero_ar || '',
                     data_recebimento_ar: dataConfirmada || ''
@@ -1341,19 +1363,24 @@
             // AR da Notificação Preliminar
             function extrairInfoAR(dadosProc, possuiDecreto) {
                 if (!nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
-                return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+                return montarInfoAR(arDoNivelDoProcesso(dadosProc), editalDoNivelDoProcesso(dadosProc));
             }
 
             // AR do Auto de Infração daquela notificação
             function extrairInfoARAuto(dadosProc, notificacaoId, possuiDecreto) {
-                const cicloEspecifico = (notificacaoId && dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]?.etapa16) || {};
-                if (cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario || cicloEspecifico.data_recebimento) {
-                    return montarInfoAR(cicloEspecifico);
+                const cicloAuto = (notificacaoId && dadosProc?.campos?.ciclos_ar_auto?.[notificacaoId]) || {};
+                const cicloEspecifico = cicloAuto.etapa16 || {};
+                const editalEspecifico = cicloAuto.etapa17 || {};
+                const temDadosProprios = cicloEspecifico.numero_ar || cicloEspecifico.data_recebimento_proprietario
+                    || cicloEspecifico.data_recebimento || editalEspecifico.data_publicacao_edital
+                    || editalEspecifico.data_anexo_edital;
+                if (temDadosProprios) {
+                    return montarInfoAR(cicloEspecifico, editalEspecifico);
                 }
                 // Sem ciclo próprio, o AR do nível do processo só serve ao Auto quando não é o
                 // da Notificação Preliminar (processo por decreto ou reincidência).
                 if (nivelDoProcessoEhDaNP(dadosProc, possuiDecreto)) return { numero_ar: '', data_recebimento_ar: '' };
-                return montarInfoAR(arDoNivelDoProcesso(dadosProc));
+                return montarInfoAR(arDoNivelDoProcesso(dadosProc), editalDoNivelDoProcesso(dadosProc));
             }
 
             // Ids dos anexos de AR que já pertencem ao AR de algum Auto

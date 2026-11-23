@@ -149,6 +149,26 @@
         return candidatos.length === 1 ? candidatos[0] : null;
     }
 
+    // Área do processo: Posturas x Meio Ambiente. Primeiro tenta pelo próprio processo
+    // (processos.dados.setor, gravado no Fluxograma — mesmo campo usado por
+    // processoMeioAmbiente() na sincronização de produtividade); sem isso (processo
+    // antigo, sem o campo), cai pro cargo do fiscal responsável no cadastro do SEMAC.
+    // Processo cancelado no Fluxograma (processos.status === 'cancelado' — mesmo critério
+    // usado na sincronização de produtividade, ver processoCancelado em sincronizacao-cron.js).
+    function processoCanceladoFluxograma(p) {
+        return String((p && p.status) || '').toLowerCase().trim().includes('cancelad');
+    }
+
+    function areaDoProcessoFluxograma(setor, cargoFiscal) {
+        var setorNorm = (setor || '').toLowerCase().trim();
+        if (setorNorm === 'meio_ambiente') return 'Meio Ambiente';
+        if (setorNorm) return 'Fiscalização de Posturas';
+        var cargoNorm = (cargoFiscal || '').toLowerCase();
+        if (cargoNorm.indexOf('ambiente') !== -1) return 'Meio Ambiente';
+        if (cargoNorm.indexOf('postura') !== -1) return 'Fiscalização de Posturas';
+        return null;
+    }
+
     // ---------------------------------------------------------------------------
     // Mapa de correção: numero_processo normalizado -> { valor, nomeFiscal } do nosso
     // controle (controle_multas_fazenda). O nome do fiscal é resolvido a partir da
@@ -174,7 +194,7 @@
         var masterClient = window.supabaseMaster;
         if (!masterClient) return;
 
-        var existentesData = await buscarTodosRegistrosControleMultas('id, numero_processo, numero_ar');
+        var existentesData = await buscarTodosRegistrosControleMultas('id, numero_processo, numero_ar, tipo_fiscalizacao, valor_multa, origem');
         var existentesPorPA = {};
         (existentesData || []).forEach(function (r) {
             var pa = normalizarPA(r.numero_processo);
@@ -196,10 +216,11 @@
         var incluirContribuinte = true;
         while (true) {
             var camposBase = colunaValorDisponivel
-                ? 'id, fiscal_id, numero_processo, valor_total_multas, created_at'
-                : 'id, fiscal_id, numero_processo, created_at';
+                ? 'id, fiscal_id, numero_processo, valor_total_multas, created_at, status'
+                : 'id, fiscal_id, numero_processo, created_at, status';
             var campos = incluirContribuinte ? (camposBase + ', contribuinte:dados->contribuinte') : camposBase;
             campos += ', ar_fluxograma:dados->campos->etapa16->>numero_ar';
+            campos += ', setor:dados->>setor';
             var query = masterClient.from('processos').select(campos);
             if (dataInicio) query = query.gte('created_at', dataInicio + 'T00:00:00');
             if (dataFim) query = query.lte('created_at', dataFim + 'T23:59:59');
@@ -233,6 +254,24 @@
             offset += tamanhoLote;
         }
 
+        // Nome (Fluxograma) e cargo (SEMAC) de QUEM fiscalizou cada processo — calculado pra
+        // TODOS os processos lidos (não só os que faltam criar), porque também serve pro
+        // preenchimento retroativo da Área logo abaixo. A maioria dos processos ainda não tem
+        // `dados.setor` gravado (campo novo no Fluxograma); pro resto, a Área vem do cargo do
+        // fiscal responsável.
+        var todosFiscalIds = [...new Set(todos.map(function (p) { return p.fiscal_id; }).filter(Boolean))];
+        var nomesPorFiscalId = {};
+        if (todosFiscalIds.length > 0) {
+            var { data: perfisTodos } = await masterClient.from('profiles').select('id, nome').in('id', todosFiscalIds);
+            (perfisTodos || []).forEach(function (p) { nomesPorFiscalId[p.id] = p.nome || ''; });
+        }
+        var listaFiscaisSemac = await buscarFiscaisSemac();
+        function resolverAreaDoProcesso(p) {
+            var nomeFluxograma = nomesPorFiscalId[p.fiscal_id] || '';
+            var fiscalResolvido = encontrarFiscalPorResponsavel(nomeFluxograma, listaFiscaisSemac);
+            return areaDoProcessoFluxograma(p.setor, fiscalResolvido && fiscalResolvido.role);
+        }
+
         // Preenchimento retroativo do AR: PAs que já estão na tabela, mas sem Nº de AR, e cujo
         // processo no Fluxograma já tem um AR cadastrado. Roda sempre, mesmo quando não há PA
         // novo pra criar.
@@ -252,19 +291,100 @@
             if (errUpdAR) console.error('[Apuração de Dados] Erro ao preencher Nº do AR retroativamente (PA ' + procExistente.numero_processo + '):', errUpdAR.message);
         }
 
+        // Preenchimento retroativo da Área: PAs que já estão na tabela sem Área, usando o
+        // setor gravado no próprio processo do Fluxograma.
+        var idsJaAtualizadosArea = new Set();
+        for (var k = 0; k < todos.length; k++) {
+            var procAreaExistente = todos[k];
+            var paAreaExistente = normalizarPA(procAreaExistente.numero_processo);
+            var linhaAreaExistente = paAreaExistente && existentesPorPA[paAreaExistente];
+            if (!linhaAreaExistente || linhaAreaExistente.tipo_fiscalizacao || idsJaAtualizadosArea.has(linhaAreaExistente.id)) continue;
+            var areaRetroativa = resolverAreaDoProcesso(procAreaExistente);
+            if (!areaRetroativa) continue;
+            idsJaAtualizadosArea.add(linhaAreaExistente.id);
+
+            var { error: errUpdArea } = await supabaseClient
+                .from('controle_multas_fazenda')
+                .update({ tipo_fiscalizacao: areaRetroativa })
+                .eq('id', linhaAreaExistente.id);
+            if (errUpdArea) console.error('[Apuração de Dados] Erro ao preencher Área retroativamente (PA ' + procAreaExistente.numero_processo + '):', errUpdArea.message);
+        }
+
+        // Preenchimento retroativo do Valor da Multa: PAs que já estão na tabela com valor 0
+        // (ainda eram só Notificação Preliminar quando sincronizados pela primeira vez) e que,
+        // no Fluxograma, JÁ viraram Auto de Infração com valor de multa de verdade
+        // (valor_total_multas > 0). Só atualiza quando o valor aqui ainda está zerado — nunca
+        // sobrescreve um valor já conferido/editado manualmente — e só grava um valor novo
+        // quando o processo realmente já tem multa lá (continua 0 enquanto ainda for só NP).
+        var idsJaAtualizadosValor = new Set();
+        if (colunaValorDisponivel) {
+            for (var v = 0; v < todos.length; v++) {
+                var procValorExistente = todos[v];
+                var paValorExistente = normalizarPA(procValorExistente.numero_processo);
+                var linhaValorExistente = paValorExistente && existentesPorPA[paValorExistente];
+                var valorAtualNaTabela = linhaValorExistente ? (Number(linhaValorExistente.valor_multa) || 0) : 0;
+                var valorNoFluxograma = Number(procValorExistente.valor_total_multas) || 0;
+                if (!linhaValorExistente || valorAtualNaTabela > 0 || valorNoFluxograma <= 0 || idsJaAtualizadosValor.has(linhaValorExistente.id)) continue;
+                idsJaAtualizadosValor.add(linhaValorExistente.id);
+
+                var { error: errUpdValor } = await supabaseClient
+                    .from('controle_multas_fazenda')
+                    .update({ valor_multa: valorNoFluxograma })
+                    .eq('id', linhaValorExistente.id);
+                if (errUpdValor) console.error('[Apuração de Dados] Erro ao preencher Valor da Multa retroativamente (PA ' + procValorExistente.numero_processo + '):', errUpdValor.message);
+            }
+        }
+
+        // Elimina da tabela os processos CANCELADOS no Fluxograma que ainda não foram
+        // conferidos por ninguém (origem ainda 'fluxograma' — nunca editados na tela nem
+        // atualizados por importação de planilha). Processo cancelado não gera multa de
+        // verdade; se a linha já foi conferida/editada, não mexe — quem decide se mantém é
+        // quem conferiu, igual já vale pros outros preenchimentos retroativos acima.
+        var idsJaExcluidos = new Set();
+        for (var c = 0; c < todos.length; c++) {
+            var procCancelado = todos[c];
+            if (!processoCanceladoFluxograma(procCancelado)) continue;
+            var paCancelado = normalizarPA(procCancelado.numero_processo);
+            var linhaCancelada = paCancelado && existentesPorPA[paCancelado];
+            if (!linhaCancelada || linhaCancelada.origem !== 'fluxograma' || idsJaExcluidos.has(linhaCancelada.id)) continue;
+            idsJaExcluidos.add(linhaCancelada.id);
+
+            var { error: errDelCancelado } = await supabaseClient
+                .from('controle_multas_fazenda')
+                .delete()
+                .eq('id', linhaCancelada.id);
+            if (errDelCancelado) console.error('[Apuração de Dados] Erro ao excluir processo cancelado (PA ' + procCancelado.numero_processo + '):', errDelCancelado.message);
+            else console.log('[Apuração de Dados] Processo cancelado no Fluxograma removido do controle (PA ' + procCancelado.numero_processo + ', nunca conferido).');
+        }
+
+        // Elimina da tabela os processos que não existem MAIS no Fluxograma (excluídos de lá)
+        // e ainda não foram conferidos aqui. Só roda numa sincronização SEM filtro de data
+        // ("Todos os períodos") — só aí `todos` tem a lista completa de processos do
+        // Fluxograma; com período filtrado, um PA só de fora da janela pareceria "excluído"
+        // sem ter sido, e apagaria linha errada.
+        if (!dataInicio && !dataFim) {
+            var pasAindaNoFluxograma = new Set(todos.map(function (p) { return normalizarPA(p.numero_processo); }).filter(Boolean));
+            var pasParaChecarExclusao = Object.keys(existentesPorPA);
+            for (var e = 0; e < pasParaChecarExclusao.length; e++) {
+                var paExcluido = pasParaChecarExclusao[e];
+                var linhaExcluida = existentesPorPA[paExcluido];
+                if (linhaExcluida.origem !== 'fluxograma' || pasAindaNoFluxograma.has(paExcluido) || idsJaExcluidos.has(linhaExcluida.id)) continue;
+                idsJaExcluidos.add(linhaExcluida.id);
+
+                var { error: errDelSumido } = await supabaseClient
+                    .from('controle_multas_fazenda')
+                    .delete()
+                    .eq('id', linhaExcluida.id);
+                if (errDelSumido) console.error('[Apuração de Dados] Erro ao excluir processo removido do Fluxograma (PA ' + paExcluido + '):', errDelSumido.message);
+                else console.log('[Apuração de Dados] Processo removido do Fluxograma (excluído de lá) removido do controle (PA ' + paExcluido + ', nunca conferido).');
+            }
+        }
+
         var faltantes = todos.filter(function (p) {
             var pa = normalizarPA(p.numero_processo);
-            return pa && !pasJaNaTabela.has(pa);
+            return pa && !pasJaNaTabela.has(pa) && !processoCanceladoFluxograma(p);
         });
         if (faltantes.length === 0) return;
-
-        var fiscalIds = [...new Set(faltantes.map(function (p) { return p.fiscal_id; }).filter(Boolean))];
-        var nomesPorFiscalId = {};
-        if (fiscalIds.length > 0) {
-            var { data: perfis } = await masterClient.from('profiles').select('id, nome').in('id', fiscalIds);
-            (perfis || []).forEach(function (p) { nomesPorFiscalId[p.id] = p.nome || ''; });
-        }
-        var listaFiscaisSemac = await buscarFiscaisSemac();
 
         var novasLinhas = [];
         var pasNestaLeva = new Set(); // evita duas linhas se o mesmo PA aparecer 2x no lote do Fluxograma
@@ -280,7 +400,7 @@
             novasLinhas.push({
                 data_envio_fazenda: p.created_at ? p.created_at.substring(0, 10) : new Date().toISOString().slice(0, 10),
                 numero_processo: p.numero_processo,
-                tipo_fiscalizacao: null,
+                tipo_fiscalizacao: resolverAreaDoProcesso(p),
                 nome_razao_social: contribuinte.nome || '',
                 cpf_cnpj: contribuinte.cpf_cnpj || '',
                 valor_multa: colunaValorDisponivel ? (Number(p.valor_total_multas) || 0) : 0,
@@ -482,8 +602,14 @@
         _apuracaoSincronizacaoLoginEmAndamento = true;
         try {
             if (!supabaseClient || !window.supabaseMaster) return;
-            var { data: authData } = await supabaseClient.auth.getUser();
-            var authUser = authData && authData.user;
+            // Usa o helper global de painel.js (dedupe de getUser() via window.authUserPromise)
+            // em vez de chamar supabaseClient.auth.getUser() direto — isso dispara no mesmo
+            // instante em que executarSincronizacaoDiaria (sincronizacao-cron.js) e
+            // carregarDadosIniciais (painel.js) também chamam getUser() no login, e chamadas
+            // concorrentes pro mesmo lock do Supabase Auth faziam uma "roubar" a trava da
+            // outra, derrubando o carregamento inicial com AbortError.
+            var authResult = window.getAuthUser ? await window.getAuthUser() : await supabaseClient.auth.getUser();
+            var authUser = authResult && authResult.data && authResult.data.user;
             if (!authUser) return;
 
             var { data: perfil } = await supabaseClient
@@ -898,13 +1024,35 @@
         return m.origem !== 'fluxograma';
     }
 
+    // Quantos processos cada Conferência teria se fosse selecionada — mesma lógica da
+    // contagem de Status: ignora o próprio filtro de Conferência, respeita os demais.
+    function contagemPorConferenciaMultas() {
+        var contagem = { todos: 0, conferidos: 0, nao_conferidos: 0 };
+        var inputInicioContagem = document.getElementById('apuracao-data-inicio');
+        var inputFimContagem = document.getElementById('apuracao-data-fim');
+        var dataInicioContagem = inputInicioContagem ? inputInicioContagem.value : '';
+        var dataFimContagem = inputFimContagem ? inputFimContagem.value : '';
+        _apuracaoTodasMultas.forEach(function (m) {
+            var statusAtual = infoStatusMulta(m.status).valor;
+            if (!_apuracaoStatusAtivos.has(statusAtual)) return;
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return;
+            if (!passaFiltroTipoProcesso(m)) return;
+            if (!passaFiltroPeriodoApuracao(m, dataInicioContagem, dataFimContagem)) return;
+            contagem[registroConferido(m) ? 'conferidos' : 'nao_conferidos']++;
+            contagem.todos++;
+        });
+        return contagem;
+    }
+
     function renderizarFiltroConferenciaMultas() {
         var container = document.getElementById('apuracao-filtros-conferencia');
         if (!container) return;
+        var contagem = contagemPorConferenciaMultas();
         var html = '';
         FILTROS_CONFERENCIA.forEach(function (f) {
             var ativo = _apuracaoFiltroConferencia === f.valor;
-            html += '<button type="button" onclick="toggleFiltroConferenciaMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #92400e; background:' + (ativo ? '#92400e' : 'white') + '; color:' + (ativo ? '#fff' : '#92400e') + '; transition:0.15s;">' + f.label + '</button>';
+            var qtd = f.valor === 'todos' ? contagem.todos : (contagem[f.valor] || 0);
+            html += '<button type="button" onclick="toggleFiltroConferenciaMulta(\'' + f.valor + '\')" style="display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:5px 10px 4px; border-radius:12px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #92400e; background:' + (ativo ? '#92400e' : 'white') + '; color:' + (ativo ? '#fff' : '#92400e') + '; transition:0.15s;"><span>' + f.label + '</span><span style="font-size:10px; font-weight:700; opacity:0.8;">' + qtd + '</span></button>';
         });
         container.innerHTML = html;
     }
@@ -970,13 +1118,36 @@
         return true;
     }
 
+    // Quantos processos cada Tipo teria se fosse selecionado — mesma lógica da contagem de
+    // Status: ignora o próprio filtro de Tipo, respeita os demais.
+    function contagemPorTipoProcessoMultas() {
+        var contagem = { todos: 0, notificacao_preliminar: 0, auto_infracao: 0 };
+        var inputInicioContagem = document.getElementById('apuracao-data-inicio');
+        var inputFimContagem = document.getElementById('apuracao-data-fim');
+        var dataInicioContagem = inputInicioContagem ? inputInicioContagem.value : '';
+        var dataFimContagem = inputFimContagem ? inputFimContagem.value : '';
+        _apuracaoTodasMultas.forEach(function (m) {
+            var statusAtual = infoStatusMulta(m.status).valor;
+            if (!_apuracaoStatusAtivos.has(statusAtual)) return;
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return;
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return;
+            if (_apuracaoFiltroArea !== 'todos' && normalizarAreaMulta(m.tipo_fiscalizacao) !== _apuracaoFiltroArea) return;
+            if (!passaFiltroPeriodoApuracao(m, dataInicioContagem, dataFimContagem)) return;
+            contagem[processoEhAutoInfracao(m) ? 'auto_infracao' : 'notificacao_preliminar']++;
+            contagem.todos++;
+        });
+        return contagem;
+    }
+
     function renderizarFiltroTipoProcessoMultas() {
         var container = document.getElementById('apuracao-filtros-tipo-processo');
         if (!container) return;
+        var contagem = contagemPorTipoProcessoMultas();
         var html = '';
         FILTROS_TIPO_PROCESSO.forEach(function (f) {
             var ativo = _apuracaoFiltroTipoProcesso === f.valor;
-            html += '<button type="button" onclick="toggleFiltroTipoProcessoMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #7c3aed; background:' + (ativo ? '#7c3aed' : 'white') + '; color:' + (ativo ? '#fff' : '#7c3aed') + '; transition:0.15s;">' + f.label + '</button>';
+            var qtd = f.valor === 'todos' ? contagem.todos : (contagem[f.valor] || 0);
+            html += '<button type="button" onclick="toggleFiltroTipoProcessoMulta(\'' + f.valor + '\')" style="display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:5px 10px 4px; border-radius:12px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #7c3aed; background:' + (ativo ? '#7c3aed' : 'white') + '; color:' + (ativo ? '#fff' : '#7c3aed') + '; transition:0.15s;"><span>' + f.label + '</span><span style="font-size:10px; font-weight:700; opacity:0.8;">' + qtd + '</span></button>';
         });
         container.innerHTML = html;
     }
@@ -1002,13 +1173,37 @@
         return true;
     }
 
+    // Quantos processos cada Área teria se fosse selecionada — mesma lógica da contagem de
+    // Status: ignora o próprio filtro de Área, respeita os demais.
+    function contagemPorAreaMultas() {
+        var contagem = { todos: 0 };
+        var inputInicioContagem = document.getElementById('apuracao-data-inicio');
+        var inputFimContagem = document.getElementById('apuracao-data-fim');
+        var dataInicioContagem = inputInicioContagem ? inputInicioContagem.value : '';
+        var dataFimContagem = inputFimContagem ? inputFimContagem.value : '';
+        _apuracaoTodasMultas.forEach(function (m) {
+            var statusAtual = infoStatusMulta(m.status).valor;
+            if (!_apuracaoStatusAtivos.has(statusAtual)) return;
+            if (_apuracaoFiltroConferencia === 'conferidos' && !registroConferido(m)) return;
+            if (_apuracaoFiltroConferencia === 'nao_conferidos' && registroConferido(m)) return;
+            if (!passaFiltroTipoProcesso(m)) return;
+            if (!passaFiltroPeriodoApuracao(m, dataInicioContagem, dataFimContagem)) return;
+            var area = normalizarAreaMulta(m.tipo_fiscalizacao);
+            if (area) contagem[area] = (contagem[area] || 0) + 1;
+            contagem.todos++;
+        });
+        return contagem;
+    }
+
     function renderizarFiltroAreaMultas() {
         var container = document.getElementById('apuracao-filtros-area');
         if (!container) return;
+        var contagem = contagemPorAreaMultas();
         var html = '';
         FILTROS_AREA.forEach(function (f) {
             var ativo = _apuracaoFiltroArea === f.valor;
-            html += '<button type="button" onclick="toggleFiltroAreaMulta(\'' + f.valor + '\')" style="padding:5px 10px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #0369a1; background:' + (ativo ? '#0369a1' : 'white') + '; color:' + (ativo ? '#fff' : '#0369a1') + '; transition:0.15s;">' + f.label + '</button>';
+            var qtd = f.valor === 'todos' ? contagem.todos : (contagem[f.valor] || 0);
+            html += '<button type="button" onclick="toggleFiltroAreaMulta(\'' + f.valor + '\')" style="display:inline-flex; flex-direction:column; align-items:center; gap:1px; padding:5px 10px 4px; border-radius:12px; font-size:11px; font-weight:700; cursor:pointer; border:1px solid #0369a1; background:' + (ativo ? '#0369a1' : 'white') + '; color:' + (ativo ? '#fff' : '#0369a1') + '; transition:0.15s;"><span>' + f.label + '</span><span style="font-size:10px; font-weight:700; opacity:0.8;">' + qtd + '</span></button>';
         });
         container.innerHTML = html;
     }
