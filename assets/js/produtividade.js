@@ -3823,6 +3823,8 @@ function mudarSubAbaCP(categoriaId, btnEl) {
     if (selectBairro) selectBairro.value = '';
     const selectAno = document.getElementById('busca-ano-geral');
     if (selectAno) selectAno.value = '';
+    const ruaImovelInput = document.getElementById('busca-rua-imovel-geral');
+    if (ruaImovelInput) ruaImovelInput.value = '';
 
     // Limpar filtros específicos de AI
     const notificacaoVal = document.getElementById('busca-notificacao-ai');
@@ -3900,6 +3902,12 @@ function normalizarBairro(texto) {
         .trim();
 }
 
+// Ignora case/acentos pra comparar texto livre (ex: busca por rua do im\u00f3vel).
+function normalizarTextoBusca(texto) {
+    if (!texto) return '';
+    return String(texto).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
 async function carregarHistoricoGeral(categoriaId) {
     const container = document.getElementById('historico-geral-lista');
     if (!container) return;
@@ -3915,6 +3923,7 @@ async function carregarHistoricoGeral(categoriaId) {
     const bairroSelecionado = document.getElementById('filtro-bairro-historico')?.value || '';
     const bairroNormalizado = normalizarBairro(bairroSelecionado);
     const anoSelecionado = document.getElementById('busca-ano-geral')?.value || '';
+    const ruaImovelVal = (document.getElementById('busca-rua-imovel-geral')?.value || '').trim();
 
     // 2. Constrói Query
     let query = supabaseClient.from('controle_processual').select('*');
@@ -4117,6 +4126,19 @@ async function carregarHistoricoGeral(categoriaId) {
         });
     }
 
+    // Filtro por Rua do Imóvel Notificado (client-side: ignora case/acentos). O nome do campo
+    // no JSON muda por categoria — endereco_imovel no Auto de Infração de Posturas, rua_imovel
+    // nas categorias de Meio Ambiente (Auto de Fiscalização, Auto de Infração Ambiental,
+    // Relatório de Vistoria) — por isso checa os dois. Notificação Preliminar de Posturas
+    // (1.1) não tem endereço cadastrado, então nunca aparece numa busca por rua.
+    if (ruaImovelVal) {
+        const ruaBusca = normalizarTextoBusca(ruaImovelVal);
+        todosOsRegistros = todosOsRegistros.filter(reg => {
+            const rua = (reg.campos && (reg.campos.endereco_imovel || reg.campos.rua_imovel)) || '';
+            return normalizarTextoBusca(rua).includes(ruaBusca);
+        });
+    }
+
     // Ordenar final no JS
     const registrosOrdenados = todosOsRegistros.sort((a, b) => obterDataReal(b) - obterDataReal(a));
     registrosGeralAtual = registrosOrdenados;
@@ -4215,6 +4237,7 @@ function limparFiltrosHistorico() {
     const zonaVal = document.getElementById('busca-zona-ai');
     const quadraVal = document.getElementById('busca-quadra-ai');
     const enderecoVal = document.getElementById('busca-endereco-ai');
+    const ruaImovelVal = document.getElementById('busca-rua-imovel-geral');
 
     if (inputFiscal) inputFiscal.value = '';
     if (selectBairro) selectBairro.value = '';
@@ -4224,6 +4247,7 @@ function limparFiltrosHistorico() {
     if (zonaVal) zonaVal.value = '';
     if (quadraVal) quadraVal.value = '';
     if (enderecoVal) enderecoVal.value = '';
+    if (ruaImovelVal) ruaImovelVal.value = '';
 
     filtrarHistoricoGeral();
     atualizarIndicadorFiltro();
@@ -4241,6 +4265,7 @@ function atualizarIndicadorFiltro() {
     const zonaVal = document.getElementById('busca-zona-ai');
     const quadraVal = document.getElementById('busca-quadra-ai');
     const enderecoVal = document.getElementById('busca-endereco-ai');
+    const ruaImovelVal = document.getElementById('busca-rua-imovel-geral');
 
     const temFiltro = (inputFiscal && inputFiscal.value.trim()) ||
         (selectBairro && selectBairro.value) ||
@@ -4249,7 +4274,8 @@ function atualizarIndicadorFiltro() {
         (loteVal && loteVal.value.trim()) ||
         (zonaVal && zonaVal.value.trim()) ||
         (quadraVal && quadraVal.value.trim()) ||
-        (enderecoVal && enderecoVal.value.trim());
+        (enderecoVal && enderecoVal.value.trim()) ||
+        (ruaImovelVal && ruaImovelVal.value.trim());
 
     btn.innerHTML = temFiltro
         ? 'Filtro <span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;"></span>'

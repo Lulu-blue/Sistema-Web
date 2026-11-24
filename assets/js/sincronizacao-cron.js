@@ -859,6 +859,49 @@
     }
 
     /**
+     * Quando o Fluxograma já marcou a notificação como 'atendida' (o munícipe cumpriu a
+     * exigência) e o registro correspondente aqui no SEMAC ainda não está marcado, marca o
+     * campo `resposta_fiscal` e lança os 20 pontos da categoria 15 — a MESMA automação que já
+     * existe quando o fiscal muda isso manualmente em "Editar Dados" (ver a checagem de
+     * resposta_fiscal em salvarEdicaoRegistro, produtividade.js).
+     *
+     * Só age quando `resposta_fiscal` está completamente vazio: se o fiscal já escreveu
+     * qualquer coisa ali (seja "Atendido" manual, seja uma nota tipo "Em andamento"), a
+     * sincronização nunca sobrescreve — fica a cargo de quem editou. Isso também evita pontuar
+     * em dobro quando o fiscal já marcou manualmente antes desta sincronização rodar.
+     */
+    async function sincronizarAtendimentoNotificacao(semacClient, userId, notif, catIdCP, elegivel) {
+        if (String(notif.status || '').toLowerCase().trim() !== 'atendida') return;
+
+        const { data: registroCP } = await semacClient
+            .from('controle_processual')
+            .select('id, campos')
+            .eq('user_id', userId)
+            .eq('categoria_id', catIdCP)
+            .contains('campos', { notif_id: notif.id })
+            .maybeSingle();
+        if (!registroCP) return; // a notificação em si ainda não foi sincronizada, nada a marcar
+
+        const respostaAtual = registroCP.campos?.resposta_fiscal || '';
+        if (respostaAtual) return; // já tem algo anotado (manual ou sincronização anterior) — não mexe
+
+        await semacClient
+            .from('controle_processual')
+            .update({ campos: { ...registroCP.campos, resposta_fiscal: 'Atendido (sincronização automática)' } })
+            .eq('id', registroCP.id);
+
+        if (!elegivel.pontuar) return;
+
+        await inserirRegistroProdutividade(semacClient, userId, '15', 'Notificação Preliminar regularizados (atendidos)', 20, {
+            notif_id: notif.id,
+            n_notificacao: notif.numero || 'S/N',
+            descricao: catIdCP === '1.9' ? 'Atendimento Automático (Auto de Fiscalização)' : 'Atendimento Automático (sincronização)',
+            data: new Date().toISOString().split('T')[0],
+            _created_at: notif.created_at
+        });
+    }
+
+    /**
      * Relatório Fiscal de Meio Ambiente tem assinatura dupla (o criador do processo e o
      * "fiscal_contribuidor") e AMBOS devem receber a pontuação. O criador é gravado pelo
      * caminho normal (inserirControleProcessual/inserirRegistroProdutividade, que respeita
@@ -1791,6 +1834,8 @@
                 if (await inserirControleProcessual(semacClient, semacUserId, fiscalNome, catIdCP, catNomeCP, numSeqNotif, ptsCP, camposCP)) {
                     inseridosControle++;
                 }
+
+                await sincronizarAtendimentoNotificacao(semacClient, semacUserId, notif, catIdCP, elegivel);
 
                 if (elegivel.pontuar) {
                     const camposRP = {
